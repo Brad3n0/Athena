@@ -642,3 +642,10 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .qz-footer button { border: 1px solid var(--accent); color: var(--accent); border-radius: 10px; padding: 5px 12px; }
 .model-btn #modelName { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 42vw; }
 @media (max-width: 520px) { .model-btn #modelName { max-width: 30vw; } .model-btn { padding: 7px 6px; } .mode-switch button { padding: 5px 7px; } }
+
+/* ---------------- Math (KaTeX) ---------------- */
+.math-block { margin: 4px 0 14px; overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+.math-block .katex-display { margin: 0; }
+.katex { font-size: 1.08em; }
+.fc-face .katex, .qz-choices .katex { font-size: 1em; }
+.fc-face .katex { font-size: 1.35em; }

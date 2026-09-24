@@ -1,4 +1,5 @@
-// Small, dependency-free Markdown renderer (works offline) with basic code highlighting.
+// Small Markdown renderer (works offline) with basic code highlighting and KaTeX math.
+import katex from './vendor/katex/katex.mjs';
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -45,10 +46,30 @@ export function highlight(code, lang) {
   return out + esc(code.slice(last));
 }
 
+// ------------------------------------------------------------------- math
+export function renderMath(tex, display = false) {
+  try {
+    // (newlines inside KaTeX's SVG paths must not be turned into <br> by the paragraph renderer)
+    return katex.renderToString(tex, { displayMode: display, throwOnError: false, strict: 'ignore', output: 'html' }).replace(/\n/g, ' ');
+  } catch {
+    return `<code>${esc(tex)}</code>`;
+  }
+}
+
+// Inline math: \( … \), $$ … $$ on one line, or $ … $ (not money like "$5 and $10").
+const INLINE_MATH = /\\\((.+?)\\\)|\$\$([^$\n]+?)\$\$|(?<![\\$\w])\$(?=[^\s$])([^$\n]*?[^\s\\$])\$(?![\w$])/g;
+
 // ----------------------------------------------------------------- inline
+export function inlineMarkdown(text) { return inline(text); }
+
 function inline(text) {
   const codes = [];
   text = text.replace(/`([^`\n]+)`/g, (_, c) => `\u0000${codes.push(c) - 1}\u0000`);
+  const maths = [];
+  text = text.replace(INLINE_MATH, (m, paren, dbl, single) => {
+    const tex = paren ?? dbl ?? single;
+    return `\u0001${maths.push(renderMath(tex, dbl !== undefined)) - 1}\u0001`;
+  });
   text = esc(text);
   text = text
     .replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, src) => /^(https?:|data:image\/)/.test(src) ? `<img alt="${alt}" src="${src}" style="max-width:100%">` : alt)
@@ -60,7 +81,9 @@ function inline(text) {
     .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, '$1<em>$2</em>')
     .replace(/(^|[^_\w])_([^_\n]+)_(?!\w)/g, '$1<em>$2</em>')
     .replace(/~~([^~]+)~~/g, '<del>$1</del>');
-  return text.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${esc(codes[i])}</code>`);
+  return text
+    .replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${esc(codes[i])}</code>`)
+    .replace(/\u0001(\d+)\u0001/g, (_, i) => maths[i]);
 }
 
 function codeBlock(code, lang) {
@@ -99,6 +122,33 @@ export function renderMarkdown(src) {
       continue;
     }
     if (!line.trim()) { flush(); i++; continue; }
+
+    // display math: $$ … $$ or \[ … \] (can span several lines)
+    const dm = line.trim().match(/^(\$\$|\\\[)(.*)$/);
+    if (dm) {
+      const close = dm[1] === '$$' ? '$$' : '\\]';
+      let rest = dm[2];
+      const one = rest.indexOf(close);
+      if (one >= 0) {
+        flush();
+        html += `<div class="math-block">${renderMath(rest.slice(0, one), true)}</div>`;
+        const after = rest.slice(one + close.length).trim();
+        if (after) para.push(after);
+        i++;
+        continue;
+      }
+      const body = [rest];
+      let j = i + 1;
+      while (j < lines.length && !lines[j].includes(close)) body.push(lines[j++]);
+      if (j < lines.length) {
+        flush();
+        body.push(lines[j].slice(0, lines[j].indexOf(close)));
+        html += `<div class="math-block">${renderMath(body.join('\n'), true)}</div>`;
+        i = j + 1;
+        continue;
+      }
+      // unclosed (still streaming): show it as plain text for now
+    }
 
     const h = line.match(/^(#{1,6})\s+(.*)$/);
     if (h) { flush(); html += `<h${h[1].length}>${inline(h[2].replace(/#+\s*$/, ''))}</h${h[1].length}>`; i++; continue; }
@@ -168,8 +218,23 @@ function renderList(lines) {
 }
 
 // Plain text for the speech engine: drop code, markup and emoji.
+function mathToWords(tex) {
+  return tex
+    .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, ' $1 over $2 ')
+    .replace(/\\sqrt\{([^{}]*)\}/g, ' the square root of $1 ')
+    .replace(/\^\{?2\}?/g, ' squared').replace(/\^\{?3\}?/g, ' cubed')
+    .replace(/\^\{([^{}]*)\}|\^(\w)/g, ' to the power of $1$2 ')
+    .replace(/_\{([^{}]*)\}|_(\w)/g, ' sub $1$2 ')
+    .replace(/\\(times|cdot)/g, ' times ').replace(/\\div/g, ' divided by ').replace(/\\pm/g, ' plus or minus ')
+    .replace(/\\(leq|le)\b/g, ' is less than or equal to ').replace(/\\(geq|ge)\b/g, ' is greater than or equal to ')
+    .replace(/\\(neq|ne)\b/g, ' is not equal to ').replace(/\\approx/g, ' is about ').replace(/\\pi/g, ' pi ')
+    .replace(/\\(left|right|displaystyle|text|mathrm|,|;|!|quad)/g, ' ')
+    .replace(/\\[a-zA-Z]+/g, ' ').replace(/[{}]/g, '').replace(/=/g, ' equals ').replace(/\s+/g, ' ');
+}
+
 export function toSpeech(src) {
   return (src || '')
+    .replace(/\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]|\\\((.+?)\\\)|\$([^$\n]+?)\$/g, (_, a, b, c, d) => mathToWords(a ?? b ?? c ?? d))
     .replace(/<think>[\s\S]*?(<\/think>|$)/g, '')
     .replace(/```[\s\S]*?(```|$)/g, ' I put the code in the chat. ')
     .replace(/`([^`]+)`/g, '$1')

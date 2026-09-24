@@ -68,6 +68,7 @@ Click **Study** at the top, next to Assistant and Code.
 - Tap a starter (**Study guide**, **Flashcards**, **Practice quiz**, **Homework help**, **Explain simply**, **Study plan** or **Summarize my notes**) and finish the sentence, or just ask: *"quiz me on the causes of World War I"*.
 - **Flashcards** appear as real cards. Click (or press Space) to flip, use ← → to move, **✓ Got it** to track what you know, and ⤮ to shuffle.
 - **Quizzes** are clickable. Each answer shows whether you were right, with an explanation, and you get a score at the end.
+- **Math looks like a textbook:** fractions, exponents, square roots and equations are drawn properly, including on flashcards and quizzes, and she reads them aloud correctly ("x squared equals 9 over 3").
 - **Attach your material** with 📎: PDFs, Word documents, PowerPoint slides, text files, or photos of worksheets and handwritten notes (photos need a vision model like `qwen2.5vl:7b`). Everything she makes is based on your material.
 - Combine it with other features: *"remind me to study biology every day at 7pm"*, `/focus 25 minutes on chemistry`, or ⭐ a study guide to keep it under **Saved**.
 

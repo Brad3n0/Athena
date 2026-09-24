@@ -1922,7 +1922,7 @@ $('#exportMenu').onclick = async (e) => {
   if (!w) { toast('Allow pop-ups to export as PDF', 'error'); return; }
   const body = (chat.messages || []).filter((m) => m.content?.trim()).map((m) =>
     `<h3>${m.role === 'user' ? 'You' : 'Athena'}</h3><div>${m.role === 'user' ? escapeHtml(m.display ?? m.content).replace(/\n/g, '<br>') : renderMarkdown(m.content)}</div>`).join('');
-  w.document.write(`<!doctype html><title>${escapeHtml(chat.title)}</title><style>body{font:14px/1.6 system-ui,sans-serif;max-width:720px;margin:32px auto;color:#111}h1{margin:0}h3{margin:22px 0 4px;color:#a8740c}pre{background:#f4f4f4;padding:10px;border-radius:8px;white-space:pre-wrap}.code-head button{display:none}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style><h1>${escapeHtml(chat.title)}</h1><p style="color:#777">Exported from Athena AI</p>${body}<script>onload=()=>print()<\/script>`);
+  w.document.write(`<!doctype html><title>${escapeHtml(chat.title)}</title><link rel="stylesheet" href="${location.origin}/vendor/katex/katex.min.css"><style>body{font:14px/1.6 system-ui,sans-serif;max-width:720px;margin:32px auto;color:#111}h1{margin:0}h3{margin:22px 0 4px;color:#a8740c}pre{background:#f4f4f4;padding:10px;border-radius:8px;white-space:pre-wrap}.code-head button{display:none}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style><h1>${escapeHtml(chat.title)}</h1><p style="color:#777">Exported from Athena AI</p>${body}<script>onload=()=>setTimeout(print,300)<\/script>`);
   w.document.close();
 };
 

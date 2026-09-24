@@ -1,11 +1,15 @@
 // Study mode widgets: interactive flashcards and practice quizzes built from the model's JSON blocks.
+import { inlineMarkdown } from './markdown.js';
 
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-/** Parse the model's JSON, forgiving common slips (trailing commas, smart quotes, a wrapping object). */
+/** Parse the model's JSON, forgiving common slips: trailing commas, smart quotes, a wrapping object,
+ * and LaTeX like \frac written with a single backslash (invalid JSON, or silently turned into a control character). */
 function parseLoose(src) {
-  let text = (src || '').trim().replace(/[“”]/g, '"');
-  const tries = [text, text.replace(/,\s*([\]}])/g, '$1')];
+  const text = (src || '').trim().replace(/[“”]/g, '"');
+  const noCommas = (t) => t.replace(/,\s*([\]}])/g, '$1');
+  const fixTex = (t) => t.replace(/\\(?=[a-zA-Z]{2,}|[()[\]{}])/g, '\\\\');
+  const singleTex = /\\[a-zA-Z]{2,}/.test(text) && !/\\\\[a-zA-Z]/.test(text);
+  const tries = singleTex ? [fixTex(text), fixTex(noCommas(text)), text, noCommas(text)] : [text, noCommas(text)];
   for (const t of tries) {
     try {
       const v = JSON.parse(t);
@@ -36,7 +40,9 @@ function normQuiz(raw) {
   }).filter((x) => x.q && x.choices.length >= 2);
 }
 
-const inline = (s) => esc(s).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+const inline = (s) => inlineMarkdown(String(s ?? ''));
+// On flashcards, draw math full size (stacked fractions etc.) instead of squeezed into a line of text.
+const cardText = (s) => inline(String(s ?? '').replace(/(^|[^\\$])\$(?!\$)([^$\n]+?)\$/g, '$1$\\displaystyle $2$'));
 
 /** Turn every .study-widget placeholder inside `root` into its widget. */
 export function hydrateStudy(root, streaming) {
@@ -74,8 +80,8 @@ function renderCards(w, cards) {
 function showCard(w) {
   const s = w._fc;
   const card = s.cards[s.order[s.i]];
-  w.querySelector('.fc-front').innerHTML = inline(card.front);
-  w.querySelector('.fc-back').innerHTML = inline(card.back);
+  w.querySelector('.fc-front').innerHTML = cardText(card.front);
+  w.querySelector('.fc-back').innerHTML = cardText(card.back);
   w.querySelector('.fc-card').classList.toggle('flipped', s.flipped);
   w.querySelector('.fc-card').classList.toggle('known', s.known.has(s.order[s.i]));
   w.querySelector('.fc-count').textContent = `${s.i + 1} / ${s.cards.length}${s.known.size ? ` · ${s.known.size} known` : ''}`;
@@ -103,7 +109,7 @@ export function flashcardAction(w, act) {
 function renderQuiz(w, qs) {
   w._qz = { qs, picks: new Array(qs.length).fill(null) };
   w.innerHTML = `<div class="quiz">
-    <div class="fc-top"><span class="fc-title">📝 Practice quiz</span><span class="qz-count">${qs.length} questions</span></div>
+    <div class="fc-top"><span class="fc-title">📝 Practice quiz</span><span class="qz-count">${qs.length} question${qs.length === 1 ? '' : 's'}</span></div>
     ${qs.map((q, i) => `
       <div class="qz-q" data-q="${i}">
         <div class="qz-text"><b>${i + 1}.</b> ${inline(q.q)}</div>

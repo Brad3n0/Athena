@@ -105,7 +105,9 @@ When asked for a QUIZ or practice questions, reply with one short intro line, th
 ```quiz
 [{"q": "What do mitochondria produce?", "choices": ["ATP", "DNA", "Glucose", "Oxygen"], "answer": 0, "explain": "Mitochondria make ATP through cellular respiration."}]
 ```
-`answer` is the 0-based index of the correct choice. Use 4 choices, vary which position is correct, and keep the JSON valid (double quotes, no trailing commas). The app turns these blocks into interactive flashcards and quizzes."""
+`answer` is the 0-based index of the correct choice. Use 4 choices, vary which position is correct, and keep the JSON valid (double quotes, no trailing commas). The app turns these blocks into interactive flashcards and quizzes.
+
+For math, show every step on its own line, use LaTeX ($...$ inline, $$...$$ for equations), and make the final answer bold. Flashcards and quizzes can use $...$ math too; inside the JSON, escape backslashes (write \\\\frac, not \\frac)."""
 
 BUILTIN_PERSONA_NAMES = {"assistant": "Assistant", "companion": "Companion", "coach": "Coach", "study": "Study Buddy", "chef": "Chef"}
 
@@ -151,6 +153,9 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
         )
     else:
         parts.append("Format answers with Markdown when it helps readability. Be concise but thorough.")
+    if mode != "voice":
+        parts.append("Write math with LaTeX: $...$ for inline math and $$...$$ on its own lines for bigger equations "
+                     "(for example $\\frac{3}{4}$, $x^2$, $\\sqrt{16}$). Never put math inside code blocks.")
     if tools_on:
         groups = {t.group for t in enabled_tools(settings)}
         abilities = ["You have tools. Use them whenever they help, then briefly tell the user what you did."]
