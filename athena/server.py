@@ -267,6 +267,19 @@ def _clean_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return cleaned
 
 
+def _is_image_error(text: str) -> bool:
+    low = text.lower()
+    return "multimodal" in low or ("image" in low and ("support" in low or "vision" in low))
+
+
+def _drop_images(messages: list[dict[str, Any]]) -> None:
+    """For models that can't see pictures: keep the conversation, replace the pictures with a short note."""
+    for m in messages:
+        if m.get("images"):
+            m.pop("images")
+            m["content"] = f"{m.get('content', '')}\n\n[The user attached an image here; you can't see images.]".strip()
+
+
 def _event(kind: str, **data: Any) -> bytes:
     return (json.dumps({"type": kind, **data}, ensure_ascii=False) + "\n").encode()
 
@@ -319,6 +332,14 @@ async def chat(request: Request):
                         text = (await resp.aread()).decode(errors="replace")
                         if "think" in payload and "think" in text.lower():
                             think_off = False
+                            continue
+                        if _is_image_error(text) and any(m.get("images") for m in messages):
+                            if messages[-1].get("images"):
+                                yield _event("error", message=f"{model} can't look at images. Download a vision model like "
+                                             "qwen2.5vl:7b (or gemma3:4b for smaller PCs) in Settings → Models, and Athena will "
+                                             "use it automatically for pictures.")
+                                return
+                            _drop_images(messages)  # a picture from earlier in the chat: carry on without it
                             continue
                         if use_tools and "tool" in text.lower():
                             # Model can't use tools: remember that and retry as plain chat.
@@ -524,8 +545,11 @@ async def default_folders():
 def _ollama_error(text: str, status: int) -> str:
     try:
         msg = json.loads(text).get("error", text)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, AttributeError):
         msg = text
+    if isinstance(msg, dict):  # {"error": {"message": ...}} style
+        msg = str(msg.get("message") or msg)
+    msg = str(msg)
     if status == 404 and "not found" in msg.lower():
         msg += " — download it in Settings → Models."
     return msg or f"Ollama returned HTTP {status}"

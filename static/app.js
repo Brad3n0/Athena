@@ -1009,10 +1009,13 @@ async function sendMessage(text, { voice = false, display = null } = {}) {
   if (!state.status.ollama) { await refreshStatus(); }
   let model = voice ? pickDefaultModel('voice') : currentModel();
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); openSettings('models'); return; }
-  if (state.attachments.some((a) => a.kind === 'image') && !isVision(model)) {
+  // A new picture, or a follow-up right after one ("what's the answer?"), goes to a model that can see it.
+  const newImage = state.attachments.some((a) => a.kind === 'image');
+  const recentImage = state.chat.messages.slice(-4).some((m) => m.images?.length);
+  if (!voice && (newImage || recentImage) && !isVision(model)) {
     const vision = pickVisionModel();
-    if (vision) { toast(`Using ${vision} to look at the image`); model = vision; }
-    else toast('To understand images, download a vision model like qwen2.5vl:7b or gemma3:12b (Settings → Models).', 'error');
+    if (vision) { if (newImage) toast(`Using ${vision} to look at the image`); model = vision; }
+    else if (newImage) toast('To understand images, download a vision model like qwen2.5vl:7b or gemma3:4b (Settings → Models).', 'error');
   }
 
   state.pendingKeep?.(0); // sent again without picking a side: keep the left answer
