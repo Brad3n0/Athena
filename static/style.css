@@ -778,3 +778,39 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .msg.found { animation: found 2.2s ease; }
 @keyframes found { 0%, 40% { background: rgba(var(--accent-rgb), .14); } 100% { background: transparent; } }
 .msg { border-radius: 14px; }
+
+/* ---------------- Writing canvas ---------------- */
+.canvas { width: min(46vw, 760px); min-width: 380px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg-side); position: relative; }
+.canvas header { display: flex; align-items: center; gap: 4px; padding: 10px 10px 10px 18px; border-bottom: 1px solid var(--border); }
+.canvas header input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--text); font-size: 16px; font-weight: 600; }
+.canvas header .muted { white-space: nowrap; margin-right: 6px; }
+.canvas header .icon-btn.on { color: var(--accent); }
+.canvas .stop-btn { font-size: 12px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); color: var(--text-2); }
+#canvasText { flex: 1; resize: none; border: 0; outline: 0; background: none; color: var(--text); padding: 22px 28px; font: 16px/1.7 Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; tab-size: 4; }
+#canvasText::selection { background: rgba(var(--accent-rgb), .35); }
+#canvasText.flash { animation: canvasFlash 1.2s ease; }
+@keyframes canvasFlash { 0% { background: rgba(var(--accent-rgb), .10); } 100% { background: transparent; } }
+.canvas.busy #canvasText { color: var(--text-2); }
+.canvas-preview { flex: 1; overflow-y: auto; padding: 22px 28px; }
+.canvas-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 14px; border-top: 1px solid var(--border); }
+.canvas-bar button, .canvas-bar select { font-size: 12.5px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); background: none; color: var(--text-2); }
+.canvas-bar button:hover, .canvas-bar select:hover { border-color: var(--accent); color: var(--text); }
+.canvas-bar select option { background: var(--bg-elev); color: var(--text); }
+.canvas.busy .canvas-bar button, .canvas.busy .canvas-bar select, .canvas.busy .canvas-ask button { opacity: .5; pointer-events: none; }
+.canvas-ask { display: flex; gap: 8px; padding: 4px 14px 14px; }
+.canvas-ask input { flex: 1; min-width: 0; background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; color: var(--text); outline: 0; }
+.canvas-ask input:focus { border-color: var(--accent); }
+.canvas-ask .primary { padding: 8px 16px; border-radius: 12px; }
+.canvas-card { display: flex; align-items: center; gap: 12px; margin: 10px 0; padding: 10px 14px; border: 1px solid rgba(var(--accent-rgb), .4); border-radius: 14px; background: rgba(var(--accent-rgb), .06); max-width: 380px; }
+.canvas-card > span { font-size: 22px; }
+.canvas-card div { flex: 1; display: flex; flex-direction: column; }
+.canvas-card button { padding: 6px 14px; border-radius: 99px; background: var(--accent); color: #1a1405; font-weight: 600; font-size: 13px; }
+body.canvas-on .composer-wrap, body.canvas-on .thread { max-width: 100%; }
+@media (max-width: 1100px) { .canvas { width: 50vw; min-width: 340px; } }
+@media (max-width: 860px) {
+  .canvas { position: fixed; z-index: 44; inset: 0; width: 100vw; min-width: 0; }
+  #canvasText, .canvas-preview { padding: 16px; }
+}
+body.canvas-on .mode-switch button svg { display: none; }
+body.canvas-on .mode-switch button { padding: 5px 9px; }
+body.canvas-on .model-btn #modelName { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

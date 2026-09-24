@@ -88,6 +88,9 @@
         </button>
       </div>
       <div class="spacer"></div>
+      <button class="icon-btn" id="canvasBtn" title="Writing canvas">
+        <svg viewBox="0 0 24 24"><path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6M8 14h8M8 17h5"/></svg>
+      </button>
       <button class="icon-btn" id="newChatTop" title="New chat">
         <svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
       </button>
@@ -141,6 +144,27 @@
       </form>
     </div>
   </main>
+
+  <!-- ============ Writing canvas ============ -->
+  <aside class="canvas" id="canvas" hidden>
+    <header id="canvasHead">
+      <input id="canvasTitle" placeholder="Untitled document" />
+      <span class="muted small" id="canvasWords"></span>
+      <button type="button" class="stop-btn" data-cv="stop" hidden>■ Stop</button>
+      <button type="button" class="icon-btn" data-cv="undo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
+      <button type="button" class="icon-btn" data-cv="preview" title="Preview formatting"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      <button type="button" class="icon-btn" data-cv="copy" title="Copy all"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      <button type="button" class="icon-btn" data-cv="download" title="Download (.md)"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
+      <button type="button" class="icon-btn" data-cv="close" title="Close canvas"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </header>
+    <textarea id="canvasText" spellcheck="true" placeholder="Start writing, paste something in, or tell Athena what to write below…"></textarea>
+    <div class="md canvas-preview" id="canvasPreview" hidden></div>
+    <div class="canvas-bar" id="canvasBar"><span id="canvasBarLabel" class="muted small"></span></div>
+    <form class="canvas-ask" id="canvasAsk">
+      <input id="canvasAskInput" placeholder="Ask for a change, e.g. “add a conclusion” or “write a cover letter for…”" />
+      <button type="submit" class="primary">Go</button>
+    </form>
+  </aside>
 
   <!-- ============ Saved replies drawer ============ -->
   <aside class="drawer" id="savedDrawer" hidden>

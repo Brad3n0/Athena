@@ -275,7 +275,7 @@ async def chat(request: Request):
     async def generate() -> AsyncIterator[bytes]:
         nonlocal use_tools, auto_approve
         think_off = True
-        system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + project_context(project)}
+        system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + project_context(project) + canvas_context(body.get("canvas"))}
         messages: list[dict[str, Any]] = [system, *history]
 
         for _round in range(MAX_TOOL_ROUNDS):
@@ -296,7 +296,7 @@ async def chat(request: Request):
                             # Model can't use tools: remember that and retry as plain chat.
                             _no_tool_models.add(model)
                             use_tools = False
-                            messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + project_context(project)}
+                            messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + project_context(project) + canvas_context(body.get("canvas"))}
                             continue
                         yield _event("error", message=_ollama_error(text, resp.status_code))
                         return
@@ -730,6 +730,83 @@ async def make_title(request: Request):
     if not title:
         raise HTTPException(502, "No title")
     return {"title": title[:60], "icon": icon}
+
+
+# --------------------------------------------------------------- canvas
+
+REWRITE_SYSTEM = (
+    "You are a skilled editor working on the user's document. Apply the instruction and reply with ONLY the "
+    "new text: no introduction, no quotes around it, no notes afterwards. Keep the same language and Markdown "
+    "formatting style, and keep anything the instruction doesn't ask you to change."
+)
+
+
+@app.post("/api/rewrite")
+async def rewrite(request: Request):
+    """Canvas edits: rewrite a selection (or the whole document) and stream back just the new text."""
+    body = await request.json()
+    model = str(body.get("model") or "")
+    text = str(body.get("text", ""))[:60_000]
+    instruction = str(body.get("instruction", "")).strip()[:2000]
+    document = str(body.get("document", ""))[:60_000]
+    if not model or not instruction:
+        raise HTTPException(400, "Missing model or instruction")
+    if text.strip() and document and text != document:
+        prompt = (f"Here is the whole document for context:\n<<<\n{document}\n>>>\n\nRewrite ONLY this part of it:\n<<<\n{text}\n>>>\n\n"
+                  f"Instruction: {instruction}\n\nReply with only the rewritten part.")
+    elif text.strip():
+        prompt = f"Document:\n<<<\n{text}\n>>>\n\nInstruction: {instruction}\n\nReply with only the full updated document."
+    else:
+        prompt = f"Write a new document. Instruction: {instruction}\n\nReply with only the document, in Markdown."
+    payload: dict[str, Any] = {"model": model, "stream": True, "think": False, "options": {"temperature": 0.6},
+                               "messages": [{"role": "system", "content": REWRITE_SYSTEM}, {"role": "user", "content": prompt}]}
+
+    async def gen():
+        for attempt in range(2):
+            try:
+                async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload, timeout=httpx.Timeout(10.0, read=300)) as resp:
+                    if resp.status_code != 200:
+                        err = (await resp.aread()).decode(errors="replace")
+                        if attempt == 0 and "think" in err.lower():
+                            payload.pop("think", None)  # model can't turn thinking off; try again without
+                            continue
+                        yield json.dumps({"error": err[:300] or f"Ollama error {resp.status_code}"}) + "\n"
+                        return
+                    in_think = False
+                    async for line in resp.aiter_lines():
+                        if not line.strip():
+                            continue
+                        chunk = (json.loads(line).get("message") or {}).get("content", "")
+                        # Some models still write <think>…</think> inline; don't put that in the document.
+                        if "<think>" in chunk:
+                            in_think, chunk = True, chunk.split("<think>")[0]
+                        if in_think:
+                            if "</think>" not in chunk:
+                                continue
+                            in_think, chunk = False, chunk.split("</think>", 1)[1]
+                        if chunk:
+                            yield json.dumps({"t": chunk}) + "\n"
+                    return
+            except httpx.HTTPError as exc:
+                yield json.dumps({"error": f"Ollama unavailable: {exc}"}) + "\n"
+                return
+
+    return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+CANVAS_PROMPT = (
+    "The user has this document open in the canvas (an editor next to the chat), titled \"{title}\":\n<<<\n{text}\n>>>\n"
+    "When they ask you to write, change, fix or add to the document, reply with ONE short sentence about what you "
+    "changed, then the COMPLETE updated document inside a single ```canvas code block (never only the changed part). "
+    "It replaces the canvas automatically. For questions about the document, just answer normally without a canvas block."
+)
+
+
+def canvas_context(canvas: Any) -> str:
+    if not isinstance(canvas, dict) or not canvas.get("open"):
+        return ""
+    text = str(canvas.get("text") or "")[:30_000]
+    return "\n\n" + CANVAS_PROMPT.format(title=str(canvas.get("title") or "Untitled")[:100], text=text or "(empty so far)")
 
 
 # --------------------------------------------------- setup wizard + self-test

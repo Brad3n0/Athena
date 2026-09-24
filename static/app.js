@@ -6,6 +6,7 @@ import { startStars } from './stars.js';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf } from './study.js';
 import { hydrateGraphs } from './graph.js';
+import { initCanvas, openCanvas, closeCanvas, syncCanvas, canvasOpen, canvasForChat, applyCanvasReply } from './canvas.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -23,6 +24,7 @@ const ICONS = {
   warn: '<svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   star: '<svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+  canvas: '<svg viewBox="0 0 24 24"><path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6M8 14h8M8 17h5"/></svg>',
   folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
   pin: '<svg viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/></svg>',
@@ -369,11 +371,13 @@ function newChat() {
   setMode(state.mode);
   renderMessages();
   renderSidebar();
+  syncCanvas();
   if (isNarrow()) toggleSidebar(false);
   $('#input').focus();
 }
 $('#newChat').onclick = newChat;
 $('#newChatTop').onclick = newChat;
+$('#canvasBtn').onclick = () => (canvasOpen() ? closeCanvas() : openCanvas());
 
 async function openChat(id) {
   stopGenerating();
@@ -383,6 +387,7 @@ async function openChat(id) {
     setMode(['code', 'study'].includes(chat.mode) ? chat.mode : 'assistant', { keepModel: true });
     renderMessages();
     renderSidebar();
+    syncCanvas();
     if (isNarrow()) toggleSidebar(false);
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -392,7 +397,7 @@ async function saveChat() {
   if (!c.id) c.id = crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '').slice(0, 16) : Math.random().toString(36).slice(2, 18);
   if (!c.title) {
     const first = c.messages.find((m) => m.role === 'user');
-    c.title = (first?.display ?? first?.content ?? 'New chat').replace(/\s+/g, ' ').trim().slice(0, 60) || 'New chat';
+    c.title = (first?.display ?? first?.content ?? (c.canvas?.title || 'New chat')).replace(/\s+/g, ' ').trim().slice(0, 60) || 'New chat';
   }
   const payload = { ...c, messages: c.messages.map(({ streaming, ...m }) => m) };
   try {
@@ -533,6 +538,9 @@ messagesEl.addEventListener('click', async (e) => {
   const previewBtn = e.target.closest('[data-preview]');
   if (previewBtn) { togglePreview(previewBtn); return; }
 
+  const canvasCard = e.target.closest('[data-canvas-open]');
+  if (canvasCard) { openCanvas({ text: canvasCard.closest('.canvas-card').dataset.src }); return; }
+
   const runBtn = e.target.closest('[data-run]');
   if (runBtn) { runCodeBlock(runBtn); return; }
 
@@ -555,6 +563,12 @@ messagesEl.addEventListener('click', async (e) => {
       act.innerHTML = ICONS.check;
       setTimeout(() => (act.innerHTML = ICONS.copy), 1500);
       break;
+    case 'canvas': {
+      const block = /```canvas[^\n]*\n([\s\S]*?)(?:\n```|$)/.exec(msg.content);
+      const text = block ? block[1] : splitThinking(msg).content.replace(/\n*```(graph|plot|flashcards|quiz)[\s\S]*?```/g, '').trim();
+      openCanvas({ text, title: state.chat.canvas?.title || (/^#\s+(.+)/m.exec(text)?.[1] ?? state.chat.title ?? '').slice(0, 80) });
+      break;
+    }
     case 'speak':
       if (speaker.speaking) speaker.stop();
       else { speaker.reset(); speaker.say(msg.content); }
@@ -699,15 +713,17 @@ function updateAssistantEl(el, m) {
   actions.innerHTML = `${vers}<button data-msg-act="copy" title="Copy">${ICONS.copy}</button>
     <button data-msg-act="star" title="${m.savedId ? 'Saved — click to remove' : 'Save this reply'}" class="${m.savedId ? 'starred' : ''}">${ICONS.star}</button>
     <button data-msg-act="speak" title="Read aloud">${ICONS.speak}</button>
+    <button data-msg-act="canvas" title="Edit in canvas">${ICONS.canvas}</button>
     <button data-msg-act="retry" title="Regenerate">${ICONS.retry}</button>
     <span class="stats">${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
   const idx = Number(el.dataset.idx);
   const isLast = state.chat && idx === state.chat.messages.length - 1;
   if (isLast && content && !m.error && !m.voice) {
-    const chips = /```(graph|plot)/.test(content) ? ['Explain the graph', 'Where do they cross?', 'Show another example']
+    const chips = /```canvas/.test(content) ? ['Make it more formal', 'Make it shorter', 'Proofread it']
+      : /```(graph|plot)/.test(content) ? ['Explain the graph', 'Where do they cross?', 'Show another example']
       : /```(flashcards|quiz)/.test(content) ? ['Make it harder', 'More questions', 'Explain the ones I missed']
       : state.mode === 'study' ? ['Make flashcards from this', 'Quiz me on this', 'Explain it simpler']
-      : /```(?!graph|plot|flashcards|quiz)/.test(content) ? ['Explain the code', 'Add comments', 'Make it simpler'] : ['Tell me more', 'Make it shorter', 'Give me an example'];
+      : /```(?!graph|plot|flashcards|quiz|canvas)/.test(content) ? ['Explain the code', 'Add comments', 'Make it simpler'] : ['Tell me more', 'Make it shorter', 'Give me an example'];
     el.querySelector('.body').insertAdjacentHTML('beforeend', `<div class="followups">${chips.map((c) => `<button type="button" data-followup="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>`);
   }
 }
@@ -869,6 +885,10 @@ const COMMANDS = [
   { cmd: '/brief', desc: 'Morning briefing', action: () => startBriefing() },
   { cmd: '/voice', desc: 'Start talking', action: () => startVoice() },
   { cmd: '/new', desc: 'New chat', action: () => newChat() },
+  { cmd: '/canvas', desc: 'Write a document together', hint: 'cover letter for a barista job', action: (r) => {
+    openCanvas();
+    if (r) sendMessage(`Write this in the canvas: ${r}`, { display: `/canvas ${r}` });
+  } },
   { cmd: '/shortcuts', desc: 'Keyboard shortcuts', action: () => $('#shortcutsDlg').showModal() },
 ];
 const slash = { open: false, items: [], index: 0 };
@@ -877,7 +897,7 @@ function parseSlash(text) {
   const m = text.match(/^(\/[a-z]+)\s*([\s\S]*)$/i);
   const c = m && COMMANDS.find((x) => x.cmd === m[1].toLowerCase());
   if (!c) return null;
-  return c.action ? { action: c.action } : { prompt: c.to(m[2].trim()) };
+  return c.action ? { action: () => c.action(m[2].trim()) } : { prompt: c.to(m[2].trim()) };
 }
 
 function updateSlashMenu() {
@@ -999,7 +1019,7 @@ async function generateReply({ voice = false, model = null } = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model, mode, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null,
+        model, mode, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, canvas: voice ? null : canvasForChat(),
         messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })),
       }),
       signal: abort.signal,
@@ -1069,6 +1089,7 @@ async function generateReply({ voice = false, model = null } = {}) {
     if (!reply.thinking) delete reply.thinking;
     if (!reply.tools.length) delete reply.tools;
     const { content } = splitThinking(reply);
+    if (!abort.signal.aborted && chat === state.chat && /```canvas/.test(content)) applyCanvasReply(content);
     if (speakThis && !abort.signal.aborted) speaker.feed(content, true);
     if (reply.error && speakThis) speaker.say(`Sorry, something went wrong. ${reply.error}`);
     if (!reply.content && !reply.error && abort.signal.aborted) reply.content = '_(stopped)_';
@@ -2738,6 +2759,8 @@ async function init() {
   if (isNarrow()) toggleSidebar(false);
   await refreshStatus();
   await refreshModels();
+  initCanvas({ state, model: () => currentModel(), save: () => saveChat(), toast,
+    onShow: () => { if (innerWidth < 1400 && innerWidth > 860) toggleSidebar(false); } });
   newChat();
   loadChats();
   loadProjects();

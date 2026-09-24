@@ -72,6 +72,15 @@ Click **Study** at the top, next to Assistant and Code.
 - **Attach your material** with 📎: PDFs, Word documents, PowerPoint slides, text files, or photos of worksheets and handwritten notes (photos need a vision model like `qwen2.5vl:7b`). Everything she makes is based on your material.
 - Combine it with other features: *"remind me to study biology every day at 7pm"*, `/focus 25 minutes on chemistry`, or ⭐ a study guide to keep it under **Saved**.
 
+## Writing canvas
+
+For essays, emails, cover letters and stories, click the 📄 button at the top (or type `/canvas cover letter for a barista job`). A document editor opens next to the chat.
+
+- **Highlight some text** and press **Improve**, **Shorter**, **Longer**, **Simpler**, **Fix grammar** or pick a **Tone**. Only that part gets rewritten. With nothing highlighted, the whole document is rewritten.
+- **Ask for bigger changes** in the box under the document (*"add a strong closing paragraph"*) or just in the chat (*"make it sound more confident"*). She rewrites the document in place.
+- **Undo** (Ctrl+Z) takes back any change, including hers. 👁 shows the formatted version, and you can copy or download it as a file.
+- Any reply can be moved into the canvas with the 📄 button under it. Each chat keeps its own document.
+
 ## Projects
 
 Projects are folders for your chats, like one per class or per app you're building. Click **+** next to **Projects** in the sidebar, then give the project:

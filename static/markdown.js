@@ -93,6 +93,10 @@ function codeBlock(code, lang) {
   if (/^(graph|plot)$/i.test(lang || '')) {
     return `<div class="graph-widget" data-src="${esc(code)}"></div>`;
   }
+  if (/^canvas$/i.test(lang || '')) {
+    const words = (code.match(/\S+/g) || []).length;
+    return `<div class="canvas-card" data-src="${esc(code)}"><span>📝</span><div><b>Canvas updated</b><span class="muted small">${words} words</span></div><button type="button" data-canvas-open>Open</button></div>`;
+  }
   if (/^(flashcards|quiz)$/i.test(lang || '')) {
     // Turned into an interactive widget by the app (see hydrateStudy in app.js).
     return `<div class="study-widget" data-kind="${lang.toLowerCase()}" data-src="${esc(code)}"></div>`;
