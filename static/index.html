@@ -152,6 +152,7 @@
         <button type="button" data-tab="general" class="active">General</button>
         <button type="button" data-tab="models">Models</button>
         <button type="button" data-tab="voice">Voice</button>
+        <button type="button" data-tab="abilities">Abilities</button>
       </nav>
 
       <section data-panel="general">
@@ -169,7 +170,6 @@
           </select>
         </label>
         <label class="check"><input type="checkbox" id="setDirect" /> Direct mode — straight answers, no lecturing or unnecessary disclaimers</label>
-        <label class="check"><input type="checkbox" id="setTools" /> Let Athena manage tasks &amp; timers (needs a tool-capable model)</label>
       </section>
 
       <section data-panel="models" hidden>
@@ -188,6 +188,22 @@
 
         <h3>Installed</h3>
         <ul class="installed" id="installed"></ul>
+      </section>
+
+      <section data-panel="abilities" hidden>
+        <p class="muted small" style="margin-top:0">What Athena can do for you. These need a tool-capable model (gpt-oss, qwen3, llama3.1…).</p>
+        <label class="check"><input type="checkbox" id="setTools" /> Tasks &amp; timers</label>
+        <label class="check"><input type="checkbox" id="setMemory" /> Memory — remembers things you tell her, across all chats</label>
+        <label class="check"><input type="checkbox" id="setFiles" /> Files — find, read, move, organize, create and delete files</label>
+        <label class="check"><input type="checkbox" id="setWeb" /> Web — search the internet and read pages (when you're online)</label>
+        <label class="check"><input type="checkbox" id="setConfirm" /> Ask me before she moves, writes or deletes anything</label>
+        <label class="check"><input type="checkbox" id="setScreen" /> Show her work on my screen (opens folders in File Explorer and pages in the browser as she works)</label>
+        <label>Folders Athena may use <span class="muted small">(one per line)</span>
+          <textarea id="setFolders" rows="5" spellcheck="false"></textarea>
+        </label>
+        <p class="muted small" style="margin-top:-8px">Leave empty to use your Desktop, Documents, Downloads, Pictures, Music and Videos. She can't see anything outside these.</p>
+        <h3>Memories</h3>
+        <ul class="memories" id="memoryList"></ul>
       </section>
 
       <section data-panel="voice" hidden>
@@ -224,6 +240,18 @@
     </div>
   </form>
 </dialog>
+
+<div class="approval" id="approval" hidden>
+  <div class="approval-card" role="alertdialog" aria-labelledby="approvalTitle">
+    <div class="approval-title" id="approvalTitle"><img src="logo.svg" alt="" /> Athena wants to</div>
+    <div class="approval-summary" id="approvalSummary"></div>
+    <label class="check small"><input type="checkbox" id="approvalAlways" /> Allow everything else in this chat</label>
+    <div class="approval-actions">
+      <button type="button" class="ghost" id="approvalDeny">Deny</button>
+      <button type="button" class="primary" id="approvalAllow">Allow</button>
+    </div>
+  </div>
+</div>
 
 <div class="toasts" id="toasts"></div>
 

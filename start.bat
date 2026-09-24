@@ -16,6 +16,9 @@ if not exist ".venv\Scripts\python.exe" (
   python -m venv .venv || goto :fail
   ".venv\Scripts\python.exe" -m pip install --upgrade pip >nul
   ".venv\Scripts\python.exe" -m pip install -r requirements.txt || goto :fail
+) else (
+  rem Pick up any new requirements after an update, instant when nothing changed
+  ".venv\Scripts\python.exe" -m pip install -q -r requirements.txt >nul 2>nul
 )
 
 where ollama >nul 2>nul

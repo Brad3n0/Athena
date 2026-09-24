@@ -6,6 +6,10 @@ A private, **fully offline** AI assistant for your home PC. It looks and works l
 - 🧑‍💻 **Code mode**: a coding model with syntax-highlighted code blocks, one-click copy, and file attachments (attach your source files and ask about them)
 - 🎙️ **Voice mode**: talk to Athena hands-free. She listens, answers out loud in a natural offline voice, and you can tap to interrupt
 - 🟡 **Voice orb**: a living gold orb that reacts to her voice and yours
+- 🧠 **Memory**: say *"remember that my sister's birthday is June 3rd"* and she knows it in every future chat
+- 📁 **Files**: *"find my resume"*, *"organize my Downloads"*, *"move the PDFs on my Desktop into Documents/Taxes"*, *"write my shopping list to a file"*, *"undo that"*
+- 🌐 **Web search** (when you're online): *"what's the weather in Chicago this weekend?"*, *"look up the newest Ollama models"*
+- 👀 **Watch her work**: every step shows up live in the chat, and she opens folders in File Explorer and pages in your browser as she works
 - ✅ **Tasks & timers**: say *"remind me to pay rent Friday"*, *"what's on my list?"*, *"I finished the laundry"* or *"set a 10 minute timer for the pasta"*
 - 🗂️ Chat history with search, rename and delete, plus a model picker, dark/light themes, image understanding (with a vision model) and a phone-friendly layout
 
@@ -54,6 +58,16 @@ Athena adds no filters of her own, but most models come with their makers' built
 - **Direct mode** (Settings → General) tells Athena to answer plainly, without lecturing or adding unneeded disclaimers. It works with any model.
 - **Community "abliterated" or "uncensored" models** have the refusal behaviour removed. Athena lists a few under **Settings → Models → Fewer refusals** (`huihui_ai/qwen3-abliterated`, `dolphin3`), and more can be found by searching "abliterated" on [ollama.com](https://ollama.com/search?q=abliterated). They're made by the community rather than the original companies. They're usually a little less accurate, and they may not handle Athena's tasks and timers as reliably. After downloading one, pick it as your default in **Settings → Models**.
 
+## Abilities: files, web, memory
+
+Turn these on or off in **Settings → Abilities**. They need a model that supports tools; `gpt-oss:20b` and `qwen3` work best.
+
+- **Files:** Athena can only see and change files in the folders listed there. By default that's your Desktop, Documents, Downloads, Pictures, Music and Videos. Before she **moves, writes or deletes** anything, a pop-up shows exactly what she's about to do, with **Allow** / **Deny** buttons. Deleted files go to the **Recycle Bin**, and *"undo that"* reverses her last change, such as putting organized files back where they were.
+- **Watching:** each step appears live in the chat (*"Searching your files for 'resume'…"*, *"Organized 42 files in ~/Downloads"*). Click a step to see the details. With **Show her work on my screen** turned on, she opens the folder in File Explorer before moving files, so you can watch them move, and opens the pages she reads in your browser.
+- **Web:** uses DuckDuckGo, so no account or API key is needed. It only works while you're online; everything else keeps working offline.
+- **Memory:** everything she remembers is listed in **Settings → Abilities → Memories**, where you can delete it.
+- **PDFs:** to let her read PDFs, run `.venv\Scripts\pip install pypdf` once.
+
 ## Voice chat & companion mode
 
 - In voice chat Athena appears as a **living gold orb**. It ripples with her voice, sends out rings while it listens to you, and swirls with orbiting arcs while she's thinking. Tap it to interrupt her.
@@ -80,7 +94,9 @@ Athena adds no filters of her own, but most models come with their makers' built
 ```
 athena/          Python server (FastAPI)
   server.py      API: streams chat from Ollama, runs tools, model downloads, speech-to-text
-  tools.py       Tools the AI can call (tasks, timers, date/time)
+  tools.py       Tools the AI can call (tasks, timers, memory, files, web) + approval rules
+  files.py       Safe file operations limited to allowed folders, with undo journal
+  web.py         Web search (DuckDuckGo) and page reading
   speech.py      Offline Whisper transcription
   tts.py         Offline natural voice (Kokoro)
   store.py       JSON storage for chats, tasks, settings

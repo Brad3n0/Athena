@@ -18,6 +18,7 @@ DATA_DIR = Path(os.environ.get("ATHENA_DATA", ROOT / "data"))
 CHATS_DIR = DATA_DIR / "conversations"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 TASKS_FILE = DATA_DIR / "tasks.json"
+MEMORY_FILE = DATA_DIR / "memories.json"
 
 _lock = threading.RLock()
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -28,6 +29,13 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Default model per mode. Empty = let the UI pick the best installed one.
     "models": {"assistant": "", "code": "", "voice": ""},
     "tools_enabled": True,
+    # Abilities
+    "memory_enabled": True,
+    "files_enabled": True,
+    "web_enabled": True,
+    "confirm_changes": True,  # ask before moving/deleting/writing files
+    "show_on_screen": True,  # open folders/pages on screen while Athena works
+    "file_folders": [],  # empty = Desktop, Documents, Downloads, Pictures, Music, Videos
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "theme": "dark",
@@ -212,3 +220,37 @@ def find_task(query: str) -> dict[str, Any] | None:
         if query in task["title"].lower() or task["title"].lower() in query:
             return task
     return None
+
+
+# ----------------------------------------------------------------- memory
+
+def list_memories() -> list[dict[str, Any]]:
+    with _lock:
+        return _read(MEMORY_FILE, [])
+
+
+def add_memory(text: str) -> dict[str, Any]:
+    text = text.strip()[:500]
+    with _lock:
+        memories = list_memories()
+        for m in memories:
+            if m["text"].lower() == text.lower():
+                return m
+        memory = {"id": new_id()[:8], "text": text, "created": time.time()}
+        memories.append(memory)
+        _write(MEMORY_FILE, memories[-200:])
+    return memory
+
+
+def forget_memory(query: str) -> dict[str, Any] | None:
+    query = (query or "").strip().lower()
+    if not query:
+        return None
+    with _lock:
+        memories = list_memories()
+        match = next((m for m in memories if m["id"] == query), None) or \
+            next((m for m in memories if query in m["text"].lower()), None)
+        if match:
+            memories.remove(match)
+            _write(MEMORY_FILE, memories)
+        return match

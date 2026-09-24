@@ -437,8 +437,9 @@ function splitThinking(m) {
 
 function updateAssistantEl(el, m) {
   const { content, thinking, stillThinking } = splitThinking(m);
-  const tools = (m.tools || []).map(toolChip).join('');
-  let html = tools ? `<div>${tools}</div>` : '';
+  const openSteps = new Set($$('.step[open]', el).map((d) => d.dataset.id));
+  const steps = (m.tools || []).map((t, i) => stepHtml(t, i, openSteps)).join('');
+  let html = steps ? `<div class="activity">${steps}</div>` : '';
   if (thinking.trim()) {
     const open = el.querySelector('.thinking-box')?.open ?? false;
     const label = stillThinking ? 'Thinking…' : `Thought${m.thinkSecs ? ` for ${m.thinkSecs}s` : ''}`;
@@ -459,18 +460,64 @@ function updateAssistantEl(el, m) {
     <span class="stats">${escapeHtml([m.model, tps].filter(Boolean).join(' · '))}</span>`;
 }
 
-function toolChip(t) {
-  const r = t.result || {};
-  const labels = {
-    add_task: () => `Added task: ${r.added?.title}`,
-    complete_task: () => `Completed: ${r.completed?.title}`,
-    delete_task: () => `Removed: ${r.deleted?.title}`,
-    list_tasks: () => `Checked your tasks (${r.count ?? 0})`,
-    set_timer: () => `Timer set: ${fmtDuration(r.seconds)}${r.label && r.label !== 'Timer' ? ` · ${r.label}` : ''}`,
-    get_current_datetime: () => 'Checked the time',
-  };
-  const text = r.error ? `${t.name}: ${r.error}` : (labels[t.name]?.() ?? t.name);
-  return `<span class="tool-chip${r.error ? ' err' : ''}">${r.error ? ICONS.warn : ICONS.tool}${escapeHtml(text)}</span>`;
+// ---- live activity steps (what Athena is doing, as it happens)
+const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u || 'page'; } };
+const q = (x) => `“${x ?? ''}”`;
+const STEP_TEXT = {
+  get_current_datetime: [() => 'Checking the time', () => 'Checked the time'],
+  set_timer: [() => 'Setting a timer', (a, r) => `Timer set: ${fmtDuration(r.seconds)}${r.label && r.label !== 'Timer' ? ` · ${r.label}` : ''}`],
+  add_task: [(a) => `Adding task ${q(a.title)}`, (a, r) => `Added task: ${r.added?.title}`],
+  list_tasks: [() => 'Checking your tasks', (a, r) => `Checked your tasks (${r.count ?? 0})`],
+  complete_task: [(a) => `Completing ${q(a.task)}`, (a, r) => `Completed: ${r.completed?.title}`],
+  delete_task: [(a) => `Removing ${q(a.task)}`, (a, r) => `Removed task: ${r.deleted?.title}`],
+  remember: [() => 'Saving to memory', (a, r) => `Remembered: ${r.remembered}`],
+  forget: [() => 'Forgetting', (a, r) => `Forgot: ${r.forgot}`],
+  list_folder: [(a) => `Looking in ${a.path || 'your folders'}`, (a, r) => r.folder ? `Looked in ${r.folder} (${r.count} items)` : 'Checked which folders I can use'],
+  find_files: [(a) => `Searching your files${a.query ? ` for ${q(a.query)}` : ''}${a.kind ? ` (${a.kind})` : ''}`, (a, r) => `Found ${r.count} file${r.count === 1 ? '' : 's'}`],
+  read_file: [(a) => `Reading ${a.path}`, (a, r) => `Read ${r.path}`],
+  create_folder: [(a) => `Creating folder ${a.path}`, (a, r) => `Created folder ${r.created}`],
+  move_file: [(a) => `Moving ${a.source}`, (a, r) => `Moved ${r.moved} → ${r.to}`],
+  copy_file: [(a) => `Copying ${a.source}`, (a, r) => `Copied to ${r.to}`],
+  write_file: [(a) => `Writing ${a.path}`, (a, r) => `Saved ${r.written}`],
+  delete_file: [(a) => `Deleting ${a.path}`, (a, r) => `Deleted ${r.deleted} (in Recycle Bin)`],
+  organize_folder: [(a) => `Organizing ${a.folder}`, (a, r) => `Organized ${r.moved_files} files in ${r.organized}`],
+  undo_last_change: [() => 'Undoing last change', (a, r) => r.undid ? `Undid: ${r.undid}` : r.message],
+  open_on_screen: [(a) => `Opening ${a.target}`, (a, r) => `Opened ${r.opened}`],
+  web_search: [(a) => `Searching the web for ${q(a.query)}`, (a, r) => `Searched the web for ${q(a.query)}`],
+  read_webpage: [(a) => `Reading ${host(a.url)}`, (a, r) => `Read ${r.title || host(r.url)}`],
+};
+
+function stepText(t) {
+  const [running, done] = STEP_TEXT[t.name] || [() => t.name, () => t.name];
+  const a = t.args || {}, r = t.result || {};
+  if (!t.result) return t.approval ? `Waiting for your OK: ${t.approval}` : running(a) + '…';
+  if (r.denied) return `You declined: ${t.approval || running(a)}`;
+  if (r.error) return `${running(a)} — ${r.error}`;
+  try { return done(a, r); } catch { return t.name; }
+}
+
+function stepHtml(t, i, openSteps) {
+  const r = t.result;
+  const status = !r ? (t.approval ? 'wait' : 'run') : r.denied ? 'denied' : r.error ? 'err' : 'ok';
+  const icon = { run: '<span class="spin"></span>', wait: ICONS.warn, ok: ICONS.tool, err: ICONS.warn, denied: ICONS.x }[status];
+  let detail = '';
+  if (r?.results?.length && t.name === 'web_search') {
+    detail = `<ol>${r.results.map((x) => `<li><a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">${escapeHtml(x.title)}</a><div class="muted small">${escapeHtml(x.snippet)}</div></li>`).join('')}</ol>`;
+  } else if (r?.results?.length) {
+    detail = `<ul>${r.results.map((x) => `<li>${escapeHtml(x.path)} <span class="muted small">${escapeHtml(x.size || '')}</span></li>`).join('')}</ul>`;
+  } else if (r?.items?.length) {
+    detail = `<ul>${r.items.map((x) => `<li>${x.type === 'folder' ? '📁' : '📄'} ${escapeHtml(x.name)}</li>`).join('')}</ul>`;
+  } else if (r?.into_folders) {
+    detail = `<ul>${Object.entries(r.into_folders).map(([k, n]) => `<li>📁 ${escapeHtml(k)}: ${n} file${n === 1 ? '' : 's'}</li>`).join('')}</ul>`;
+  } else if (r?.url && t.name === 'read_webpage') {
+    detail = `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>`;
+  }
+  if (t.screen) detail += `<div class="muted small">Opened on your screen: ${escapeHtml(t.screen)}</div>`;
+  const key = t.id || String(i);
+  const summary = `<summary>${icon}<span>${escapeHtml(stepText(t))}</span></summary>`;
+  return detail
+    ? `<details class="step ${status}" data-id="${key}"${openSteps.has(key) ? ' open' : ''}>${summary}<div class="step-detail">${detail}</div></details>`
+    : `<div class="step ${status}"><div class="summary">${icon}<span>${escapeHtml(stepText(t))}</span></div></div>`;
 }
 
 function fmtDuration(s) {
@@ -567,7 +614,10 @@ async function generateReply({ voice = false, model = null } = {}) {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, mode, messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })) }),
+      body: JSON.stringify({
+        model, mode, auto_approve: !!chat.autoApprove,
+        messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })),
+      }),
       signal: abort.signal,
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
@@ -597,8 +647,20 @@ async function generateReply({ voice = false, model = null } = {}) {
         } else if (ev.type === 'thinking') {
           if (!thinkStart) thinkStart = Date.now();
           reply.thinking += ev.content;
+        } else if (ev.type === 'tool_start') {
+          reply.tools.push({ id: ev.id, name: ev.name, args: ev.args });
+          if (voice) setVoiceState('thinking', stepText(reply.tools.at(-1)));
+        } else if (ev.type === 'approval') {
+          const step = reply.tools.find((t) => t.id === ev.id);
+          if (step) step.approval = ev.summary;
+          askApproval(ev, chat, voice);
+        } else if (ev.type === 'screen') {
+          const step = reply.tools.find((t) => t.id === ev.id);
+          if (step) step.screen = ev.target;
         } else if (ev.type === 'tool') {
-          reply.tools.push({ name: ev.name, args: ev.args, result: ev.result });
+          const step = reply.tools.find((t) => t.id === ev.id) || reply.tools[reply.tools.push({ id: ev.id, name: ev.name, args: ev.args }) - 1];
+          step.result = ev.result;
+          closeApproval(ev.id);
           handleToolEvent(ev);
         } else if (ev.type === 'error') {
           reply.error = ev.message;
@@ -612,6 +674,7 @@ async function generateReply({ voice = false, model = null } = {}) {
     if (err.name !== 'AbortError') reply.error = err.message;
   } finally {
     if (state.abort === abort) state.abort = null;
+    closeApproval();
     cancelAnimationFrame(raf);
     raf = 0;
     reply.streaming = false;
@@ -671,6 +734,35 @@ $('#attachments').onclick = (e) => {
   const rm = e.target.closest('[data-rm]');
   if (rm) { state.attachments.splice(Number(rm.dataset.rm), 1); renderAttachments(); }
 };
+
+// ------------------------------------------------------------ approvals
+let pendingApproval = null;
+
+function askApproval(ev, chat, voice) {
+  pendingApproval = { id: ev.id, chat };
+  $('#approvalSummary').textContent = ev.summary;
+  $('#approvalAlways').checked = false;
+  $('#approval').hidden = false;
+  $('#approvalAllow').focus();
+  if (voice) { speaker.reset(); speaker.say('I need your OK on screen first.'); }
+}
+
+function closeApproval(id) {
+  if (!pendingApproval || (id && pendingApproval.id !== id)) return;
+  pendingApproval = null;
+  $('#approval').hidden = true;
+}
+
+async function answerApproval(allow) {
+  const p = pendingApproval;
+  if (!p) return;
+  const always = allow && $('#approvalAlways').checked;
+  if (always) p.chat.autoApprove = true;
+  closeApproval(p.id);
+  try { await api(`/api/approvals/${p.id}`, json('POST', { allow, always })); } catch (e) { toast(e.message, 'error'); }
+}
+$('#approvalAllow').onclick = () => answerApproval(true);
+$('#approvalDeny').onclick = () => answerApproval(false);
 
 // ------------------------------------------------------------ tools / timers
 function handleToolEvent(ev) {
@@ -923,6 +1015,14 @@ function openSettings(tab = 'general') {
   $('#setInstructions').value = s.custom_instructions || '';
   $('#setTheme').value = s.theme || 'dark';
   $('#setTools').checked = !!s.tools_enabled;
+  $('#setMemory').checked = !!s.memory_enabled;
+  $('#setFiles').checked = !!s.files_enabled;
+  $('#setWeb').checked = !!s.web_enabled;
+  $('#setConfirm').checked = s.confirm_changes !== false;
+  $('#setScreen').checked = !!s.show_on_screen;
+  $('#setFolders').value = (s.file_folders || []).join('\n');
+  api('/api/folders').then((f) => { $('#setFolders').placeholder = f.defaults.join('\n'); }).catch(() => {});
+  loadMemories();
   $('#setDirect').checked = !!s.direct_mode;
   $('#setPersona').value = s.persona || 'assistant';
   $('#setTtsEngine').value = s.tts_engine === 'system' ? 'system' : 'auto';
@@ -993,6 +1093,25 @@ bind('#setInstructions', 'custom_instructions');
 bind('#setTheme', 'theme');
 bind('#setTools', 'tools_enabled', (el) => el.checked);
 bind('#setDirect', 'direct_mode', (el) => el.checked);
+bind('#setMemory', 'memory_enabled', (el) => el.checked);
+bind('#setFiles', 'files_enabled', (el) => el.checked);
+bind('#setWeb', 'web_enabled', (el) => el.checked);
+bind('#setConfirm', 'confirm_changes', (el) => el.checked);
+bind('#setScreen', 'show_on_screen', (el) => el.checked);
+bind('#setFolders', 'file_folders', (el) => el.value.split('\n').map((l) => l.trim()).filter(Boolean));
+
+async function loadMemories() {
+  const list = await api('/api/memories').catch(() => []);
+  $('#memoryList').innerHTML = list.length
+    ? list.slice().reverse().map((m) => `<li><span>${escapeHtml(m.text)}</span><button type="button" data-forget="${m.id}" title="Forget">${ICONS.trash}</button></li>`).join('')
+    : '<li class="muted small">Nothing yet. Tell her “remember that…” and it shows up here.</li>';
+}
+$('#memoryList').onclick = async (e) => {
+  const b = e.target.closest('[data-forget]');
+  if (!b) return;
+  await api(`/api/memories/${b.dataset.forget}`, { method: 'DELETE' });
+  loadMemories();
+};
 bind('#setVoice', 'tts_voice');
 bind('#setPersona', 'persona');
 bind('#setTtsEngine', 'tts_engine');

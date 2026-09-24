@@ -369,3 +369,46 @@ svg.fill { fill: currentColor; stroke: none; }
 .avatar-stage { width: min(400px, 86vw); height: min(400px, 48vh); display: grid; place-items: center; cursor: pointer; }
 .orb-canvas { display: block; }
 .voice-overlay[data-state="muted"] .orb-canvas { filter: grayscale(.9) brightness(.6); }
+
+/* ---------------- Live activity steps ---------------- */
+.activity { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; border-left: 2px solid var(--border); padding-left: 10px; }
+.step { font-size: 13.5px; color: var(--text-2); }
+.step summary, .step .summary { display: flex; align-items: center; gap: 8px; padding: 3px 0; list-style: none; }
+.step summary { cursor: pointer; }
+.step summary::-webkit-details-marker { display: none; }
+.step summary::after { content: "›"; color: var(--text-3); margin-left: 2px; transition: transform .15s; }
+.step[open] summary::after { transform: rotate(90deg); }
+.step svg { width: 15px; height: 15px; flex: none; }
+.step.ok svg { color: var(--accent); }
+.step.err svg, .step.denied svg { color: var(--danger); }
+.step.wait svg { color: var(--accent); animation: blink 1.2s infinite; }
+.step.run span:last-child { color: var(--text); }
+.step-detail { margin: 2px 0 8px 23px; font-size: 13px; max-height: 240px; overflow-y: auto; }
+.step-detail ul, .step-detail ol { margin: 0; padding-left: 18px; }
+.step-detail li { margin: 2px 0; }
+.step-detail a { color: var(--accent); }
+.spin { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; flex: none; margin: 0 1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------------- Approval prompt ---------------- */
+.approval { position: fixed; inset: auto 0 24px 0; z-index: 85; display: flex; justify-content: center; padding: 0 16px; }
+.approval-card {
+  width: min(520px, 100%); background: var(--bg-elev); border: 1px solid var(--accent); border-radius: 16px;
+  box-shadow: var(--shadow), 0 0 24px rgba(245, 197, 66, .15); padding: 16px 18px; animation: toast-in .2s ease;
+}
+.approval-title { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+.approval-title img { width: 22px; height: 22px; }
+.approval-summary { margin: 8px 0 12px; color: var(--text); font-size: 14.5px; word-break: break-word; }
+.approval .check { display: flex; gap: 8px; align-items: center; color: var(--text-2); }
+.approval .check input { accent-color: var(--accent); }
+.approval-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* ---------------- Memories list ---------------- */
+.memories { list-style: none; padding: 0; margin: 6px 0; }
+.memories li { display: flex; align-items: flex-start; gap: 10px; padding: 7px 10px; border-radius: 10px; font-size: 14px; }
+.memories li:hover { background: var(--bg-hover); }
+.memories li span { flex: 1; }
+.memories button { color: var(--text-3); }
+.memories button:hover { color: var(--danger); }
+.memories button svg { width: 16px; height: 16px; }
+.settings label.check input { flex: none; }
