@@ -91,7 +91,9 @@ def _focus(a):
 def _decks():
     from . import decks
     items = decks.list_decks()
-    return {"decks": [{"name": d["name"], "cards": d["total"], "due_today": d["due"]} for d in items], "total_due": decks.total_due()}
+    st = decks.streak()
+    return {"decks": [{"name": d["name"], "cards": d["total"], "due_today": d["due"]} for d in items], "total_due": decks.total_due(),
+            "study_streak_days": st["days"], "studied_today": st["today"]}
 
 
 def _reminder(a):

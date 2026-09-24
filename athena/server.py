@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import events, files, knowledge, scheduler, security, speech, store, tts, workspace
+from . import decks, events, files, knowledge, scheduler, security, speech, store, tts, workspace
 from .tools import BY_NAME, approval_summary, arun_tool, enabled_tools, parse_args, run_tool
 
 STATIC_DIR = store.ROOT / "static"
@@ -226,6 +226,11 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
             "Be direct and candid. Answer the question fully and plainly. Don't lecture, moralize, or add "
             "warnings, disclaimers or caveats unless they're genuinely important. Treat the user as a capable adult."
         )
+    length = settings.get("reply_length") or "normal"
+    if length == "short" and mode != "voice":
+        parts.append("Keep replies short: get straight to the point in a few sentences or a short list. The user can ask for more.")
+    elif length == "detailed" and mode != "voice":
+        parts.append("Give thorough, detailed replies: explain the reasoning, cover edge cases, and include examples.")
     custom = (settings.get("custom_instructions") or "").strip()
     if custom:
         parts.append("Additional instructions from the user:\n" + custom)
@@ -300,6 +305,8 @@ async def chat(request: Request):
     auto_approve = bool(body.get("auto_approve"))
     history = _clean_messages(body.get("messages") or [])
     project = store.get_project(body.get("project_id"))
+    if mode == "study":
+        await run_in_threadpool(decks.record_study_day)
     try:
         code_root = workspace.open_root(body.get("workspace")) if mode != "voice" and not no_tools else None
     except workspace.WorkspaceError:
@@ -1127,7 +1134,7 @@ async def delete_project(project_id: str):
 async def list_decks():
     from . import decks
 
-    return {"decks": decks.list_decks(), "due": decks.total_due()}
+    return {"decks": decks.list_decks(), "due": decks.total_due(), "streak": decks.streak()}
 
 
 @app.post("/api/decks")
@@ -1200,6 +1207,22 @@ async def loaded_models():
         return {"models": [m.get("name") for m in resp.json().get("models", [])]}
     except Exception:
         return {"models": [], "unknown": True}
+
+
+@app.post("/api/models/warm")
+async def warm_model(request: Request):
+    """Load a model into memory now, so the next reply starts right away."""
+    model = str((await request.json()).get("model") or "")
+    if not model:
+        raise HTTPException(400, "No model")
+    try:
+        resp = await client.post(f"{OLLAMA}/api/generate", json={"model": model, "prompt": "", "keep_alive": "30m"},
+                                 timeout=httpx.Timeout(10.0, read=300))
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Couldn't load {model}: {exc}") from exc
+    if resp.status_code != 200:
+        raise HTTPException(502, f"Couldn't load {model}: {_ollama_error(resp.text, resp.status_code)}")
+    return {"ok": True}
 
 
 # -------------------------------------------------------------------- stats

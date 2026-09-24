@@ -11,6 +11,7 @@ from typing import Any
 from . import store
 
 DECKS_FILE = store.DATA_DIR / "decks.json"
+STUDY_DAYS_FILE = store.DATA_DIR / "study_days.json"
 DAY = 86400
 _lock = threading.RLock()
 
@@ -136,6 +137,7 @@ def grade(deck_id: str, card_id: str, grade_name: str) -> dict[str, Any] | None:
                 if c["id"] == card_id:
                     d["cards"][i] = _schedule(c, grade_name)
                     _save(decks)
+                    record_study_day()
                     return d["cards"][i]
     return None
 
@@ -143,3 +145,32 @@ def grade(deck_id: str, card_id: str, grade_name: str) -> dict[str, Any] | None:
 def total_due() -> int:
     now = time.time()
     return sum(1 for d in _load() for c in d["cards"] if c["due"] <= now)
+
+
+# ------------------------------------------------------------------ streak
+
+def record_study_day() -> None:
+    """Mark today as a study day (reviewing flashcards or using the Study tab)."""
+    import datetime as dt
+
+    today = dt.date.today().isoformat()
+    with _lock:
+        days = store._read(STUDY_DAYS_FILE, [])
+        if today not in days:
+            store._write(STUDY_DAYS_FILE, (days + [today])[-400:])
+
+
+def streak() -> dict[str, Any]:
+    """Days in a row you've studied. It stays alive until the end of today, so yesterday still counts."""
+    import datetime as dt
+
+    days = set(store._read(STUDY_DAYS_FILE, []))
+    day = dt.date.today()
+    studied_today = day.isoformat() in days
+    if not studied_today:
+        day -= dt.timedelta(days=1)
+    count = 0
+    while day.isoformat() in days:
+        count += 1
+        day -= dt.timedelta(days=1)
+    return {"days": count, "today": studied_today}

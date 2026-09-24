@@ -71,6 +71,7 @@
       </button>
       <div class="model-picker">
         <button class="model-btn" id="modelBtn">
+          <span class="ready-dot" id="readyDot" title=""></span>
           <span id="modelName">Select a model</span>
           <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
         </button>
@@ -159,6 +160,7 @@
       <button type="button" class="icon-btn" data-cv="undo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
       <button type="button" class="icon-btn" data-cv="preview" title="Preview formatting"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
       <button type="button" class="icon-btn" data-cv="copy" title="Copy all"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+      <button type="button" class="icon-btn" data-cv="print" title="Print (or save as PDF)"><svg viewBox="0 0 24 24"><path d="M7 9V3h10v6M7 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="7" y="14" width="10" height="7"/></svg></button>
       <button type="button" class="icon-btn" data-cv="download" title="Download (.md)"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg></button>
       <button type="button" class="icon-btn" data-cv="close" title="Close canvas"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </header>
@@ -187,6 +189,7 @@
       <h2>Flashcard decks</h2>
       <button class="icon-btn" id="closeDecks" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </header>
+    <div class="streak" id="streakBox" hidden></div>
     <p class="muted small">Save flashcards from any chat with 💾, then review what's due each day. Cards you miss come back sooner.</p>
     <button type="button" class="primary" id="reviewAll" hidden>Review all due cards</button>
     <div class="deck-list" id="deckList"></div>
@@ -272,6 +275,9 @@
           <select id="personaVoice"><option value="">Voice: same as usual</option></select>
           <button type="button" class="ghost" id="personaSave">Save personality</button>
         </details>
+        <label>Reply length
+          <select id="setReplyLength"><option value="short">Short — quick, to-the-point answers</option><option value="normal">Normal</option><option value="detailed">Detailed — thorough explanations with examples</option></select>
+        </label>
         <label class="check"><input type="checkbox" id="setDirect" /> Direct mode — straight answers, no lecturing or unnecessary disclaimers</label>
       </section>
 

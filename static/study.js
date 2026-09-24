@@ -138,7 +138,8 @@ export function quizAnswer(w, qi, choice) {
   const ok = choice === q.answer;
   const ex = box.querySelector('.qz-explain');
   ex.hidden = false;
-  ex.innerHTML = `${ok ? '✅ Correct!' : `❌ The answer is <b>${'ABCDEF'[q.answer]}</b>.`} ${inline(q.explain)}`;
+  ex.innerHTML = `${ok ? '✅ Correct!' : `❌ The answer is <b>${'ABCDEF'[q.answer]}</b>.`} ${inline(q.explain)}` +
+    (ok ? '' : `<div><button type="button" class="qz-why" data-quiz-why="${qi}">🤔 Explain my mistake</button></div>`);
   const answered = s.picks.filter((p) => p !== null).length;
   const right = s.picks.filter((p, i) => p === s.qs[i].answer).length;
   const done = answered === s.qs.length;
@@ -152,4 +153,15 @@ export function quizAnswer(w, qi, choice) {
 export function quizRetry(w) {
   const s = w._qz;
   if (s) renderQuiz(w, s.qs);
+}
+
+/** The prompt for "Explain my mistake": what was asked, what you picked, and the right answer. */
+export function mistakePrompt(w, qi) {
+  const s = w._qz;
+  const q = s?.qs[qi];
+  if (!q) return '';
+  const letter = (i) => 'ABCDEF'[i] || i + 1;
+  return `On this quiz question I picked the wrong answer. Explain my mistake: why my answer is wrong, why the correct one is right, ` +
+    `and a quick tip so I don't make it again.\n\nQuestion: ${q.q}\nMy answer: ${letter(s.picks[qi])}) ${q.choices[s.picks[qi]]}\n` +
+    `Correct answer: ${letter(q.answer)}) ${q.choices[q.answer]}`;
 }

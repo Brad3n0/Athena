@@ -4,7 +4,7 @@ import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices, la
 import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
-import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf } from './study.js';
+import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf, mistakePrompt } from './study.js';
 import { hydrateGraphs } from './graph.js';
 import { initCanvas, openCanvas, closeCanvas, syncCanvas, canvasOpen, canvasForChat, applyCanvasReply } from './canvas.js';
 
@@ -174,7 +174,36 @@ function currentModel() {
 function renderModelButton() {
   if (!state.chat) return;
   $('#modelName').textContent = currentModel() || (state.models.length ? 'Select a model' : 'No models installed');
+  renderReadyDot();
 }
+
+// A gold dot = the model is loaded and answers right away; hollow = the first reply takes a few seconds to load it.
+state.loaded = [];
+function renderReadyDot() {
+  const dot = $('#readyDot');
+  const model = state.chat && currentModel();
+  const on = !!model && state.loaded.includes(model);
+  dot.hidden = !model || !state.status.ollama;
+  dot.classList.toggle('on', on);
+  dot.classList.toggle('loading', state.warming === model);
+  dot.title = on ? `${model} is loaded and ready` : state.warming === model ? `Loading ${model}…` : `${model} isn't loaded yet, so the first reply takes a few seconds. Click the dot to load it now.`;
+}
+async function refreshLoaded() {
+  const r = await fetch('/api/models/loaded').then((x) => x.json()).catch(() => ({ models: [] }));
+  state.loaded = (r.models || []).flatMap((n) => [n, n.replace(/:latest$/, '')]);
+  renderReadyDot();
+}
+setInterval(() => { if (!document.hidden) refreshLoaded(); }, 15000);
+$('#readyDot').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  const model = currentModel();
+  if (!model || state.loaded.includes(model) || state.warming) return;
+  state.warming = model;
+  renderReadyDot();
+  try { await api('/api/models/warm', json('POST', { model })); } catch (err) { toast(err.message, 'error'); }
+  state.warming = null;
+  refreshLoaded();
+});
 
 function openModelMenu() {
   const menu = $('#modelMenu');
@@ -489,18 +518,47 @@ function renderWelcome() {
   const night = hour < 6 || hour >= 18;
   const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const bday = isBirthday();
-  const heading = state.mode === 'code' ? `What are we building today${name}?` : state.mode === 'study' ? `What are we studying today${name}?` : bday ? `Happy birthday${name}! 🎂` : `${greet}${name}`;
+  const special = !bday && state.mode === 'assistant' ? specialDay(hour) : null;
+  const heading = state.mode === 'code' ? `What are we building today${name}?` : state.mode === 'study' ? `What are we studying today${name}?` : bday ? `Happy birthday${name}! 🎂` : special?.heading ? `${special.heading}${name}${special.emoji ? ` ${special.emoji}` : ''}` : `${greet}${name}`;
   const sub = state.mode === 'code' ? '' : `<div class="greet-sub">${night ? ICONS.moon : ICONS.sun}${escapeHtml(date)}</div>`;
-  let line = !body && state.mode === 'assistant' ? `<div class="greet-line">${escapeHtml(bday ? "Today's all about you. What should we do?" : welcomeLine(hour))}</div>` : '';
+  let line = !body && state.mode === 'assistant' ? `<div class="greet-line">${escapeHtml(bday ? "Today's all about you. What should we do?" : special?.line || welcomeLine(hour))}</div>` : '';
   if (!body && state.mode === 'study') {
     line = `<div class="study-chips">${STUDY_STARTERS.map(([label, text]) => `<button type="button" data-starter="${escapeHtml(text)}">${label}</button>`).join('')}</div>
-      <div class="study-hint">Tip: attach your notes, a PDF, slides or a photo of a worksheet with 📎 and she'll use it.</div>`;
+      <div class="study-hint">Tip: attach your notes, a PDF, slides or a photo of a worksheet with 📎 and she'll use it.</div>
+      ${streakText() ? `<div class="streak${state.streak.today ? '' : ' cold'}">${escapeHtml(streakText())}</div>` : ''}`;
   }
   const proj = state.projects?.find((p) => p.id === state.chat?.project_id);
   const projTag = proj ? `<div class="proj-tag">${escapeHtml(proj.icon || '📁')} ${escapeHtml(proj.name)}</div>` : '';
   messagesEl.innerHTML = `<div class="welcome">${logoSvg()}<h1>${heading}</h1>${projTag}${sub}${line}${body}</div>`;
   if (bday) celebrateOnce();
   $('#goModels')?.addEventListener('click', () => openSettings('models'));
+}
+
+// ------------------------------------------------------------ orb mood
+// A rough read of how her reply feels, so the orb glows warmer, livelier or calmer while she says it.
+function detectMood(text) {
+  const t = (text || '').toLowerCase();
+  const score = (re) => (t.match(re) || []).length;
+  const excited = score(/!{1,}|🎉|🥳|🔥|amazing|awesome|incredible|let'?s go|congrat|woo+|yay/g);
+  const happy = score(/😊|😄|😁|🙂|😉|💛|❤|haha|glad|love|great|nice|fun|happy|sweet|cute/g);
+  const calm = score(/sorry|sad|tough|hard time|breathe|rest|sleep|relax|gently|understand|it'?s okay|take care|careful|unfortunately/g);
+  if (excited >= 3 && excited >= happy) return 'excited';
+  if (calm >= 2 && calm > happy) return 'calm';
+  if (happy + excited >= 2) return 'happy';
+  return 'neutral';
+}
+
+// ------------------------------------------------------------ cheat sheet
+const CHEAT_CHIP = '📄 Cheat sheet';
+function makeCheatSheet(topic = '') {
+  if (state.abort) return;
+  const has = state.chat.messages.some((m) => m.role === 'assistant');
+  openCanvas({ title: state.chat.canvas?.title || (topic ? `Cheat sheet: ${topic}` : 'Cheat sheet') });
+  const what = topic || (has ? 'everything we covered in this chat' : '');
+  if (!what) { toast('Tell me the topic, e.g. /cheatsheet derivatives'); return; }
+  sendMessage(`Make a one-page cheat sheet of ${what} in the canvas. Put the most important formulas first (in LaTeX), then key definitions, ` +
+    'step-by-step methods, a tiny worked example for each method, and common mistakes to avoid. Keep it compact and well organized ' +
+    'with short headings and bullet points, so it fits on one printed page.', { display: `📄 Make a cheat sheet${topic ? `: ${topic}` : ''}` });
 }
 
 // ------------------------------------------------------------ welcome lines + birthday
@@ -520,6 +578,46 @@ const WELCOME_LINES = {
   late: ['Burning the midnight oil?', "Can't sleep? I'm here.", 'Late-night ideas are the best ones.'],
   companion: ['Missed you.', 'There you are.', 'I was hoping you’d stop by.', 'Talk to me.'],
 };
+// Holidays, days of the week and your habits give the welcome screen a personal touch.
+const HOLIDAYS = {
+  '01-01': ['Happy New Year', '🎉', 'New year, new goals. What are we starting with?'],
+  '02-14': ["Happy Valentine's Day", '💝', 'Need help with a card, a gift idea or dinner plans?'],
+  '03-17': ["Happy St. Patrick's Day", '🍀', 'Feeling lucky? What are we doing today?'],
+  '07-04': ['Happy Fourth of July', '🎆', 'Fireworks later. What can I help with first?'],
+  '10-31': ['Happy Halloween', '🎃', 'Costume ideas? Scary stories? I\'ve got you.'],
+  '12-24': ['Merry Christmas Eve', '🎄', 'Last-minute gift ideas or a cozy movie list?'],
+  '12-25': ['Merry Christmas', '🎁', 'Hope your day is a great one. What\'s up?'],
+  '12-31': ["Happy New Year's Eve", '🥂', 'Any resolutions you want help planning?'],
+};
+let specialCache = null;
+function specialDay(hour) {
+  const now = new Date();
+  const key = `${now.toDateString()} ${hour}`;
+  if (specialCache?.key === key) return specialCache.value; // the welcome screen redraws often; decide once
+  specialCache = { key, value: computeSpecialDay(now, hour) };
+  return specialCache.value;
+}
+function computeSpecialDay(now, hour) {
+  const mmdd = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  let visits = {};
+  try { visits = JSON.parse(localStorage.getItem('athena-visits') || '{}'); } catch { /* ignore */ }
+  const today = now.toDateString();
+  const daysAway = visits.last ? Math.round((new Date(today) - new Date(visits.last)) / 864e5) : 0;
+  const lateAgain = hour < 5 && visits.lateDay && visits.lateDay !== today && (new Date(today) - new Date(visits.lateDay)) <= 864e5 * 1.5;
+  if (visits.last !== today) {
+    try { localStorage.setItem('athena-visits', JSON.stringify({ last: today, lateDay: hour < 5 ? today : visits.lateDay })); } catch { /* ignore */ }
+  }
+  const h = HOLIDAYS[mmdd];
+  if (h) return { heading: h[0], emoji: h[1], line: h[2] };
+  if (daysAway >= 3) return { heading: 'Welcome back', emoji: '👋', line: `It's been ${daysAway} days. What have you been up to?` };
+  if (lateAgain) return { line: 'Late night again? 🌙 Don\'t forget to sleep.' };
+  const day = now.getDay();
+  if (day === 5 && hour >= 12) return { heading: 'Happy Friday', emoji: '🎉', line: 'Weekend plans, or finishing up the week?' };
+  if (day === 1 && hour < 12) return { line: 'Monday again. Let\'s make it an easy one. ☕' };
+  if ((day === 0 || day === 6) && hour >= 8 && hour < 18) return { line: 'Weekend mode. Anything fun planned?' };
+  return null;
+}
+
 function welcomeLine(hour) {
   const pool = [...WELCOME_LINES.any];
   if (hour >= 5 && hour < 11) pool.push(...WELCOME_LINES.morning);
@@ -585,10 +683,22 @@ messagesEl.addEventListener('click', async (e) => {
   if (card) { flashcardAction(card.closest('.study-widget'), 'flip'); return; }
   const choice = e.target.closest('[data-choice]');
   if (choice) { quizAnswer(choice.closest('.study-widget'), Number(choice.closest('.qz-q').dataset.q), Number(choice.dataset.choice)); return; }
+  const why = e.target.closest('[data-quiz-why]');
+  if (why) {
+    if (state.abort) return toast('Wait for her to finish first');
+    const prompt = mistakePrompt(why.closest('.study-widget'), Number(why.dataset.quizWhy));
+    why.disabled = true;
+    if (prompt) sendMessage(prompt, { display: '🤔 Explain my mistake' });
+    return;
+  }
   if (e.target.closest('[data-quiz="retry"]')) { quizRetry(e.target.closest('.study-widget')); return; }
 
   const follow = e.target.closest('[data-followup]');
-  if (follow) { if (!state.abort) sendMessage(follow.dataset.followup); return; }
+  if (follow) {
+    if (state.abort) return;
+    if (follow.dataset.followup === CHEAT_CHIP) makeCheatSheet(); else sendMessage(follow.dataset.followup);
+    return;
+  }
 
   const saveBtn = e.target.closest('[data-save-code]');
   if (saveBtn) { saveCodeBlock(saveBtn); return; }
@@ -798,8 +908,8 @@ function updateAssistantEl(el, m) {
   if (isLast && content && !m.error && !m.voice) {
     const chips = /```canvas/.test(content) ? ['Make it more formal', 'Make it shorter', 'Proofread it']
       : /```(graph|plot)/.test(content) ? ['Explain the graph', 'Where do they cross?', 'Show another example']
-      : /```(flashcards|quiz)/.test(content) ? ['Make it harder', 'More questions', 'Explain the ones I missed']
-      : state.mode === 'study' ? ['Make flashcards from this', 'Quiz me on this', 'Explain it simpler']
+      : /```(flashcards|quiz)/.test(content) ? ['Make it harder', 'More questions', 'Explain the ones I missed', CHEAT_CHIP]
+      : state.mode === 'study' ? ['Make flashcards from this', 'Quiz me on this', 'Explain it simpler', CHEAT_CHIP]
       : /```(?!graph|plot|flashcards|quiz|canvas)/.test(content) ? ['Explain the code', 'Add comments', 'Make it simpler'] : ['Tell me more', 'Make it shorter', 'Give me an example'];
     el.querySelector('.body').insertAdjacentHTML('beforeend', `<div class="followups">${chips.map((c) => `<button type="button" data-followup="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>`);
   }
@@ -975,6 +1085,7 @@ const COMMANDS = [
   { cmd: '/brief', desc: 'Morning briefing', action: () => startBriefing() },
   { cmd: '/voice', desc: 'Start talking', action: () => startVoice() },
   { cmd: '/new', desc: 'New chat', action: () => newChat() },
+  { cmd: '/cheatsheet', desc: 'One-page cheat sheet to print', hint: 'derivatives', action: (r) => makeCheatSheet(r) },
   { cmd: '/folder', desc: 'Open a code project folder', action: () => openWorkspaceDialog() },
   { cmd: '/canvas', desc: 'Write a document together', hint: 'cover letter for a barista job', action: (r) => {
     openCanvas();
@@ -1279,6 +1390,7 @@ async function generateReply({ voice = false, model = null } = {}) {
     const { content } = splitThinking(reply);
     if (!abort.signal.aborted && chat === state.chat && /```canvas/.test(content)) applyCanvasReply(content);
     if (speakThis && !abort.signal.aborted) speaker.feed(content, true);
+    if (voice) state.voice.avatar?.setMood?.(detectMood(content));
     if (reply.error && speakThis) speaker.say(`Sorry, something went wrong. ${reply.error}`);
     if (!reply.content && !reply.error && abort.signal.aborted) reply.content = '_(stopped)_';
     updateAssistantEl(el, reply);
@@ -1288,6 +1400,8 @@ async function generateReply({ voice = false, model = null } = {}) {
       if (!chat.model) chat.model = model;
       await saveChat();
     }
+    refreshLoaded();
+    if (mode === 'study' && !state.streak?.today) refreshDeckBadge(); // first study of the day extends the streak
     if (!reply.error && chat.autoTitle !== false && chat.messages.filter((m) => m.role === 'assistant').length === 1) smartTitle(chat, reply);
   }
   return reply;
@@ -1562,6 +1676,7 @@ const overlay = $('#voiceOverlay');
 
 function setVoiceState(s, label) {
   overlay.dataset.state = s;
+  if (s === 'thinking') state.voice.avatar?.setMood?.('neutral');
   state.voice.avatar?.setState({ listening: 'listening', transcribing: 'thinking', thinking: 'thinking', speaking: 'speaking' }[s] || 'idle');
   $('#voiceState').textContent = label || { listening: 'Listening…', transcribing: 'Got it…', thinking: 'Thinking…', speaking: 'Speaking — tap to interrupt', muted: 'Microphone muted' }[s] || s;
 }
@@ -1825,6 +1940,7 @@ function openSettings(tab = 'general') {
   api('/api/folders').then((f) => { $('#setFolders').placeholder = f.defaults.join('\n'); }).catch(() => {});
   loadMemories();
   $('#setDirect').checked = !!s.direct_mode;
+  $('#setReplyLength').value = s.reply_length || 'normal';
   fillPersonas();
   renderAccents();
   $('#setTextSize').value = s.text_size || 'normal';
@@ -1975,6 +2091,7 @@ bind('#setInstructions', 'custom_instructions');
 bind('#setTheme', 'theme');
 bind('#setTools', 'tools_enabled', (el) => el.checked);
 bind('#setDirect', 'direct_mode', (el) => el.checked);
+bind('#setReplyLength', 'reply_length');
 bind('#setMemory', 'memory_enabled', (el) => el.checked);
 bind('#setFiles', 'files_enabled', (el) => el.checked);
 bind('#setWeb', 'web_enabled', (el) => el.checked);
@@ -2798,6 +2915,8 @@ async function refreshDeckBadge() {
   $('#deckBadge').textContent = d.due;
   $('#deckBadge').hidden = !d.due;
   $('#deckBadge').title = `${d.due} card${d.due === 1 ? '' : 's'} due today`;
+  state.streak = d.streak || { days: 0, today: false };
+  renderStreak();
   return d;
 }
 
@@ -2806,6 +2925,22 @@ const whenText = (ts) => {
   const secs = ts - Date.now() / 1000;
   return secs < 3600 ? `in ${Math.max(1, Math.round(secs / 60))} min` : secs < 0.9 * 86400 ? `in ${Math.round(secs / 3600)} h` : Math.round(secs / 86400) === 1 ? "tomorrow" : `in ${Math.round(secs / 86400)} days`;
 };
+
+// 🔥 Days in a row you've studied (flashcard reviews or the Study tab).
+function streakText() {
+  const { days = 0, today = false } = state.streak || {};
+  if (!days) return '';
+  if (!today) return `🔥 ${days}-day study streak · study today to keep it going!`;
+  return `🔥 ${days}-day study streak${days >= 30 ? ' · legendary! 🏆' : days >= 7 ? ' · on fire!' : ''}`;
+}
+function renderStreak() {
+  const box = $('#streakBox');
+  const text = streakText();
+  box.hidden = !text;
+  box.textContent = text;
+  box.classList.toggle('cold', !!text && !state.streak.today);
+  if (state.mode === 'study' && !state.chat?.messages.length) { const el = $('.welcome .streak'); if (el) el.textContent = text; else if (text) renderMessages(); }
+}
 
 async function loadDecks() {
   const d = await refreshDeckBadge();
@@ -3103,6 +3238,7 @@ async function init() {
   if (isNarrow()) toggleSidebar(false);
   await refreshStatus();
   await refreshModels();
+  refreshLoaded();
   initCanvas({ state, model: () => currentModel(), save: () => saveChat(), toast,
     onShow: () => { if (innerWidth < 1400 && innerWidth > 860) toggleSidebar(false); } });
   newChat();

@@ -14,6 +14,13 @@ const BLOBS = [
   { c: [30, 64, 175], r: 0.60, speed: -0.19, orbit: 0.52, phase: 4.8, a: 0.55 },
 ];
 
+const MOODS = {
+  neutral: { tint: [], mix: 0, glow: 1, speed: 1 },
+  happy: { tint: [255, 170, 120], mix: 0.28, glow: 1.18, speed: 1.15 },
+  excited: { tint: [255, 120, 170], mix: 0.3, glow: 1.35, speed: 1.6 },
+  calm: { tint: [130, 170, 240], mix: 0.3, glow: 0.85, speed: 0.7 },
+};
+
 export class VoiceOrb {
   constructor(container) {
     this.canvas = document.createElement('canvas');
@@ -36,6 +43,8 @@ export class VoiceOrb {
   }
 
   setState(state) { this.state = state; }
+  /** happy | excited | calm | neutral: tints the orb warmer, livelier or cooler to match her mood. */
+  setMood(mood) { this.mood = MOODS[mood] ? mood : 'neutral'; }
   cheer() { this.flash = 1; }
 
   _spark(initial = false) {
@@ -65,8 +74,15 @@ export class VoiceOrb {
     const t = now / 1000;
     const { ctx, size } = this;
     const pal = palette();
-    const A = pal.rgb.join(', '), L = pal.light.join(', ');
-    pal.orb.forEach((c, i) => { BLOBS[i].c = c; });
+    // Ease towards the current mood's tint, glow and speed.
+    const target = MOODS[this.mood || 'neutral'];
+    this.tone = this.tone || { ...MOODS.neutral, tint: [] };
+    for (const k of ['mix', 'glow', 'speed']) this.tone[k] = lerp(this.tone[k], target[k], 0.03);
+    // Slide the tint colour too (neutral keeps the last tint while it fades out), so moods blend smoothly.
+    if (target.tint.length) this.tone.tint = this.tone.tint.length ? this.tone.tint.map((v, i) => lerp(v, target.tint[i], 0.03)) : [...target.tint];
+    const mix = (c) => c.map((v, i) => Math.round(v + ((this.tone.tint[i] ?? v) - v) * this.tone.mix));
+    const A = mix(pal.rgb).join(', '), L = pal.light.join(', ');
+    pal.orb.forEach((c, i) => { BLOBS[i].c = mix(c); });
     if (!size) { this._raf = requestAnimationFrame((tt) => this._tick(tt)); return; }
 
     // Inputs, smoothed
@@ -77,7 +93,7 @@ export class VoiceOrb {
     this.think = lerp(this.think, this.state === 'thinking' ? 1 : 0, 0.06);
     this.flash = Math.max(0, (this.flash || 0) - dt * 1.5);
     const energy = Math.min(1, this.level + this.mic * 0.7);
-    this.spin += dt * (0.35 + this.think * 2.2 + energy * 1.2);
+    this.spin += dt * (0.35 + this.think * 2.2 + energy * 1.2) * this.tone.speed;
 
     const cx = size / 2, cy = size / 2;
     const breathe = 1 + Math.sin(t * 1.4) * 0.015;
@@ -86,7 +102,7 @@ export class VoiceOrb {
 
     // Outer glow
     const glow = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, size * 0.5);
-    glow.addColorStop(0, `rgba(${A}, ${0.28 + energy * 0.35 + this.flash * 0.3})`);
+    glow.addColorStop(0, `rgba(${A}, ${(0.28 + energy * 0.35 + this.flash * 0.3) * this.tone.glow})`);
     glow.addColorStop(0.45, `rgba(${pal.orb[1].join(', ')}, ${0.08 + energy * 0.12})`);
     glow.addColorStop(1, `rgba(${pal.orb[1].join(', ')}, 0)`);
     ctx.fillStyle = glow;

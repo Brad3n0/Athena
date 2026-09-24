@@ -853,3 +853,20 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
   #newChatTop { display: none; } /* the sidebar has New chat; keeps the top bar from overflowing on phones */
   .topbar { gap: 2px; padding: 8px 6px; }
 }
+
+/* ---------------- Model ready dot ---------------- */
+.ready-dot { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--text-3); flex: none; cursor: pointer; transition: all .3s; }
+.ready-dot.on { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px rgba(var(--accent-rgb), .7); cursor: default; }
+.ready-dot.loading { border-color: var(--accent); animation: dotPulse 1s ease-in-out infinite; }
+@keyframes dotPulse { 50% { background: rgba(var(--accent-rgb), .5); } }
+.model-btn { gap: 7px; }
+.qz-why { margin-top: 8px; font-size: 13px; padding: 5px 12px; border-radius: 99px; border: 1px solid rgba(var(--accent-rgb), .5); color: var(--accent); background: rgba(var(--accent-rgb), .06); }
+.qz-why:hover:not(:disabled) { background: rgba(var(--accent-rgb), .15); }
+.qz-why:disabled { opacity: .5; }
+
+/* ---------------- Study streak ---------------- */
+.streak { margin: 10px 0 6px; padding: 8px 12px; border-radius: 12px; font-size: 13.5px; font-weight: 600;
+  background: linear-gradient(90deg, rgba(255, 140, 50, .16), rgba(var(--accent-rgb), .10)); border: 1px solid rgba(255, 150, 60, .35); color: var(--text); }
+.streak.cold { background: rgba(255, 255, 255, .03); border-color: var(--border); color: var(--text-2); font-weight: 500; }
+.welcome .streak { display: inline-block; margin-top: 14px; }
+@media (max-width: 520px) { #canvasWords { display: none; } .canvas header .icon-btn { width: 32px; } }

@@ -49,6 +49,7 @@ export function initCanvas(d) {
     if (act === 'undo') undoEdit();
     if (act === 'copy') { navigator.clipboard?.writeText(ui.text.value).then(() => deps.toast('Copied the document')); }
     if (act === 'download') download();
+    if (act === 'print') printDoc();
     if (act === 'stop') busy?.abort();
   };
 }
@@ -234,6 +235,33 @@ function setPreview(on) {
   if (on) ui.preview.innerHTML = renderMarkdown(ui.text.value) || '<p class="muted">Nothing here yet.</p>';
 }
 function togglePreview() { setPreview(ui.preview.hidden); }
+
+/** Print the formatted document (math included) on clean white pages. "Save as PDF" works from the same dialog. */
+function printDoc() {
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+  document.body.append(frame);
+  const title = (ui.title.value.trim() || 'Document').replace(/[<>&]/g, '');
+  frame.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
+    <link rel="stylesheet" href="${new URL('vendor/katex/katex.min.css', location.href)}">
+    <style>
+      @page { margin: 12mm; }
+      body { font: 11pt/1.45 Georgia, 'Times New Roman', serif; color: #111; margin: 0; }
+      h1 { font-size: 17pt; margin: 0 0 6pt; } h2 { font-size: 13pt; margin: 10pt 0 4pt; border-bottom: 1px solid #ccc; }
+      h3 { font-size: 11.5pt; margin: 8pt 0 3pt; } p, li { margin: 2pt 0; } ul, ol { padding-left: 16pt; margin: 3pt 0; }
+      code { font-size: 9.5pt; background: #f3f3f3; padding: 0 3px; border-radius: 3px; }
+      pre { background: #f6f6f6; padding: 6pt; border-radius: 4px; white-space: pre-wrap; font-size: 9.5pt; }
+      table { border-collapse: collapse; } td, th { border: 1px solid #bbb; padding: 3pt 6pt; }
+      .katex-display { margin: 4pt 0; } .code-head, .code-actions, button { display: none !important; }
+    </style></head><body>${renderMarkdown(ui.text.value)}</body></html>`;
+  frame.onload = () => {
+    setTimeout(() => {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+      setTimeout(() => frame.remove(), 1000);
+    }, 300); // let the math font load
+  };
+}
 
 function download() {
   const name = (ui.title.value.trim() || 'Document').replace(/[\\/:*?"<>|]+/g, '').slice(0, 80) || 'Document';

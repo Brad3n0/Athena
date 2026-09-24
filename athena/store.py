@@ -65,6 +65,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "voice_hotkey": "<ctrl>+<shift>+<space>",
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
+    "reply_length": "normal",
     "theme": "dark",
     "setup_done": False,  # first-run wizard finished
     "text_size": "normal",  # small | normal | large

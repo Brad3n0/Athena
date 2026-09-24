@@ -26,6 +26,10 @@ A private, **fully offline** AI assistant for your home PC. It looks and works l
 
 Linux/macOS: use `./pull-models.sh`, `./install-voice.sh` and `./start.sh` instead.
 
+## Updating Athena
+
+Double-click **`update.bat`** to get the newest version. The first time, it installs Git and asks you to sign in to GitHub once (the repo is private). After that it just downloads what changed. Your chats, settings and installed parts stay exactly as they are. Close Athena's black window and double-click `start` afterwards.
+
 ## 2. Every day
 
 Double-click **`start.bat`**. Athena opens in your browser at **http://localhost:8765**. After setup it works with your internet unplugged.
@@ -70,6 +74,9 @@ Click **Study** at the top, next to Assistant and Code.
 - **Quizzes** are clickable. Each answer shows whether you were right, with an explanation, and you get a score at the end.
 - **Math looks like a textbook:** fractions, exponents, square roots and equations are drawn properly, including on flashcards and quizzes, and she reads them aloud correctly ("x squared equals 9 over 3").
 - **Attach your material** with 📎: PDFs, Word documents, PowerPoint slides, text files, or photos of worksheets and handwritten notes (photos need a vision model like `qwen2.5vl:7b`). Everything she makes is based on your material.
+- **Explain my mistake:** get a quiz question wrong and press **🤔 Explain my mistake** for why your answer was wrong, why the right one is right, and a tip for next time.
+- **🔥 Study streak:** every day you review flashcards or use the Study tab counts. See your streak in **Decks** and on the Study screen.
+- **📄 Cheat sheet:** press the chip under a study reply (or type `/cheatsheet derivatives`) for a one-page sheet of formulas, methods and common mistakes in the canvas. Press 🖨 to print it or save it as a PDF.
 - Combine it with other features: *"remind me to study biology every day at 7pm"*, `/focus 25 minutes on chemistry`, or ⭐ a study guide to keep it under **Saved**.
 
 ## Code projects
@@ -148,6 +155,9 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 - Everything is stored in the `data/` folder: chats, tasks and settings as plain JSON. Back it up or delete it anytime.
 - Use Athena from your phone on the same Wi-Fi: `start.bat --host 0.0.0.0`, then open `http://<your-pc-ip>:8765`. If you reach it by a custom name (like a domain), add that name to the `ATHENA_ALLOWED_HOSTS` environment variable. Athena refuses unknown names and requests sent from other websites, so a web page can't secretly control her. Browsers only allow the microphone on `localhost`, so voice works on the PC itself.
 - Other options: `--port 9000` changes the port, and `--no-browser` stops the browser opening. `OLLAMA_HOST` is respected if Ollama runs elsewhere.
+- **Ready dot:** the dot next to the model name turns gold when that model is loaded and will answer right away. A hollow dot means the first reply takes a few seconds; click it to load the model now.
+- **Reply length:** **Settings → General → Reply length** switches between Short, Normal and Detailed answers.
+- **Little touches:** the welcome screen notices holidays, Fridays, late nights and when you've been away, and the voice orb glows warmer when she's happy and calmer when she's being gentle.
 - **Each mode keeps its own chat:** switch from Assistant to Study and you get your study chat (or a fresh one). Switch back and your Assistant chat is right where you left it. To take a conversation into another model without switching modes, pick a model from the menu at the top.
 - **Branch a chat:** press ⑂ under any reply to start a new chat that continues from that point. The original stays as it was, which is handy for trying a different direction.
 - **Compare models:** open the model menu and click ⚖ next to another model. Your next messages get two answers side by side (with speed and length), and you keep the better one. The other stays as a version (‹ ›). Press ✕ on the "Comparing" bar to stop. Two big models at once can be slow if your graphics card can only hold one.
