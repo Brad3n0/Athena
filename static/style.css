@@ -326,12 +326,16 @@ svg.fill { fill: currentColor; stroke: none; }
 .voice-state { font-size: 20px; font-weight: 600; letter-spacing: .01em; }
 .voice-caption { max-width: 680px; padding: 0 24px; text-align: center; font-size: 16px; opacity: .75; min-height: 3em; max-height: 30vh; overflow-y: auto; }
 .voice-controls { display: flex; gap: 22px; }
-.round { width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.1); color: inherit; }
-:root[data-theme="light"] .round { background: rgba(0,0,0,.07); }
-.round:hover { background: rgba(255,255,255,.18); }
-.round.danger { background: var(--danger); color: #fff; }
-.round.off { background: #fff; color: #111; }
+.round {
+  width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink); border: 2px solid var(--accent);
+  box-shadow: 0 0 18px rgba(245, 197, 66, .25); transition: filter .15s, background .15s, color .15s;
+}
+.round:hover { filter: brightness(1.1); }
 .round svg { width: 24px; height: 24px; }
+.round .slash { display: none; }
+.round.off { background: transparent; color: var(--accent); box-shadow: none; }
+.round.off .slash { display: inline; }
 
 /* ---------------- Toasts ---------------- */
 .toasts { position: fixed; top: 16px; right: 16px; z-index: 80; display: flex; flex-direction: column; gap: 8px; }
