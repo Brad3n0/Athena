@@ -223,8 +223,46 @@ function setMode(mode, { keepModel = false } = {}) {
 }
 $('#modeSwitch').onclick = (e) => {
   const b = e.target.closest('[data-mode]');
-  if (b) setMode(b.dataset.mode, { keepModel: false });
+  if (b) switchMode(b.dataset.mode);
 };
+
+// Each mode keeps its own chat: switching to Study shows your study chat (or a fresh one),
+// and switching back to Assistant brings back the chat you were in.
+const modeChats = {};
+let modeChatIds = {};
+try { modeChatIds = JSON.parse(localStorage.getItem('athena-mode-chats') || '{}'); } catch { /* ignore */ }
+
+function rememberModeChat() {
+  if (!state.chat || (state.chat.startup && !state.chat.messages.length)) return; // the blank chat Athena opens with
+  modeChats[state.mode] = state.chat;
+  if (state.chat.id) modeChatIds[state.mode] = state.chat.id;
+  else delete modeChatIds[state.mode]; // a fresh, empty chat
+  try { localStorage.setItem('athena-mode-chats', JSON.stringify(modeChatIds)); } catch { /* ignore */ }
+}
+
+async function switchMode(mode) {
+  if (mode === state.mode) return;
+  if (state.abort) { toast('She\'s still answering. Wait a moment or press stop first.'); return; }
+  rememberModeChat();
+  const exists = (c) => c && (!c.id || state.chats.some((x) => x.id === c.id)) && (!state.project || c.project_id === state.project);
+  const inMemory = modeChats[mode];
+  if (exists(inMemory)) {
+    state.chat = inMemory;
+    setMode(mode, { keepModel: true });
+    renderMessages();
+    renderSidebar();
+    syncCanvas();
+    renderWorkspaceChip();
+    return;
+  }
+  const id = modeChatIds[mode];
+  if (id && state.chats.some((x) => x.id === id && (!state.project || x.project_id === state.project))) {
+    await openChat(id); // switches the mode to the chat's own mode
+    return;
+  }
+  state.mode = mode;
+  newChat();
+}
 
 function modePlaceholder(mode) {
   return mode === 'code' ? 'Ask Athena to write, explain or fix code'
@@ -398,10 +436,12 @@ $('#canvasBtn').onclick = () => (canvasOpen() ? closeCanvas() : openCanvas());
 
 async function openChat(id) {
   stopGenerating();
+  if (state.chat?.id !== id) rememberModeChat();
   try {
     const chat = await api(`/api/conversations/${id}`);
     state.chat = { ...chat, messages: chat.messages || [] };
     setMode(['code', 'study'].includes(chat.mode) ? chat.mode : 'assistant', { keepModel: true });
+    rememberModeChat();
     renderMessages();
     renderSidebar();
     syncCanvas();
@@ -1710,7 +1750,7 @@ const VOICE_COMMANDS = [
   [/^(talk|speak|go) (a (little |bit )?)?(slower|more slowly)$|^slow down$/, () => nudgeRate(-0.15, 'Okay, I\'ll slow down.')],
   [/^(talk|speak|go) (a (little |bit )?)?faster$|^speed up$/, () => nudgeRate(0.15, 'Okay, a bit faster.')],
   [/^(new chat|start over|fresh start|clear (the )?chat)$/, () => { newChat(); speaker.reset(); speaker.say('Fresh start. What\'s up?'); }],
-  [/^(switch to |go to )?(code|study|assistant) mode$/, (m) => { const mode = m[2]; setMode(mode); speaker.reset(); speaker.say(`${mode[0].toUpperCase() + mode.slice(1)} mode.`); }],
+  [/^(switch to |go to )?(code|study|assistant) mode$/, async (m) => { const mode = m[2]; await switchMode(mode); speaker.reset(); speaker.say(`${mode[0].toUpperCase() + mode.slice(1)} mode.`); }],
   [/^(go to sleep|take a (break|nap)|pause|sleep)$/, async () => { speaker.reset(); speaker.say('Okay. Tap me when you need me.'); await speaker.done(); await voiceDoze(); }],
   [/^(never ?mind|cancel( that)?|forget it)$/, () => { speaker.reset(); speaker.say('No problem.'); }],
   [/^(save|star) (that|this|it)$/, () => {
@@ -3045,6 +3085,7 @@ async function init() {
   initCanvas({ state, model: () => currentModel(), save: () => saveChat(), toast,
     onShow: () => { if (innerWidth < 1400 && innerWidth > 860) toggleSidebar(false); } });
   newChat();
+  state.chat.startup = true;
   loadChats();
   loadProjects();
   loadTasks();

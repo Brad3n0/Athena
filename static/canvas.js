@@ -57,7 +57,7 @@ export const canvasOpen = () => !!deps?.state.chat?.canvas?.open;
 
 /** What the chat sends so she can see (and rewrite) the document. */
 export function canvasForChat() {
-  const c = deps.state.chat?.canvas;
+  const c = deps?.state.chat?.canvas;
   return c?.open ? { open: true, title: c.title, text: c.text } : null;
 }
 
@@ -80,6 +80,7 @@ export function closeCanvas() {
 
 /** Call after switching chats: shows that chat's canvas, or hides the panel. */
 export function syncCanvas() {
+  if (!deps) return; // app still starting up
   undo.length = 0;
   redo.length = 0;
   busy?.abort();
