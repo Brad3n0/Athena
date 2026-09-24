@@ -157,6 +157,10 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
     if mode != "voice":
         parts.append("Write math with LaTeX: $...$ for inline math and $$...$$ on its own lines for bigger equations "
                      "(for example $\\frac{3}{4}$, $x^2$, $\\sqrt{16}$). Never put math inside code blocks.")
+        parts.append("To draw a graph of functions, use a fenced code block with the language tag `graph`, one function per "
+                     "line in plain math (not LaTeX), plus optional ranges, points and a title, e.g.:\n"
+                     "```graph\ntitle: Parabola and line\ny = x^2 - 4\ny = 2x + 1\nx: -6..6\npoint: (2, 0) root\n```\n"
+                     "The app draws it as an interactive graph. Use it whenever a picture of a function helps.")
     if tools_on:
         groups = {t.group for t in enabled_tools(settings)}
         abilities = ["You have tools. Use them whenever they help, then briefly tell the user what you did."]

@@ -5,6 +5,7 @@ import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 import { hydrateStudy, flashcardAction, quizAnswer, quizRetry } from './study.js';
+import { hydrateGraphs } from './graph.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -628,6 +629,7 @@ function updateAssistantEl(el, m) {
   if (m.streaming && stillThinking && !thinking.trim()) html += '<span class="typing"></span>';
   el.querySelector('.content').innerHTML = html;
   if (html.includes('study-widget')) hydrateStudy(el, !!m.streaming);
+  if (html.includes('graph-widget')) hydrateGraphs(el, !!m.streaming);
 
   el.classList.toggle('streaming', !!m.streaming);
   const actions = el.querySelector('.msg-actions');
@@ -645,9 +647,10 @@ function updateAssistantEl(el, m) {
   const idx = Number(el.dataset.idx);
   const isLast = state.chat && idx === state.chat.messages.length - 1;
   if (isLast && content && !m.error && !m.voice) {
-    const chips = /```(flashcards|quiz)/.test(content) ? ['Make it harder', 'More questions', 'Explain the ones I missed']
+    const chips = /```(graph|plot)/.test(content) ? ['Explain the graph', 'Where do they cross?', 'Show another example']
+      : /```(flashcards|quiz)/.test(content) ? ['Make it harder', 'More questions', 'Explain the ones I missed']
       : state.mode === 'study' ? ['Make flashcards from this', 'Quiz me on this', 'Explain it simpler']
-      : /```/.test(content) ? ['Explain the code', 'Add comments', 'Make it simpler'] : ['Tell me more', 'Make it shorter', 'Give me an example'];
+      : /```(?!graph|plot|flashcards|quiz)/.test(content) ? ['Explain the code', 'Add comments', 'Make it simpler'] : ['Tell me more', 'Make it shorter', 'Give me an example'];
     el.querySelector('.body').insertAdjacentHTML('beforeend', `<div class="followups">${chips.map((c) => `<button type="button" data-followup="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>`);
   }
 }
