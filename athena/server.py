@@ -212,6 +212,27 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
     return "\n\n".join(parts)
 
 
+PROJECT_FILES_BUDGET = 40_000  # characters of project files included in every chat
+
+
+def project_context(project: dict[str, Any] | None) -> str:
+    """Instructions and files shared by every chat in a project."""
+    if not project:
+        return ""
+    parts = [f"\n\nThis chat is part of the user's project \"{project.get('name', 'Project')}\"."]
+    if (project.get("instructions") or "").strip():
+        parts.append("Project instructions (always follow these):\n" + project["instructions"].strip())
+    budget = PROJECT_FILES_BUDGET
+    for f in project.get("files") or []:
+        if budget <= 0:
+            parts.append("(More project files exist but were left out for length.)")
+            break
+        text = (f.get("text") or "")[:budget]
+        budget -= len(text)
+        parts.append(f"Project file: {f.get('name')}\n<<<\n{text}\n>>>")
+    return "\n\n".join(parts)
+
+
 def _clean_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cleaned = []
     for msg in messages[-60:]:  # keep the context window reasonable
@@ -244,12 +265,13 @@ async def chat(request: Request):
     use_tools = model not in _no_tool_models and bool(enabled_tools(settings))
     auto_approve = bool(body.get("auto_approve"))
     history = _clean_messages(body.get("messages") or [])
+    project = store.get_project(body.get("project_id"))
     shown: set[str] = set()
 
     async def generate() -> AsyncIterator[bytes]:
         nonlocal use_tools, auto_approve
         think_off = True
-        system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools)}
+        system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + project_context(project)}
         messages: list[dict[str, Any]] = [system, *history]
 
         for _round in range(MAX_TOOL_ROUNDS):
@@ -270,7 +292,7 @@ async def chat(request: Request):
                             # Model can't use tools: remember that and retry as plain chat.
                             _no_tool_models.add(model)
                             use_tools = False
-                            messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False)}
+                            messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + project_context(project)}
                             continue
                         yield _event("error", message=_ollama_error(text, resp.status_code))
                         return
@@ -854,6 +876,43 @@ def _pptx_text(path: str) -> str:
             words = re.findall(r"<a:t>([^<]*)</a:t>", z.read(name).decode("utf-8", "ignore"))
             out.append(f"Slide {i}: " + " ".join(words))
     return "\n".join(out)
+
+
+# ------------------------------------------------------------------ projects
+
+@app.get("/api/projects")
+async def list_projects():
+    chats = store.list_conversations()
+    out = []
+    for p in store.list_projects():
+        out.append({**{k: v for k, v in p.items() if k != "files"}, "files": [{"name": f["name"], "chars": len(f.get("text", ""))} for f in p.get("files", [])],
+                    "chats": sum(1 for c in chats if c.get("project_id") == p["id"])})
+    return out
+
+
+@app.get("/api/projects/{project_id}")
+async def get_project(project_id: str):
+    p = store.get_project(project_id)
+    if not p:
+        raise HTTPException(404, "Not found")
+    return p
+
+
+@app.post("/api/projects")
+async def create_project(request: Request):
+    return store.save_project(await request.json())
+
+
+@app.put("/api/projects/{project_id}")
+async def update_project(project_id: str, request: Request):
+    if not store.get_project(project_id):
+        raise HTTPException(404, "Not found")
+    return store.save_project(await request.json(), project_id)
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: str):
+    return {"ok": store.delete_project(project_id)}
 
 
 # ------------------------------------------------------------ flashcard decks

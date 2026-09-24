@@ -729,3 +729,30 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .review-done { text-align: center; padding: 30px 0; font-size: 17px; }
 .review-done b { display: block; font-size: 26px; margin-bottom: 6px; }
 .review-deck { font-size: 12px; color: var(--text-3); text-align: center; margin-bottom: 8px; }
+
+/* ---------------- Projects ---------------- */
+.projects { margin: 2px 0 4px; }
+.projects .ph { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text-3); padding: 8px 10px 2px; }
+.projects .ph button { color: var(--text-3); font-size: 18px; line-height: 1; padding: 0 4px; border-radius: 6px; }
+.projects .ph button:hover { color: var(--accent); background: var(--bg-hover); }
+.proj-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 10px; border-radius: 10px; font-size: 14px; }
+.proj-item:hover { background: var(--bg-hover); }
+.proj-item.active { background: rgba(var(--accent-rgb), .14); color: var(--text); }
+.proj-item .pc { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.proj-header { display: flex; align-items: center; gap: 6px; margin: 4px 0 2px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(var(--accent-rgb), .4); background: rgba(var(--accent-rgb), .07); }
+.proj-header b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proj-header button { color: var(--text-3); width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; }
+.proj-header button:hover { color: var(--text); background: var(--bg-hover); }
+.proj-header svg { width: 15px; height: 15px; }
+.project-dlg { width: min(560px, calc(100vw - 32px)); }
+.project-body { padding: 16px 20px 20px; overflow-y: auto; }
+.project-body label { display: block; margin: 12px 0 6px; font-size: 14px; }
+.project-body input, .project-body textarea { width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; color: var(--text); outline: 0; }
+.project-body input:focus, .project-body textarea:focus { border-color: var(--accent); }
+.proj-icon { width: 56px !important; flex: none; text-align: center; font-size: 20px; }
+.welcome .proj-tag { font-size: 14px; color: var(--accent); margin-top: -12px; }
+.export-menu button:disabled { opacity: .45; cursor: default; background: none; }
+#projFiles li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#projFiles li span svg { width: 14px; height: 14px; vertical-align: -2px; }
+.project-body .pull-row:first-child { display: flex; gap: 8px; }
+.project-body .pull-row:first-child #projName { flex: 1; }

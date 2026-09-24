@@ -32,6 +32,7 @@
       <input id="searchChats" placeholder="Search chats" />
     </div>
 
+    <div class="projects" id="projectList"></div>
     <nav class="chat-list" id="chatList"></nav>
 
     <div class="sidebar-bottom">
@@ -481,6 +482,28 @@
   </form>
   <div class="lock-error" id="unlockError"></div>
 </div>
+
+<div class="export-menu" id="moveMenu" hidden></div>
+
+<dialog class="settings project-dlg" id="projectDlg">
+  <form method="dialog" class="settings-inner">
+    <header><h2 id="projectDlgTitle">New project</h2><button class="icon-btn" value="close" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+    <div class="project-body">
+      <div class="pull-row"><input id="projIcon" class="proj-icon" maxlength="4" title="Emoji" /><input id="projName" placeholder="Project name, e.g. Algebra class" /></div>
+      <label>Instructions for every chat in this project
+        <textarea id="projInstructions" rows="5" placeholder="e.g. I'm in 9th grade Algebra 1. Explain step by step and use examples like the ones in my notes."></textarea>
+      </label>
+      <label>Files she should know about <span class="muted small">(notes, syllabus, code, PDFs, Word…)</span></label>
+      <ul class="memories" id="projFiles"></ul>
+      <label class="ghost file-btn" style="margin-bottom:14px">+ Add files<input type="file" id="projFileInput" multiple hidden /></label>
+      <div class="pull-row">
+        <button type="button" class="ghost" id="projDelete">Delete project</button>
+        <span class="spacer"></span>
+        <button type="button" class="primary" id="projSave">Save</button>
+      </div>
+    </div>
+  </form>
+</dialog>
 
 <div class="export-menu" id="exportMenu" hidden>
   <button type="button" data-export="md">Markdown (.md)</button>

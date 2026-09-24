@@ -72,6 +72,16 @@ Click **Study** at the top, next to Assistant and Code.
 - **Attach your material** with 📎: PDFs, Word documents, PowerPoint slides, text files, or photos of worksheets and handwritten notes (photos need a vision model like `qwen2.5vl:7b`). Everything she makes is based on your material.
 - Combine it with other features: *"remind me to study biology every day at 7pm"*, `/focus 25 minutes on chemistry`, or ⭐ a study guide to keep it under **Saved**.
 
+## Projects
+
+Projects are folders for your chats, like one per class or per app you're building. Click **+** next to **Projects** in the sidebar, then give the project:
+
+- a name and an emoji,
+- **instructions** she follows in every chat inside it (*"I'm in Algebra 1, explain step by step"*),
+- **files** she should always know about, such as notes, a syllabus, code, PDFs or Word documents.
+
+While a project is open, new chats go into it, and the sidebar only shows that project's chats. Press ✕ to go back to all chats. To move an existing chat, hover over it and click the 📁 folder icon.
+
 ## Desktop app, "Hey Athena" and more
 
 - **Desktop app:** double-click **`start-desktop.bat`**. Athena opens in her own window and lives in the system tray. Press **Ctrl+Space** anywhere to bring her up, or **Ctrl+Shift+Space** to start talking. In **Settings → Desktop app** you can turn on **Start with Windows** and create Desktop/Start menu shortcuts.

@@ -23,6 +23,8 @@ const ICONS = {
   warn: '<svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   star: '<svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+  folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
   pin: '<svg viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
@@ -228,7 +230,9 @@ function renderSidebar() {
   const list = $('#chatList');
   list.innerHTML = '';
   let group = '';
-  const ordered = [...state.chats.filter((c) => c.pinned), ...state.chats.filter((c) => !c.pinned)];
+  const inProject = state.chats.filter((c) => !state.project || c.project_id === state.project);
+  const ordered = [...inProject.filter((c) => c.pinned), ...inProject.filter((c) => !c.pinned)];
+  renderProjects();
   for (const c of ordered) {
     if (q && !(c.title || '').toLowerCase().includes(q)) continue;
     const g = c.pinned ? 'Pinned' : groupLabel(c.updated || c.created || Date.now() / 1000);
@@ -238,10 +242,10 @@ function renderSidebar() {
     item.dataset.id = c.id;
     const icon = c.icon ? `<span class="chat-icon">${escapeHtml(c.icon)}</span>` : c.mode === 'code' ? '<span class="chat-icon mode-tag">&lt;/&gt;</span>' : c.mode === 'study' ? '<span class="chat-icon">📘</span>' : '';
     item.innerHTML = `${icon}<span class="title">${escapeHtml(c.title || 'New chat')}</span>
-      <span class="actions"><button data-act="pin" title="${c.pinned ? 'Unpin' : 'Pin to top'}">${ICONS.pin}</button><button data-act="export" title="Export">${ICONS.download}</button><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
+      <span class="actions"><button data-act="pin" title="${c.pinned ? 'Unpin' : 'Pin to top'}">${ICONS.pin}</button><button data-act="move" title="Move to project">${ICONS.folder}</button><button data-act="export" title="Export">${ICONS.download}</button><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
     list.append(item);
   }
-  if (!list.children.length) list.innerHTML = `<div class="chat-group">${q ? 'No matches' : 'Your chats will appear here'}</div>`;
+  if (!list.children.length) list.innerHTML = `<div class="chat-group">${q ? 'No matches' : state.project ? 'No chats in this project yet' : 'Your chats will appear here'}</div>`;
 }
 
 $('#chatList').onclick = async (e) => {
@@ -254,6 +258,10 @@ $('#chatList').onclick = async (e) => {
     await api(`/api/conversations/${id}`, json('PUT', { pinned: !c?.pinned }));
     if (state.chat?.id === id) state.chat.pinned = !c?.pinned;
     await loadChats();
+    return;
+  }
+  if (act === 'move') {
+    openMoveMenu(id, e.target.closest('[data-act]'));
     return;
   }
   if (act === 'export') {
@@ -314,7 +322,7 @@ const isNarrow = () => matchMedia('(max-width: 860px)').matches;
 // ------------------------------------------------------------ chats
 function newChat() {
   stopGenerating();
-  state.chat = { id: null, title: '', mode: state.mode, model: '', messages: [] };
+  state.chat = { id: null, title: '', mode: state.mode, model: '', messages: [], project_id: state.project || null };
   setMode(state.mode);
   renderMessages();
   renderSidebar();
@@ -382,7 +390,9 @@ function renderWelcome() {
     line = `<div class="study-chips">${STUDY_STARTERS.map(([label, text]) => `<button type="button" data-starter="${escapeHtml(text)}">${label}</button>`).join('')}</div>
       <div class="study-hint">Tip: attach your notes, a PDF, slides or a photo of a worksheet with 📎 and she'll use it.</div>`;
   }
-  messagesEl.innerHTML = `<div class="welcome">${logoSvg()}<h1>${heading}</h1>${sub}${line}${body}</div>`;
+  const proj = state.projects?.find((p) => p.id === state.chat?.project_id);
+  const projTag = proj ? `<div class="proj-tag">${escapeHtml(proj.icon || '📁')} ${escapeHtml(proj.name)}</div>` : '';
+  messagesEl.innerHTML = `<div class="welcome">${logoSvg()}<h1>${heading}</h1>${projTag}${sub}${line}${body}</div>`;
   if (bday) celebrateOnce();
   $('#goModels')?.addEventListener('click', () => openSettings('models'));
 }
@@ -942,7 +952,7 @@ async function generateReply({ voice = false, model = null } = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model, mode, auto_approve: !!chat.autoApprove,
+        model, mode, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null,
         messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })),
       }),
       signal: abort.signal,
@@ -1920,8 +1930,8 @@ function openExportMenu(id, anchor) {
   const menu = $('#exportMenu');
   const r = anchor.getBoundingClientRect();
   menu.style.left = `${Math.min(r.left, innerWidth - 190)}px`;
-  menu.style.top = `${r.bottom + 4}px`;
   menu.hidden = false;
+  menu.style.top = `${Math.max(8, Math.min(r.bottom + 4, innerHeight - menu.offsetHeight - 8))}px`;
 }
 document.addEventListener('click', (e) => { if (!e.target.closest('#exportMenu') && !e.target.closest('[data-act="export"]')) $('#exportMenu').hidden = true; });
 $('#exportMenu').onclick = async (e) => {
@@ -2196,6 +2206,126 @@ function sfx(kind) {
     }
   } catch { /* no audio */ }
 }
+
+// ------------------------------------------------------------ projects
+state.projects = [];
+try { state.project = localStorage.getItem('athena-project') || null; } catch { state.project = null; }
+
+async function loadProjects() {
+  state.projects = await api('/api/projects').catch(() => []);
+  if (state.project && !state.projects.some((p) => p.id === state.project)) setProject(null);
+  renderSidebar();
+}
+
+function setProject(id) {
+  state.project = id;
+  try { id ? localStorage.setItem('athena-project', id) : localStorage.removeItem('athena-project'); } catch { /* ignore */ }
+  if (!state.chat?.messages.length) { state.chat.project_id = id; renderMessages(); }
+  renderSidebar();
+}
+
+function renderProjects() {
+  const box = $('#projectList');
+  const cur = state.projects.find((p) => p.id === state.project);
+  if (cur) {
+    box.innerHTML = `<div class="proj-header"><span>${escapeHtml(cur.icon || '📁')}</span><b title="${escapeHtml(cur.name)}">${escapeHtml(cur.name)}</b>
+      <button data-proj-act="edit" title="Project settings">${ICONS.gear}</button><button data-proj-act="exit" title="Show all chats">${ICONS.x}</button></div>`;
+    return;
+  }
+  box.innerHTML = `<div class="ph"><span>Projects</span><button data-proj-act="new" title="New project">+</button></div>` +
+    state.projects.map((p) => `<button class="proj-item" data-proj="${p.id}"><span>${escapeHtml(p.icon || '📁')}</span><span>${escapeHtml(p.name)}</span><span class="pc">${p.chats || ''}</span></button>`).join('');
+}
+
+$('#projectList').onclick = (e) => {
+  const item = e.target.closest('[data-proj]');
+  if (item) { setProject(item.dataset.proj); newChat(); return; }
+  const act = e.target.closest('[data-proj-act]')?.dataset.projAct;
+  if (act === 'new') openProjectEditor(null);
+  if (act === 'edit') openProjectEditor(state.project);
+  if (act === 'exit') { setProject(null); newChat(); }
+};
+
+const projEdit = { id: null, files: [] };
+async function openProjectEditor(id) {
+  projEdit.id = id;
+  const p = id ? await api(`/api/projects/${id}`) : { name: '', icon: '📁', instructions: '', files: [] };
+  projEdit.files = p.files || [];
+  $('#projectDlgTitle').textContent = id ? 'Project settings' : 'New project';
+  $('#projName').value = p.name || '';
+  $('#projIcon').value = p.icon || '📁';
+  $('#projInstructions').value = p.instructions || '';
+  $('#projDelete').hidden = !id;
+  renderProjFiles();
+  $('#projectDlg').showModal();
+  $('#projName').focus();
+}
+function renderProjFiles() {
+  $('#projFiles').innerHTML = projEdit.files.length
+    ? projEdit.files.map((f, i) => `<li><span>${ICONS.file} ${escapeHtml(f.name)} <span class="muted small">${Math.round((f.text || '').length / 1000) || '<1'}k characters</span></span><button type="button" data-pf="${i}" title="Remove">${ICONS.trash}</button></li>`).join('')
+    : '<li class="muted small">No files yet.</li>';
+}
+$('#projFiles').onclick = (e) => { const b = e.target.closest('[data-pf]'); if (b) { projEdit.files.splice(Number(b.dataset.pf), 1); renderProjFiles(); } };
+$('#projFileInput').onchange = async (e) => {
+  for (const file of e.target.files) {
+    try {
+      let text;
+      if (/\.(pdf|docx|pptx)$/i.test(file.name)) {
+        const form = new FormData(); form.append('file', file);
+        const res = await fetch('/api/extract', { method: 'POST', body: form });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.detail);
+        text = body.text;
+      } else if (file.size < 1_000_000) text = await readFile(file, 'Text');
+      else throw new Error('too large');
+      projEdit.files.push({ name: file.name, text });
+    } catch (err) { toast(`${file.name}: ${err.message}`, 'error'); }
+  }
+  e.target.value = '';
+  renderProjFiles();
+};
+$('#projSave').onclick = async () => {
+  const data = { name: $('#projName').value.trim() || 'New project', icon: $('#projIcon').value.trim() || '📁', instructions: $('#projInstructions').value, files: projEdit.files };
+  const p = projEdit.id ? await api(`/api/projects/${projEdit.id}`, json('PUT', data)) : await api('/api/projects', json('POST', data));
+  $('#projectDlg').close();
+  await loadProjects();
+  if (!projEdit.id) { setProject(p.id); newChat(); }
+  toast(projEdit.id ? 'Project saved' : `📁 ${p.name} created — new chats go into it`);
+};
+$('#projDelete').onclick = async () => {
+  if (!confirm('Delete this project? Its chats are kept and moved back to your main list.')) return;
+  await api(`/api/projects/${projEdit.id}`, { method: 'DELETE' });
+  $('#projectDlg').close();
+  setProject(null);
+  await loadProjects();
+  await loadChats();
+};
+
+let moveTarget = null;
+function openMoveMenu(chatId, anchor) {
+  moveTarget = chatId;
+  const chat = state.chats.find((c) => c.id === chatId);
+  const menu = $('#moveMenu');
+  menu.innerHTML = `<div class="muted small" style="padding:6px 12px">Move to…</div>` +
+    state.projects.map((p) => `<button type="button" data-move="${p.id}"${chat?.project_id === p.id ? ' disabled' : ''}>${escapeHtml(p.icon || '📁')} ${escapeHtml(p.name)}</button>`).join('') +
+    `<button type="button" data-move=""${!chat?.project_id ? ' disabled' : ''}>No project</button><button type="button" data-move="__new">+ New project…</button>`;
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = `${Math.min(r.left, innerWidth - 200)}px`;
+  menu.hidden = false;
+  menu.style.top = `${Math.max(8, Math.min(r.bottom + 4, innerHeight - menu.offsetHeight - 8))}px`;
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('#moveMenu') && !e.target.closest('[data-act="move"]')) $('#moveMenu').hidden = true; });
+$('#moveMenu').onclick = async (e) => {
+  const b = e.target.closest('[data-move]');
+  if (!b || !moveTarget) return;
+  $('#moveMenu').hidden = true;
+  if (b.dataset.move === '__new') { openProjectEditor(null); return; }
+  const project_id = b.dataset.move || null;
+  await api(`/api/conversations/${moveTarget}`, json('PUT', { project_id }));
+  if (state.chat?.id === moveTarget) state.chat.project_id = project_id;
+  await loadChats();
+  loadProjects();
+  toast(project_id ? `Moved to ${state.projects.find((p) => p.id === project_id)?.name}` : 'Moved out of the project');
+};
 
 // ------------------------------------------------------------ flashcard decks
 async function saveDeck(widget) {
@@ -2524,6 +2654,7 @@ async function init() {
   await refreshModels();
   newChat();
   loadChats();
+  loadProjects();
   loadTasks();
   voicesReady();
   connectEvents();

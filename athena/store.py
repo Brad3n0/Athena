@@ -20,6 +20,7 @@ SETTINGS_FILE = DATA_DIR / "settings.json"
 TASKS_FILE = DATA_DIR / "tasks.json"
 MEMORY_FILE = DATA_DIR / "memories.json"
 SAVED_FILE = DATA_DIR / "saved.json"
+PROJECTS_FILE = DATA_DIR / "projects.json"
 
 _lock = threading.RLock()
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -148,7 +149,7 @@ def list_conversations() -> list[dict[str, Any]]:
         chat = _read(path, None)
         if not chat:
             continue
-        items.append({k: chat.get(k) for k in ("id", "title", "mode", "model", "created", "updated", "pinned", "icon")})
+        items.append({k: chat.get(k) for k in ("id", "title", "mode", "model", "created", "updated", "pinned", "icon", "project_id")})
     items.sort(key=lambda c: c.get("updated") or 0, reverse=True)
     return items
 
@@ -319,3 +320,46 @@ def delete_saved(item_id: str) -> bool:
         kept = [i for i in items if i["id"] != item_id]
         _write(SAVED_FILE, kept)
         return len(kept) != len(items)
+
+
+# ----------------------------------------------------------------- projects
+
+def list_projects() -> list[dict[str, Any]]:
+    with _lock:
+        return _read(PROJECTS_FILE, [])
+
+
+def get_project(project_id: str | None) -> dict[str, Any] | None:
+    if not project_id:
+        return None
+    return next((p for p in list_projects() if p["id"] == project_id), None)
+
+
+def save_project(data: dict[str, Any], project_id: str | None = None) -> dict[str, Any]:
+    with _lock:
+        projects = list_projects()
+        proj = next((p for p in projects if p["id"] == project_id), None) if project_id else None
+        if not proj:
+            proj = {"id": new_id()[:10], "created": time.time(), "name": "New project", "icon": "📁", "instructions": "", "files": []}
+            projects.append(proj)
+        for key in ("name", "icon", "instructions"):
+            if key in data:
+                proj[key] = str(data[key])[: 20000 if key == "instructions" else 80]
+        if "files" in data and isinstance(data["files"], list):
+            proj["files"] = [{"name": str(f.get("name", "file"))[:120], "text": str(f.get("text", ""))[:200_000]}
+                             for f in data["files"] if isinstance(f, dict)][:30]
+        _write(PROJECTS_FILE, projects)
+        return proj
+
+
+def delete_project(project_id: str) -> bool:
+    with _lock:
+        projects = list_projects()
+        kept = [p for p in projects if p["id"] != project_id]
+        _write(PROJECTS_FILE, kept)
+    for path in CHATS_DIR.glob("*.json"):  # chats stay, they just leave the project
+        chat = _read(path, None)
+        if chat and chat.get("project_id") == project_id:
+            chat["project_id"] = None
+            _write(path, chat)
+    return len(kept) != len(projects)
