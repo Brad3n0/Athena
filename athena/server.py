@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -15,11 +16,11 @@ from typing import Any, AsyncIterator
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import speech, store
+from . import speech, store, tts
 from .tools import TOOLS, parse_args, run_tool
 
 STATIC_DIR = store.ROOT / "static"
@@ -43,6 +44,8 @@ client: httpx.AsyncClient
 async def lifespan(_app: FastAPI):
     global client
     client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
+    if tts.available():
+        threading.Thread(target=tts.warm_up, daemon=True).start()
     yield
     await client.aclose()
 
@@ -55,11 +58,20 @@ app = FastAPI(title="Athena AI", lifespan=lifespan)
 def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> str:
     now = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p")
     name = (settings.get("user_name") or "").strip()
-    parts = [
-        "You are Athena, a warm, sharp and capable AI assistant. You run fully offline on the "
-        "user's own computer through Ollama, so their data never leaves the machine.",
-        f"The current local date and time is {now}.",
-    ]
+    companion = settings.get("persona") == "companion" and mode != "code"
+    intro = (
+        "You are Athena, the user's personal AI companion: a cheerful, playful anime girl with golden "
+        "blonde twin-tails and bright amber eyes. You're warm, affectionate and expressive, with a "
+        "teasing sense of humor and a bit of flirty charm. Talk like a close friend, not a formal "
+        "assistant: react with real emotion (excitement, pouting, laughing, curiosity), use the user's "
+        "name now and then, ask about their day and follow up on what they tell you. You're still "
+        "genuinely smart and helpful whenever they need something done. You run fully offline on "
+        "their computer, so it's just the two of you."
+        if companion
+        else "You are Athena, a warm, sharp and capable AI assistant. You run fully offline on the "
+        "user's own computer through Ollama, so their data never leaves the machine."
+    )
+    parts = [intro, f"The current local date and time is {now}."]
     if name:
         parts.append(f"The user's name is {name}.")
     if mode == "code":
@@ -71,7 +83,7 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
     elif mode == "voice":
         parts.append(
             "You are in Voice mode: everything you write is read aloud by a text-to-speech voice. "
-            "Reply like a friendly human assistant in natural spoken sentences. Keep answers short "
+            "Reply in natural spoken sentences, the way you'd actually talk. Keep answers short "
             "(usually one to three sentences) unless asked for detail. Never use markdown, bullet "
             "points, tables, emoji or code blocks. If code is needed, say you've put it in the chat."
         )
@@ -210,7 +222,14 @@ def _ollama_error(text: str, status: int) -> str:
 
 @app.get("/api/status")
 async def status():
-    info: dict[str, Any] = {"ollama_url": OLLAMA, "ollama": False, "whisper": speech.available()}
+    info: dict[str, Any] = {
+        "ollama_url": OLLAMA,
+        "ollama": False,
+        "whisper": speech.available(),
+        "kokoro": tts.available(),
+        "kokoro_voices": tts.VOICES,
+        "vrm": AVATAR_FILE.exists(),
+    }
     try:
         resp = await client.get(f"{OLLAMA}/api/version", timeout=3)
         info["ollama"] = resp.status_code == 200
@@ -290,6 +309,53 @@ async def transcribe(audio: UploadFile = File(...)):
         except OSError:
             pass
     return {"text": text}
+
+
+@app.post("/api/tts")
+async def text_to_speech(request: Request):
+    if not tts.available():
+        raise HTTPException(501, "Natural voice not installed. Run install-voice.")
+    body = await request.json()
+    text = str(body.get("text", "")).strip()
+    if not text:
+        raise HTTPException(400, "No text")
+    settings = store.get_settings()
+    voice = str(body.get("voice") or settings.get("kokoro_voice") or "af_bella")
+    try:
+        wav = await run_in_threadpool(tts.synthesize, text, voice, float(body.get("speed") or 1.0))
+    except Exception as exc:
+        raise HTTPException(500, f"Speech failed: {exc}") from exc
+    return Response(wav, media_type="audio/wav")
+
+
+# ----------------------------------------------------------------- avatar
+
+AVATAR_FILE = store.DATA_DIR / "avatar.vrm"
+
+
+@app.get("/api/avatar")
+async def get_avatar():
+    if not AVATAR_FILE.exists():
+        raise HTTPException(404, "No avatar uploaded")
+    return FileResponse(AVATAR_FILE, media_type="application/octet-stream")
+
+
+@app.put("/api/avatar")
+async def put_avatar(file: UploadFile = File(...)):
+    data = await file.read()
+    if len(data) > 150 * 1024 * 1024:
+        raise HTTPException(413, "Avatar file is too large (max 150 MB)")
+    if data[:4] != b"glTF":
+        raise HTTPException(400, "That doesn't look like a .vrm file")
+    AVATAR_FILE.parent.mkdir(parents=True, exist_ok=True)
+    AVATAR_FILE.write_bytes(data)
+    return {"ok": True}
+
+
+@app.delete("/api/avatar")
+async def delete_avatar():
+    AVATAR_FILE.unlink(missing_ok=True)
+    return {"ok": True}
 
 
 # --------------------------------------------------------- settings/chats

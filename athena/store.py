@@ -37,6 +37,14 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Text-to-speech (browser / Windows voices, work offline)
     "tts_voice": "",
     "tts_rate": 1.05,
+    # "auto" uses Kokoro (natural offline voice) when installed, else the system voices
+    "tts_engine": "auto",
+    "kokoro_voice": "af_bella",
+    "voice_pitch": 1.08,
+    # "assistant" = helpful and professional, "companion" = playful anime-girl friend
+    "persona": "assistant",
+    # What appears in voice chat: "anime" (built-in 2D girl), "vrm" (your 3D model) or "orb"
+    "avatar": "anime",
     "auto_speak": False,
 }
 

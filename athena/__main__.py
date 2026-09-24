@@ -12,7 +12,16 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--preload-whisper", metavar="MODEL", help="Download a Whisper model for offline use and exit")
+    parser.add_argument("--download-voice", action="store_true", help="Download the natural Kokoro voice and exit")
     args = parser.parse_args()
+
+    if args.download_voice:
+        from .tts import download
+
+        print("Downloading Athena's natural voice (about 350 MB)...")
+        download()
+        print("Done.")
+        return
 
     if args.preload_whisper:
         from .speech import preload

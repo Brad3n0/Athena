@@ -1,2 +1,4 @@
 # Offline speech-to-text for voice chat (optional, ~200 MB)
 faster-whisper>=1.0
+# Natural offline voice for Athena (text-to-speech)
+kokoro-onnx>=0.4

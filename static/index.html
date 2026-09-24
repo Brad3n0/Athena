@@ -6,6 +6,9 @@
   <title>Athena AI</title>
   <link rel="icon" href="logo.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
 </head>
 <body>
 <div class="app" id="app">
@@ -127,6 +130,7 @@
   <div class="voice-top">
     <span class="voice-model" id="voiceModel"></span>
   </div>
+  <div class="avatar-stage" id="avatarStage" title="Tap to interrupt"></div>
   <button class="orb" id="orb" title="Tap to interrupt / talk"><span class="orb-core"></span></button>
   <div class="voice-state" id="voiceState">Starting…</div>
   <div class="voice-caption" id="voiceCaption"></div>
@@ -162,6 +166,12 @@
         <label>Theme
           <select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select>
         </label>
+        <label>Personality
+          <select id="setPersona">
+            <option value="assistant">Assistant — helpful and professional</option>
+            <option value="companion">Companion — playful, warm anime-girl friend</option>
+          </select>
+        </label>
         <label class="check"><input type="checkbox" id="setDirect" /> Direct mode — straight answers, no lecturing or unnecessary disclaimers</label>
         <label class="check"><input type="checkbox" id="setTools" /> Let Athena manage tasks &amp; timers (needs a tool-capable model)</label>
       </section>
@@ -185,11 +195,39 @@
       </section>
 
       <section data-panel="voice" hidden>
-        <label>Athena's voice <select id="setVoice"></select></label>
-        <p class="muted small">Only voices marked “offline” work without internet. On Windows you can add natural voices in Settings → Time &amp; language → Speech.</p>
+        <h3 style="margin-top:0">Look</h3>
+        <label>In voice chat, show
+          <select id="setAvatar">
+            <option value="anime">Athena — anime companion (built in)</option>
+            <option value="vrm">My own 3D character (.vrm)</option>
+            <option value="orb">Glowing orb</option>
+          </select>
+        </label>
+        <div id="vrmBox" class="vrm-box">
+          <p class="muted small">Create your own 3D anime character for free in <b>VRoid Studio</b> (hair, eyes, outfit, anything you like), then use <i>Export → VRM</i> and upload it here. Characters from VRoid Hub work too, if their license allows it.</p>
+          <div class="pull-row">
+            <label class="ghost file-btn">Upload .vrm<input type="file" id="vrmFile" accept=".vrm,.glb" hidden /></label>
+            <button type="button" class="ghost" id="vrmRemove">Remove</button>
+            <span class="muted small" id="vrmStatus"></span>
+          </div>
+        </div>
+
+        <h3>Voice</h3>
+        <label>Voice engine
+          <select id="setTtsEngine">
+            <option value="auto">Natural voice (Kokoro, offline) — recommended</option>
+            <option value="system">System voices (Windows)</option>
+          </select>
+        </label>
+        <p class="muted small" id="kokoroStatus"></p>
+        <label>Natural voice <select id="setKokoroVoice"></select></label>
+        <label>System voice <select id="setVoice"></select></label>
         <label>Speaking speed <input type="range" id="setRate" min="0.6" max="1.6" step="0.05" /></label>
+        <label>Voice pitch <span class="muted small">(higher = cuter)</span> <input type="range" id="setPitch" min="0.85" max="1.35" step="0.01" /></label>
         <button type="button" class="ghost" id="testVoice">▶ Test voice</button>
-        <label class="check"><input type="checkbox" id="setAutoSpeak" /> Read every reply aloud in text chats</label>
+        <label class="check" style="margin-top:14px"><input type="checkbox" id="setAutoSpeak" /> Read every reply aloud in text chats</label>
+
+        <h3>Listening</h3>
         <label>Speech recognition (Whisper) model
           <select id="setWhisper">
             <option value="tiny.en">tiny.en — fastest</option>

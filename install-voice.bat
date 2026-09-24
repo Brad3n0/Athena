@@ -6,10 +6,12 @@ if not exist ".venv\Scripts\python.exe" (
   pause
   exit /b 1
 )
-echo Installing offline speech recognition (faster-whisper)...
+echo Installing offline speech recognition (Whisper) and natural voice (Kokoro)...
 ".venv\Scripts\python.exe" -m pip install -r requirements-voice.txt || goto :fail
 echo Downloading the Whisper speech model so voice works offline...
 ".venv\Scripts\python.exe" -m athena --preload-whisper base.en || goto :fail
+echo Downloading Athena's natural voice (Kokoro, about 350 MB)...
+".venv\Scripts\python.exe" -m athena --download-voice || goto :fail
 echo.
 echo Done! Restart Athena and click the voice button.
 echo Tip: pick a different Whisper model in Settings - Voice, then run

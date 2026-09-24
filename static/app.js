@@ -1,6 +1,7 @@
 // Athena AI — front-end app
 import { renderMarkdown, toSpeech } from './markdown.js';
 import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices } from './voice.js';
+import { AnimeAvatar } from './avatar2d.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -73,7 +74,7 @@ const state = {
 };
 
 const mic = new Mic();
-const speaker = new Speaker(() => state.settings);
+const speaker = new Speaker(() => ({ settings: state.settings, kokoro: !!state.status.kokoro }));
 
 // ------------------------------------------------------------------- api
 async function api(path, opts = {}) {
@@ -588,7 +589,11 @@ async function generateReply({ voice = false, model = null } = {}) {
           if (thinkStart && !reply.thinkSecs) reply.thinkSecs = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
           reply.content += ev.content;
           if (speakThis) speaker.feed(splitThinking(reply).content);
-          if (voice) setVoiceCaption(splitThinking(reply).content, 'athena');
+          if (voice) {
+            const said = splitThinking(reply).content;
+            setVoiceCaption(said, 'athena');
+            if (/\b(ha(ha)+|he(he)+|yay|lol|hooray)\b|[♪♡]/i.test(said.slice(-40))) state.voice.avatar?.cheer?.();
+          }
         } else if (ev.type === 'thinking') {
           if (!thinkStart) thinkStart = Date.now();
           reply.thinking += ev.content;
@@ -789,6 +794,7 @@ const orb = $('#orb');
 
 function setVoiceState(s, label) {
   overlay.dataset.state = s;
+  state.voice.avatar?.setState({ listening: 'listening', transcribing: 'thinking', thinking: 'thinking', speaking: 'speaking' }[s] || 'idle');
   $('#voiceState').textContent = label || { listening: 'Listening…', transcribing: 'Got it…', thinking: 'Thinking…', speaking: 'Speaking — tap to interrupt', muted: 'Microphone muted' }[s] || s;
 }
 function setVoiceCaption(text, who) {
@@ -805,10 +811,44 @@ $('#voiceMute').onclick = () => {
   if (mic.muted) { state.voice.listenAbort?.abort(); setVoiceState('muted'); }
   else if (!speaker.speaking && !state.abort) setVoiceState('listening');
 };
-orb.onclick = () => {
+orb.onclick = $('#avatarStage').onclick = () => {
   // Interrupt Athena and go straight back to listening.
   if (speaker.speaking || state.abort) { speaker.stop(); stopGenerating(); }
 };
+
+async function showAvatar() {
+  hideAvatar();
+  const stage = $('#avatarStage');
+  let kind = state.settings.avatar || 'anime';
+  if (kind === 'vrm' && !state.status.vrm) kind = 'anime';
+  let avatar = null;
+  if (kind === 'vrm') {
+    try {
+      const { VrmAvatar } = await import('./avatar3d.js');
+      avatar = await VrmAvatar.create(stage, '/api/avatar');
+    } catch (e) {
+      toast(`Couldn't load your 3D character: ${e.message}`, 'error');
+      kind = 'anime';
+    }
+  }
+  if (kind === 'anime') avatar = new AnimeAvatar(stage);
+  if (avatar) avatar.getLevel = () => speaker.level();
+  state.voice.avatar = avatar;
+  overlay.classList.toggle('has-avatar', !!avatar);
+  // Glow behind her follows her voice.
+  const glow = () => {
+    if (state.voice.avatar !== avatar || !avatar) return;
+    stage.style.setProperty('--level', speaker.level().toFixed(2));
+    requestAnimationFrame(glow);
+  };
+  glow();
+}
+
+function hideAvatar() {
+  state.voice.avatar?.destroy();
+  state.voice.avatar = null;
+  overlay.classList.remove('has-avatar');
+}
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.voice.active) endVoice(); });
 
 async function startVoice() {
@@ -821,6 +861,7 @@ async function startVoice() {
   overlay.hidden = false;
   $('#voiceModel').textContent = `Voice chat · ${model}${state.status.whisper ? ' · Whisper (offline)' : ''}`;
   $('#voiceCaption').textContent = '';
+  await showAvatar();
   setVoiceState('listening', 'Starting microphone…');
   await voicesReady();
   try {
@@ -830,9 +871,16 @@ async function startVoice() {
     endVoice();
     return;
   }
-  if (!state.status.whisper) toast('Offline speech recognition is not installed — using the browser recognizer (may need internet). Run install-voice for fully offline voice.');
   speaker.onStart = () => state.voice.active && setVoiceState('speaking');
   speaker.onEnd = () => state.voice.active && state.abort && setVoiceState('thinking');
+  if (state.settings.persona === 'companion' && !state.chat.messages.length) {
+    const hi = ['Hey you! I was hoping you\'d come talk to me.', 'Oh, hi! What are we getting up to today?', 'There you are! I missed you.'];
+    speaker.reset();
+    speaker.say(`${hi[Math.floor(Math.random() * hi.length)]}${state.settings.user_name ? ` ${state.settings.user_name}!` : ''}`);
+    state.voice.avatar?.cheer?.(1200);
+    await speaker.done();
+  }
+  if (!state.status.whisper) toast('Offline speech recognition is not installed — using the browser recognizer (may need internet). Run install-voice for fully offline voice.');
   voiceLoop();
 }
 
@@ -843,6 +891,7 @@ function endVoice() {
   speaker.onStart = speaker.onEnd = null;
   stopGenerating();
   mic.close();
+  hideAvatar();
   overlay.hidden = true;
   orb.style.setProperty('--level', 0);
 }
@@ -892,6 +941,17 @@ function openSettings(tab = 'general') {
   $('#setTheme').value = s.theme || 'dark';
   $('#setTools').checked = !!s.tools_enabled;
   $('#setDirect').checked = !!s.direct_mode;
+  $('#setPersona').value = s.persona || 'assistant';
+  $('#setAvatar').value = s.avatar || 'anime';
+  $('#setTtsEngine').value = s.tts_engine === 'system' ? 'system' : 'auto';
+  $('#setPitch').value = s.voice_pitch || 1;
+  $('#setKokoroVoice').innerHTML = Object.entries(state.status.kokoro_voices || { af_bella: 'Bella' })
+    .map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join('');
+  $('#setKokoroVoice').value = s.kokoro_voice || 'af_bella';
+  $('#kokoroStatus').textContent = state.status.kokoro
+    ? '✓ Natural voice is installed.'
+    : '✗ Natural voice not installed yet — run install-voice.bat (Windows) or ./install-voice.sh, then restart Athena. Using system voices until then.';
+  updateVrmStatus();
   $('#setRate').value = s.tts_rate || 1;
   $('#setAutoSpeak').checked = !!s.auto_speak;
   $('#setWhisper').value = s.whisper_model || 'base.en';
@@ -953,6 +1013,40 @@ bind('#setTheme', 'theme');
 bind('#setTools', 'tools_enabled', (el) => el.checked);
 bind('#setDirect', 'direct_mode', (el) => el.checked);
 bind('#setVoice', 'tts_voice');
+bind('#setPersona', 'persona');
+bind('#setAvatar', 'avatar');
+bind('#setTtsEngine', 'tts_engine');
+bind('#setKokoroVoice', 'kokoro_voice');
+bind('#setPitch', 'voice_pitch', (el) => Number(el.value));
+
+function updateVrmStatus() {
+  $('#vrmStatus').textContent = state.status.vrm ? '✓ 3D character uploaded' : 'No character uploaded';
+  $('#vrmRemove').hidden = !state.status.vrm;
+}
+$('#vrmFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  $('#vrmStatus').textContent = 'Uploading…';
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await fetch('/api/avatar', { method: 'PUT', body: form });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Upload failed');
+    await refreshStatus();
+    await saveSettings({ avatar: 'vrm' });
+    $('#setAvatar').value = 'vrm';
+    toast('Your 3D character is ready — start a voice chat to meet her!');
+  } catch (err) { toast(err.message, 'error'); }
+  updateVrmStatus();
+};
+$('#vrmRemove').onclick = async () => {
+  if (!confirm('Remove your 3D character?')) return;
+  await api('/api/avatar', { method: 'DELETE' });
+  await refreshStatus();
+  if (state.settings.avatar === 'vrm') { await saveSettings({ avatar: 'anime' }); $('#setAvatar').value = 'anime'; }
+  updateVrmStatus();
+};
 bind('#setRate', 'tts_rate', (el) => Number(el.value));
 bind('#setAutoSpeak', 'auto_speak', (el) => el.checked);
 bind('#setWhisper', 'whisper_model');
@@ -964,7 +1058,14 @@ for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode',
     fillModelSelects();
   });
 }
-$('#testVoice').onclick = () => { speaker.stop(); speaker.reset(); speaker.say(`Hi${state.settings.user_name ? ` ${state.settings.user_name}` : ''}, I'm Athena. How can I help you today?`); };
+$('#testVoice').onclick = () => {
+  speaker.stop();
+  speaker.reset();
+  const name = state.settings.user_name ? ` ${state.settings.user_name}` : '';
+  speaker.say(state.settings.persona === 'companion'
+    ? `Hey${name}! It's me, Athena. So, what are we doing today?`
+    : `Hi${name}, I'm Athena. How can I help you today?`);
+};
 
 dlg.addEventListener('click', async (e) => {
   if (e.target === dlg) dlg.close();

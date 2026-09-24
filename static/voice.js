@@ -105,7 +105,7 @@ export function browserRecognize({ signal } = {}) {
 
 // ----------------------------------------------------------------- output
 export function listVoices() {
-  return (speechSynthesis?.getVoices() || []).slice().sort((a, b) => (b.localService - a.localService) || a.name.localeCompare(b.name));
+  return (window.speechSynthesis?.getVoices() || []).slice().sort((a, b) => (b.localService - a.localService) || a.name.localeCompare(b.name));
 }
 
 export function voicesReady() {
@@ -128,12 +128,20 @@ function pickVoice(name) {
   return local.find((v) => /natural|aria|jenny|zira|samantha|female/i.test(v.name)) || local[0] || voices.find((v) => v.localService) || voices[0] || null;
 }
 
-/** Speaks streamed text sentence-by-sentence so Athena starts talking before the reply is finished. */
+/**
+ * Speaks streamed text sentence-by-sentence so Athena starts talking before the reply is finished.
+ * Uses the natural Kokoro voice from the server when available, otherwise the system voices.
+ * `level()` reports how loud she is right now (0..1), which drives the avatar's lip-sync.
+ */
 export class Speaker {
-  constructor(getSettings) {
-    this.getSettings = getSettings;
+  constructor(getConfig) {
+    this.getConfig = getConfig; // () => ({ settings, kokoro })
     this.pending = 0;
+    this.queue = [];
+    this.playing = null;
+    this.gen = 0;
     this._waiters = [];
+    this._pulse = 0;
     this.onStart = this.onEnd = null;
     this.reset();
   }
@@ -163,25 +171,121 @@ export class Speaker {
 
   say(text) { this.feed(text, true); }
 
+  _useKokoro() {
+    const { settings, kokoro } = this.getConfig();
+    return kokoro && settings.tts_engine !== 'system';
+  }
+
   _say(chunk) {
     chunk = chunk.replace(/\s+/g, ' ').trim();
-    if (!chunk || !/[\p{L}\p{N}]/u.test(chunk) || !window.speechSynthesis) return;
-    const s = this.getSettings();
-    const u = new SpeechSynthesisUtterance(chunk);
-    const v = pickVoice(s.tts_voice);
-    if (v) { u.voice = v; u.lang = v.lang; }
-    u.rate = Number(s.tts_rate) || 1;
+    if (!chunk || !/[\p{L}\p{N}]/u.test(chunk)) return;
     this.pending++;
-    u.onstart = () => this.onStart?.();
-    u.onend = u.onerror = () => {
-      this.pending = Math.max(0, this.pending - 1);
-      if (!this.pending) { this.onEnd?.(); this._resolveWaiters(); }
+    if (this._useKokoro()) this._queueKokoro(chunk);
+    else this._speakSystem(chunk);
+  }
+
+  // ---- natural voice (Kokoro on the server) ----
+  _ctx() {
+    if (!this.ctx) {
+      this.ctx = new AudioContext();
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 512;
+      this.analyser.connect(this.ctx.destination);
+      this.buf = new Float32Array(this.analyser.fftSize);
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    return this.ctx;
+  }
+
+  _queueKokoro(text) {
+    const { settings } = this.getConfig();
+    const pitch = Number(settings.voice_pitch) || 1;
+    const rate = Number(settings.tts_rate) || 1;
+    const gen = this.gen;
+    // Start synthesizing right away so the next sentence is ready when this one ends.
+    const audio = fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, voice: settings.kokoro_voice, speed: rate / pitch }),
+    }).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('tts failed'))))
+      .then((b) => this._ctx().decodeAudioData(b));
+    this.queue.push({ text, audio, pitch, gen });
+    if (!this.playing) this._playNext();
+  }
+
+  async _playNext() {
+    const item = this.queue.shift();
+    if (!item) { this.playing = null; return; }
+    this.playing = item;
+    let buffer;
+    try { buffer = await item.audio; } catch { buffer = null; }
+    if (item.gen !== this.gen) return; // stopped meanwhile
+    if (!buffer) { // fall back to the system voice for this sentence
+      this.playing = null;
+      this.pending--;
+      this._say(item.text);
+      if (!this.playing) this._playNext();
+      return;
+    }
+    const src = this._ctx().createBufferSource();
+    src.buffer = buffer;
+    src.playbackRate.value = item.pitch;
+    src.connect(this.analyser);
+    item.src = src;
+    src.onended = () => {
+      if (item.gen !== this.gen) return;
+      this._finishOne();
+      this._playNext();
     };
+    this.onStart?.();
+    src.start();
+  }
+
+  // ---- system voices (Windows / browser, offline voices only if chosen) ----
+  _speakSystem(text) {
+    if (!window.speechSynthesis) { this._finishOne(); return; }
+    const { settings } = this.getConfig();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = pickVoice(settings.tts_voice);
+    if (v) { u.voice = v; u.lang = v.lang; }
+    u.rate = Number(settings.tts_rate) || 1;
+    u.pitch = Math.min(2, Number(settings.voice_pitch) || 1);
+    u.onstart = () => this.onStart?.();
+    u.onboundary = () => { this._pulse = performance.now(); };
+    u.onend = u.onerror = () => this._finishOne();
+    this.sysSpeaking = true;
     speechSynthesis.speak(u);
   }
 
+  _finishOne() {
+    this.pending = Math.max(0, this.pending - 1);
+    if (!this.pending) { this.sysSpeaking = false; this.onEnd?.(); this._resolveWaiters(); }
+  }
+
+  /** Current loudness 0..1 for lip-sync. */
+  level() {
+    if (this.playing?.src && this.analyser) {
+      this.analyser.getFloatTimeDomainData(this.buf);
+      let sum = 0;
+      for (const x of this.buf) sum += x * x;
+      return Math.min(1, Math.sqrt(sum / this.buf.length) * 5);
+    }
+    if (this.sysSpeaking && window.speechSynthesis?.speaking) {
+      // System voices don't expose audio, so fake a natural talking rhythm.
+      const t = performance.now();
+      const burst = Math.max(0, 1 - (t - this._pulse) / 260);
+      return 0.25 + 0.35 * Math.abs(Math.sin(t / 70)) * (0.5 + 0.5 * Math.sin(t / 310)) + 0.3 * burst;
+    }
+    return 0;
+  }
+
   stop() {
+    this.gen++;
+    this.queue = [];
+    try { this.playing?.src?.stop(); } catch { /* already stopped */ }
+    this.playing = null;
     window.speechSynthesis?.cancel();
+    this.sysSpeaking = false;
     this.pending = 0;
     this._resolveWaiters();
   }

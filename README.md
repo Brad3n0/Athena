@@ -4,7 +4,8 @@ A private, **fully offline** AI assistant for your home PC. It looks and works l
 
 - 💬 **Assistant mode**: everyday chat, writing, planning and questions
 - 🧑‍💻 **Code mode**: a coding model with syntax-highlighted code blocks, one-click copy, and file attachments (attach your source files and ask about them)
-- 🎙️ **Voice mode**: talk to Athena hands-free. She listens, answers out loud, and you can tap to interrupt
+- 🎙️ **Voice mode**: talk to Athena hands-free. She listens, answers out loud in a natural offline voice, and you can tap to interrupt
+- 💛 **Anime companion**: in voice chat Athena appears as an animated blonde anime girl who blinks, lip-syncs and reacts. You can also load your own 3D character made in VRoid Studio
 - ✅ **Tasks & timers**: say *"remind me to pay rent Friday"*, *"what's on my list?"*, *"I finished the laundry"* or *"set a 10 minute timer for the pasta"*
 - 🗂️ Chat history with search, rename and delete, plus a model picker, dark/light themes, image understanding (with a vision model) and a phone-friendly layout
 
@@ -16,7 +17,7 @@ A private, **fully offline** AI assistant for your home PC. It looks and works l
 2. **Install Python 3.10+:** https://www.python.org/downloads/. On Windows, tick **"Add python.exe to PATH"**.
 3. **Get Athena:** download this repo (Code → Download ZIP) and unzip it, or `git clone` it.
 4. **Download AI models:** double-click **`pull-models.bat`** and choose your graphics card size. You can also do this later inside Athena under **Settings → Models**.
-5. **Enable offline voice (recommended):** double-click **`install-voice.bat`**. It installs [faster-whisper](https://github.com/SYSTRAN/faster-whisper) and downloads its speech model.
+5. **Enable offline voice (recommended):** double-click **`install-voice.bat`**. It installs [faster-whisper](https://github.com/SYSTRAN/faster-whisper) so Athena can hear you, and [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) so she can talk in a natural voice. Together they download about 500 MB.
 
 Linux/macOS: use `./pull-models.sh`, `./install-voice.sh` and `./start.sh` instead.
 
@@ -53,12 +54,21 @@ Athena adds no filters of her own, but most models come with their makers' built
 - **Direct mode** (Settings → General) tells Athena to answer plainly, without lecturing or adding unneeded disclaimers. It works with any model.
 - **Community "abliterated" or "uncensored" models** have the refusal behaviour removed. Athena lists a few under **Settings → Models → Fewer refusals** (`huihui_ai/qwen3-abliterated`, `dolphin3`), and more can be found by searching "abliterated" on [ollama.com](https://ollama.com/search?q=abliterated). They're made by the community rather than the original companies. They're usually a little less accurate, and they may not handle Athena's tasks and timers as reliably. After downloading one, pick it as your default in **Settings → Models**.
 
+## Anime companion mode
+
+1. Go to **Settings → General → Personality** and choose **Companion**. Athena becomes a playful, warm, slightly teasing friend instead of a formal assistant.
+2. Go to **Settings → Voice → In voice chat, show** and choose **Athena — anime companion**. This is the default.
+3. Pick her voice under **Natural voice**. *Bella* is bright and energetic, *Heart* is warm, *Nicole* is soft and breathy, and *Sky* sounds youthful. Nudge **Voice pitch** up for a cuter sound, then press **▶ Test voice**.
+4. Click the waveform button to talk. She blinks, follows your mouse with her eyes, tilts her head while she listens and thinks, lip-syncs to her voice, and smiles when she laughs. Tap her to interrupt.
+
+**Use your own 3D character:** download the free [VRoid Studio](https://vroid.com/en/studio) and design her however you like: hair, eyes, outfit and so on. Then use **Export → Export as VRM**, and in Athena go to **Settings → Voice → Upload .vrm**. Characters downloaded from VRoid Hub also work, if their license allows personal use.
+
 ## Voice tips
 
 - Click the **waveform button** next to the message box to start a voice conversation. Just talk, and Athena replies when you pause. Tap the orb to interrupt her. Say *"goodbye"* or press **Esc** to end.
 - The **microphone button** dictates into the message box instead.
 - **Speech-to-text** runs locally with Whisper (`base.en` by default). If you have an NVIDIA GPU, switch to `small.en` or `large-v3-turbo` and "NVIDIA GPU" in **Settings → Voice** for better accuracy. After changing the model, run `.venv\Scripts\python.exe -m athena --preload-whisper small.en` once while online.
-- **Athena's voice** uses the voices built into your PC, which work offline. On Windows 11 you can add more natural voices under *Settings → Time & language → Speech → Manage voices*, then pick one in **Settings → Voice**. Voices marked "online" need internet.
+- **Athena's voice** uses the natural Kokoro voice once `install-voice` has run. Otherwise it uses the voices built into your PC, which also work offline. On Windows 11 you can add more natural voices under *Settings → Time & language → Speech → Manage voices*, then pick one in **Settings → Voice**. Voices marked "online" need internet.
 - If you skip `install-voice`, voice mode falls back to the browser's recognizer, and in Chrome/Edge that needs internet.
 
 ## Good to know
@@ -75,9 +85,12 @@ athena/          Python server (FastAPI)
   server.py      API: streams chat from Ollama, runs tools, model downloads, speech-to-text
   tools.py       Tools the AI can call (tasks, timers, date/time)
   speech.py      Offline Whisper transcription
+  tts.py         Offline natural voice (Kokoro)
   store.py       JSON storage for chats, tasks, settings
 static/          The web app (plain HTML/CSS/JS, no internet or build step needed)
   app.js         Chat UI, model picker, tasks, settings, voice mode
-  voice.js       Microphone + voice activity detection, text-to-speech
+  voice.js       Microphone + voice activity detection, text-to-speech + lip-sync level
+  avatar2d.js    Built-in animated anime companion (SVG)
+  avatar3d.js    Your own 3D VRM character (three.js + three-vrm, bundled in vendor/)
   markdown.js    Markdown + code highlighting
 ```
