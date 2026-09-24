@@ -526,3 +526,65 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .voice-caption .w.said { opacity: 1; color: var(--accent-2); }
 .voice-overlay[data-state="sleeping"] .orb-canvas { filter: brightness(.45) saturate(.6); transition: filter 1s; }
 .stat b.text { font-size: 17px; line-height: 1.9; }
+
+/* ---------------- Jump to bottom ---------------- */
+.jump-btn {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 132px; z-index: 6; width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); box-shadow: var(--shadow);
+  animation: msg-in .2s ease;
+}
+.jump-btn:hover { border-color: var(--accent); color: var(--accent); }
+.jump-btn svg { width: 18px; height: 18px; }
+
+/* ---------------- Saved replies ---------------- */
+.saved-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.saved-item { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--bg); }
+.saved-item .md { font-size: 13.5px; max-height: 160px; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.saved-item.open .md { max-height: none; -webkit-mask-image: none; mask-image: none; }
+.saved-item .meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); margin-top: 6px; }
+.saved-item .meta button { color: var(--text-3); padding: 2px 6px; border-radius: 6px; }
+.saved-item .meta button:hover { color: var(--text); background: var(--bg-hover); }
+.saved-item .meta .spacer { flex: 1; }
+.msg-actions .starred { color: var(--accent); }
+.msg-actions .starred svg { fill: currentColor; }
+
+/* ---------------- Response versions ---------------- */
+.versions { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-3); margin-right: 4px; }
+.versions button { width: 24px !important; height: 24px !important; }
+.versions button:disabled { opacity: .3; cursor: default; }
+
+/* ---------------- Warming up ---------------- */
+.warming { display: inline-flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 14px; }
+
+/* ---------------- Welcome line + confetti ---------------- */
+.welcome .greet-line { color: var(--text-2); font-size: 15px; margin-top: -10px; font-style: italic; }
+.confetti { position: fixed; inset: 0; pointer-events: none; z-index: 70; }
+
+/* ---------------- Focus timer ---------------- */
+.focus-widget {
+  position: absolute; right: 18px; top: 64px; z-index: 7; display: flex; align-items: center; gap: 10px;
+  background: var(--bg-elev); border: 1px solid rgba(var(--accent-rgb), .45); border-radius: 18px; padding: 8px 10px 8px 8px;
+  box-shadow: var(--shadow), 0 0 22px rgba(var(--accent-rgb), .15); animation: msg-in .25s ease;
+}
+.focus-orb { width: 54px; height: 54px; display: grid; place-items: center; }
+.focus-label { font-size: 12px; color: var(--text-3); max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.focus-time { font: 600 22px/1.1 var(--mono); color: var(--accent); }
+.focus-widget.break .focus-time { color: var(--text); }
+.focus-widget.paused .focus-time { opacity: .5; }
+.focus-btns { display: flex; flex-direction: column; }
+.focus-btns .icon-btn { width: 28px; height: 28px; }
+.focus-btns svg { width: 15px; height: 15px; }
+
+/* ---------------- Text size + compact ---------------- */
+:root[data-size="small"] .thread, :root[data-size="small"] .composer { zoom: .92; }
+:root[data-size="large"] .thread, :root[data-size="large"] .composer { zoom: 1.12; }
+:root[data-compact="true"] .thread { gap: 12px; }
+:root[data-compact="true"] .md p { margin-bottom: 8px; }
+:root[data-compact="true"] .msg.user .bubble { padding: 7px 13px; }
+:root[data-compact="true"] .chat-item { height: 32px; }
+:root[data-compact="true"] .messages { padding-top: 0; }
+.toast { display: flex; align-items: center; gap: 12px; }
+.toast-action { color: var(--accent); font-weight: 650; padding: 2px 8px; border-radius: 6px; margin-left: auto; }
+.toast-action:hover { background: var(--bg-hover); }
+.saved-item .code-actions, .saved-item .code-head { display: none; }
+.saved-item .meta { flex-wrap: wrap; row-gap: 2px; }

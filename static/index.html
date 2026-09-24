@@ -38,6 +38,10 @@
         <svg viewBox="0 0 24 24"><path d="M9 11l2 2 4-4"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
         Tasks <span class="badge" id="taskBadge" hidden>0</span>
       </button>
+      <button class="side-link" id="openSaved">
+        <svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>
+        Saved
+      </button>
       <button class="side-link" id="openSettings">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         Settings
@@ -84,6 +88,20 @@
 
     <section class="messages" id="messages"></section>
 
+    <button type="button" class="jump-btn" id="jumpBtn" title="Jump to the latest message" hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+    </button>
+    <div class="focus-widget" id="focusWidget" hidden>
+      <div class="focus-orb" id="focusOrb"></div>
+      <div class="focus-info">
+        <div class="focus-label" id="focusLabel">Focus</div>
+        <div class="focus-time" id="focusTime">25:00</div>
+      </div>
+      <div class="focus-btns">
+        <button type="button" class="icon-btn" id="focusPause" title="Pause"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></button>
+        <button type="button" class="icon-btn" id="focusStop" title="Stop"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+    </div>
     <div class="composer-wrap">
       <form class="composer" id="composer">
         <div class="slash-menu" id="slashMenu" hidden></div>
@@ -114,6 +132,16 @@
       </form>
     </div>
   </main>
+
+  <!-- ============ Saved replies drawer ============ -->
+  <aside class="drawer" id="savedDrawer" hidden>
+    <header>
+      <h2>Saved</h2>
+      <button class="icon-btn" id="closeSaved" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </header>
+    <p class="muted small">Star any of Athena's replies to keep it here.</p>
+    <div class="saved-list" id="savedList"></div>
+  </aside>
 
   <!-- ============ Tasks drawer ============ -->
   <aside class="drawer" id="tasksDrawer" hidden>
@@ -176,6 +204,12 @@
         </label>
         <label>Accent colour</label>
         <div class="swatches" id="accentPicker"></div>
+        <label>Text size
+          <select id="setTextSize"><option value="small">Small</option><option value="normal">Normal</option><option value="large">Large</option></select>
+        </label>
+        <label class="check"><input type="checkbox" id="setCompact" /> Compact layout (fit more on screen)</label>
+        <label class="check"><input type="checkbox" id="setSounds" /> Soft sounds when you send a message and when she finishes</label>
+        <label>Your birthday <span class="muted small">(Athena will celebrate with you)</span> <input type="date" id="setBirthday" /></label>
         <label>Theme
           <select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select>
         </label>

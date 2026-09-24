@@ -667,6 +667,33 @@ async def make_title(request: Request):
     return {"title": title[:60], "icon": icon}
 
 
+# ------------------------------------------------------------ saved replies
+
+@app.get("/api/saved")
+async def list_saved():
+    return list(reversed(store.list_saved()))
+
+
+@app.post("/api/saved")
+async def add_saved(request: Request):
+    return store.add_saved(await request.json())
+
+
+@app.delete("/api/saved/{item_id}")
+async def delete_saved(item_id: str):
+    return {"ok": store.delete_saved(item_id)}
+
+
+@app.get("/api/models/loaded")
+async def loaded_models():
+    """Models Ollama currently has in memory (so the UI can say 'waking up…' for the others)."""
+    try:
+        resp = await client.get(f"{OLLAMA}/api/ps", timeout=3)
+        return {"models": [m.get("name") for m in resp.json().get("models", [])]}
+    except Exception:
+        return {"models": [], "unknown": True}
+
+
 # -------------------------------------------------------------------- stats
 
 @app.get("/api/stats")

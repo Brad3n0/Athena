@@ -19,6 +19,7 @@ CHATS_DIR = DATA_DIR / "conversations"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 TASKS_FILE = DATA_DIR / "tasks.json"
 MEMORY_FILE = DATA_DIR / "memories.json"
+SAVED_FILE = DATA_DIR / "saved.json"
 
 _lock = threading.RLock()
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -64,6 +65,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "theme": "dark",
+    "text_size": "normal",  # small | normal | large
+    "compact": False,
+    "sound_effects": False,
+    "birthday": "",  # "MM-DD"
     "accent": "gold",  # gold, rose, silver, cyan, emerald, aurora, sunset, violet, sakura, ice, lime
     "voice_barge_in": True,  # interrupt Athena just by talking
     "voice_sleep": True,  # dim after a minute of silence in voice chat
@@ -282,3 +287,34 @@ def forget_memory(query: str) -> dict[str, Any] | None:
             memories.remove(match)
             _write(MEMORY_FILE, memories)
         return match
+
+
+# ------------------------------------------------------------ saved replies
+
+def list_saved() -> list[dict[str, Any]]:
+    with _lock:
+        return _read(SAVED_FILE, [])
+
+
+def add_saved(item: dict[str, Any]) -> dict[str, Any]:
+    entry = {
+        "id": new_id()[:10],
+        "chat_id": str(item.get("chat_id") or ""),
+        "chat_title": str(item.get("chat_title") or "")[:120],
+        "content": str(item.get("content") or "")[:50000],
+        "model": str(item.get("model") or ""),
+        "time": time.time(),
+    }
+    with _lock:
+        items = list_saved()
+        items.append(entry)
+        _write(SAVED_FILE, items[-500:])
+    return entry
+
+
+def delete_saved(item_id: str) -> bool:
+    with _lock:
+        items = list_saved()
+        kept = [i for i in items if i["id"] != item_id]
+        _write(SAVED_FILE, kept)
+        return len(kept) != len(items)

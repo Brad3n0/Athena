@@ -80,6 +80,14 @@ def _timer(a):
     return {"timer_set": True, "seconds": round(minutes * 60), "label": label, "id": item["id"]}
 
 
+def _focus(a):
+    minutes = float(a.get("minutes") or 25)
+    if minutes <= 0 or minutes > 240:
+        return {"error": "minutes must be between 1 and 240"}
+    return {"focus_started": True, "minutes": minutes, "task": str(a.get("task", "") or ""),
+            "break_minutes": float(a.get("break_minutes") or 5)}
+
+
 def _reminder(a):
     try:
         when = scheduler.parse_when(str(a.get("at", "")), a.get("minutes_from_now"))
@@ -216,6 +224,9 @@ TOOLS: list[Tool] = [
     Tool("set_timer", "core", "Start a countdown timer / reminder that alerts the user in the Athena window.",
          {"minutes": {"type": "number", "description": "Length in minutes (can be fractional)"}, "label": S("What the timer is for")},
          ["minutes"], run=_timer),
+    Tool("start_focus", "core", "Start a focus / Pomodoro session: a countdown shown on screen, then a break reminder.",
+         {"minutes": {"type": "number", "description": "Focus length (default 25)"}, "task": S("What they're focusing on"),
+          "break_minutes": {"type": "number", "description": "Break length afterwards (default 5)"}}, run=_focus),
     Tool("add_task", "tasks", "Add a task / to-do item to the user's task list.",
          {"title": S("Short description of the task"), "due": S("Optional due date/time, e.g. '2026-10-01' or 'Friday 5pm'"),
           "priority": S("low, normal or high", enum=["low", "normal", "high"]), "notes": S("Optional extra details")},

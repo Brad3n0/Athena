@@ -20,6 +20,7 @@ const ICONS = {
   tool: '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
   warn: '<svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+  star: '<svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
   pin: '<svg viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/></svg>',
   sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
@@ -84,13 +85,21 @@ async function api(path, opts = {}) {
 }
 const json = (method, body) => ({ method, body: JSON.stringify(body) });
 
-function toast(text, kind = '') {
+function toast(text, kind = '', { action = null, ms = 0 } = {}) {
   const el = document.createElement('div');
   el.className = `toast ${kind}`;
   el.textContent = text;
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'toast-action';
+    b.textContent = action.label;
+    b.onclick = (e) => { e.stopPropagation(); el.remove(); action.fn(); };
+    el.append(b);
+  }
   $('#toasts').append(el);
-  setTimeout(() => el.remove(), kind === 'alarm' ? 15000 : 4500);
+  setTimeout(() => el.remove(), ms || (kind === 'alarm' ? 15000 : 4500));
   el.onclick = () => el.remove();
+  return el;
 }
 
 // ---------------------------------------------------------------- theme
@@ -99,6 +108,8 @@ function applyTheme() {
   const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   applyAccent(state.settings.accent || 'gold');
+  document.documentElement.dataset.size = state.settings.text_size || 'normal';
+  document.documentElement.dataset.compact = state.settings.compact ? 'true' : 'false';
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 
@@ -239,11 +250,17 @@ $('#chatList').onclick = async (e) => {
     return;
   }
   if (act === 'delete') {
-    if (!confirm('Delete this chat?')) return;
-    await api(`/api/conversations/${id}`, { method: 'DELETE' });
+    // Hide it right away; really delete after a few seconds unless you press Undo.
+    const removed = state.chats.find((c) => c.id === id);
     state.chats = state.chats.filter((c) => c.id !== id);
     if (state.chat?.id === id) newChat();
     renderSidebar();
+    let undone = false;
+    toast(`Deleted “${removed?.title || 'chat'}”`, '', {
+      ms: 6000,
+      action: { label: 'Undo', fn: () => { undone = true; loadChats(); } },
+    });
+    setTimeout(async () => { if (!undone) { await api(`/api/conversations/${id}`, { method: 'DELETE' }).catch(() => {}); } }, 6200);
   } else if (act === 'rename') {
     const title = item.querySelector('.title');
     const input = document.createElement('input');
@@ -346,14 +363,76 @@ function renderWelcome() {
   }
   const night = hour < 6 || hour >= 18;
   const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const bday = isBirthday();
+  const heading = state.mode === 'code' ? `What are we building today${name}?` : bday ? `Happy birthday${name}! 🎂` : `${greet}${name}`;
   const sub = state.mode === 'code' ? '' : `<div class="greet-sub">${night ? ICONS.moon : ICONS.sun}${escapeHtml(date)}</div>`;
-  messagesEl.innerHTML = `<div class="welcome">${logoSvg()}<h1>${state.mode === 'code' ? `What are we building today${name}?` : `${greet}${name}`}</h1>${sub}${body}</div>`;
+  const line = !body && state.mode !== 'code' ? `<div class="greet-line">${escapeHtml(bday ? "Today's all about you. What should we do?" : welcomeLine(hour))}</div>` : '';
+  messagesEl.innerHTML = `<div class="welcome">${logoSvg()}<h1>${heading}</h1>${sub}${line}${body}</div>`;
+  if (bday) celebrateOnce();
   $('#goModels')?.addEventListener('click', () => openSettings('models'));
+}
+
+// ------------------------------------------------------------ welcome lines + birthday
+const WELCOME_LINES = {
+  any: ['Ready when you are.', "What's on your mind?", 'Ask me anything.', "Let's get something done.", "I'm all ears.", 'How can I help today?', 'What are we working on?'],
+  morning: ['Coffee first, then world domination?', "Let's make today a good one.", 'Fresh start. What first?'],
+  evening: ["What's on your mind tonight?", 'Winding down or just getting started?', 'How did today go?'],
+  late: ['Burning the midnight oil?', "Can't sleep? I'm here.", 'Late-night ideas are the best ones.'],
+  companion: ['Missed you.', 'There you are.', 'I was hoping you’d stop by.', 'Talk to me.'],
+};
+function welcomeLine(hour) {
+  const pool = [...WELCOME_LINES.any];
+  if (hour >= 5 && hour < 11) pool.push(...WELCOME_LINES.morning);
+  if (hour >= 18) pool.push(...WELCOME_LINES.evening);
+  if (hour < 5) pool.push(...WELCOME_LINES.late);
+  if (state.settings.persona === 'companion') pool.push(...WELCOME_LINES.companion, ...WELCOME_LINES.companion);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function isBirthday() {
+  const today = new Date();
+  const mmdd = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  return state.settings.birthday === mmdd;
+}
+
+function celebrateOnce() {
+  const key = `athena-bday-${new Date().getFullYear()}`;
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch { /* ignore */ }
+  confetti();
+}
+
+function confetti() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const c = document.createElement('canvas');
+  c.className = 'confetti';
+  c.width = innerWidth; c.height = innerHeight;
+  document.body.append(c);
+  const ctx = c.getContext('2d');
+  const pal = [getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#f5c542', '#ffffff', '#ffd970', '#f9a8d4', '#93c5fd'];
+  const bits = Array.from({ length: 140 }, () => ({
+    x: innerWidth / 2 + (Math.random() - 0.5) * 200, y: innerHeight * 0.35,
+    vx: (Math.random() - 0.5) * 14, vy: -Math.random() * 14 - 4, r: 3 + Math.random() * 4,
+    rot: Math.random() * 6, vr: (Math.random() - 0.5) * 0.3, color: pal[Math.floor(Math.random() * pal.length)],
+  }));
+  const t0 = performance.now();
+  (function frame(now) {
+    ctx.clearRect(0, 0, c.width, c.height);
+    for (const b of bits) {
+      b.vy += 0.35; b.vx *= 0.99; b.x += b.vx; b.y += b.vy; b.rot += b.vr;
+      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.rot);
+      ctx.fillStyle = b.color; ctx.fillRect(-b.r, -b.r / 2, b.r * 2, b.r);
+      ctx.restore();
+    }
+    if (now - t0 < 3500) requestAnimationFrame(frame); else c.remove();
+  })(t0);
 }
 
 messagesEl.addEventListener('click', async (e) => {
   const follow = e.target.closest('[data-followup]');
   if (follow) { if (!state.abort) sendMessage(follow.dataset.followup); return; }
+
+  const saveBtn = e.target.closest('[data-save-code]');
+  if (saveBtn) { saveCodeBlock(saveBtn); return; }
 
   const runBtn = e.target.closest('[data-run]');
   if (runBtn) { runCodeBlock(runBtn); return; }
@@ -381,11 +460,33 @@ messagesEl.addEventListener('click', async (e) => {
       if (speaker.speaking) speaker.stop();
       else { speaker.reset(); speaker.say(msg.content); }
       break;
-    case 'retry':
+    case 'retry': {
       if (state.abort) return;
+      const versions = msg.versions ? [...msg.versions] : [snapshot(msg)];
       state.chat.messages.splice(idx);
       renderMessages();
-      await generateReply();
+      const fresh = await generateReply();
+      if (fresh && !fresh.error) {
+        fresh.versions = [...versions, snapshot(fresh)];
+        fresh.v = fresh.versions.length - 1;
+        rerenderMessage(state.chat.messages.length - 1);
+        await saveChat();
+      }
+      break;
+    }
+    case 'vprev':
+    case 'vnext': {
+      if (!msg.versions || state.abort) return;
+      const v = Math.max(0, Math.min(msg.versions.length - 1, (msg.v ?? msg.versions.length - 1) + (act.dataset.msgAct === 'vnext' ? 1 : -1)));
+      delete msg.savedId;
+      Object.assign(msg, msg.versions[v], { v });
+      if (!msg.savedId) delete msg.savedId;
+      rerenderMessage(idx);
+      await saveChat();
+      break;
+    }
+    case 'star':
+      await toggleSaved(msg, act);
       break;
     case 'edit': {
       if (state.abort) return;
@@ -398,6 +499,20 @@ messagesEl.addEventListener('click', async (e) => {
     }
   }
 });
+
+function snapshot(m) {
+  const { content, thinking, tools, model, stats, time, savedId } = m;
+  return { content, thinking, tools, model, stats, time, savedId };
+}
+
+function rerenderMessage(idx) {
+  const old = $(`.msg[data-idx="${idx}"]`, messagesEl);
+  if (!old) { renderMessages(); return; }
+  const el = messageEl(state.chat.messages[idx], idx);
+  el.style.animation = 'none';
+  old.replaceWith(el);
+  markLast();
+}
 
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); }
@@ -466,7 +581,9 @@ function updateAssistantEl(el, m) {
   }
   if (content) html += `<div class="md">${renderMarkdown(content)}</div>`;
   if (m.error) html += `<p class="error-text">⚠ ${escapeHtml(m.error)}</p>`;
-  if (m.streaming && !content && !m.error && !stillThinking) html += '<span class="typing"></span>';
+  if (m.streaming && !content && !m.error && !stillThinking && !(m.tools || []).length && m.warming) {
+    html += `<span class="warming"><span class="spin"></span>Waking up ${escapeHtml(m.model || 'the model')}… the first reply takes a moment</span>`;
+  } else if (m.streaming && !content && !m.error && !stillThinking) html += '<span class="typing"></span>';
   if (m.streaming && stillThinking && !thinking.trim()) html += '<span class="typing"></span>';
   el.querySelector('.content').innerHTML = html;
 
@@ -475,7 +592,11 @@ function updateAssistantEl(el, m) {
   el.querySelector('.followups')?.remove();
   if (m.streaming) { actions.innerHTML = ''; return; }
   const tps = m.stats?.eval_count && m.stats?.eval_duration ? `${(m.stats.eval_count / (m.stats.eval_duration / 1e9)).toFixed(1)} tok/s` : '';
-  actions.innerHTML = `<button data-msg-act="copy" title="Copy">${ICONS.copy}</button>
+  const vers = m.versions?.length > 1
+    ? `<span class="versions"><button data-msg-act="vprev" title="Previous version" ${(m.v ?? 0) === 0 ? 'disabled' : ''}>‹</button>${(m.v ?? m.versions.length - 1) + 1}/${m.versions.length}<button data-msg-act="vnext" title="Next version" ${(m.v ?? m.versions.length - 1) === m.versions.length - 1 ? 'disabled' : ''}>›</button></span>`
+    : '';
+  actions.innerHTML = `${vers}<button data-msg-act="copy" title="Copy">${ICONS.copy}</button>
+    <button data-msg-act="star" title="${m.savedId ? 'Saved — click to remove' : 'Save this reply'}" class="${m.savedId ? 'starred' : ''}">${ICONS.star}</button>
     <button data-msg-act="speak" title="Read aloud">${ICONS.speak}</button>
     <button data-msg-act="retry" title="Regenerate">${ICONS.retry}</button>
     <span class="stats">${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
@@ -636,9 +757,12 @@ const COMMANDS = [
   { cmd: '/open', desc: 'Open an app', hint: 'Spotify', to: (r) => `Open ${r}` },
   { cmd: '/remember', desc: 'Save something to memory', hint: "my sister's birthday is June 3", to: (r) => `Remember this: ${r}` },
   { cmd: '/run', desc: 'Write and run Python', hint: 'count the words in a sentence', to: (r) => `Write Python code to ${r}, run it, and show me the result` },
+  { cmd: '/focus', desc: 'Start a focus timer', hint: '25 minutes on homework', to: (r) => `Start a focus session${r ? `: ${r}` : ' for 25 minutes'}` },
+  { cmd: '/saved', desc: 'Your saved replies', action: () => openSaved() },
   { cmd: '/brief', desc: 'Morning briefing', action: () => startBriefing() },
   { cmd: '/voice', desc: 'Start talking', action: () => startVoice() },
   { cmd: '/new', desc: 'New chat', action: () => newChat() },
+  { cmd: '/shortcuts', desc: 'Keyboard shortcuts', action: () => $('#shortcutsDlg').showModal() },
 ];
 const slash = { open: false, items: [], index: 0 };
 
@@ -714,6 +838,7 @@ async function sendMessage(text, { voice = false, display = null } = {}) {
   }
 
   const msg = { role: 'user', content: text, display: display ?? text, time: Date.now() };
+  if (!voice) sfx('send');
   if (state.attachments.length) {
     const textFiles = state.attachments.filter((a) => a.kind === 'text');
     const images = state.attachments.filter((a) => a.kind === 'image');
@@ -756,6 +881,11 @@ async function generateReply({ voice = false, model = null } = {}) {
   };
   const t0 = Date.now();
   let thinkStart = 0;
+  // Let you know when the model has to load into memory first (can take a while on the first message).
+  const warmTimer = setTimeout(() => { if (!reply.content && !reply.thinking && !reply.tools.length) { reply.warming = true; paint(); } }, 2500);
+  fetch('/api/models/loaded').then((r) => r.json()).then((l) => {
+    if (!l.unknown && !l.models.includes(model) && !reply.content && !reply.thinking) { reply.warming = true; paint(); }
+  }).catch(() => {});
 
   try {
     const res = await fetch('/api/chat', {
@@ -782,6 +912,7 @@ async function generateReply({ voice = false, model = null } = {}) {
         buf = buf.slice(nl + 1);
         if (!line) continue;
         const ev = JSON.parse(line);
+        if (reply.warming) delete reply.warming;
         if (ev.type === 'token') {
           if (thinkStart && !reply.thinkSecs) reply.thinkSecs = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
           reply.content += ev.content;
@@ -821,7 +952,10 @@ async function generateReply({ voice = false, model = null } = {}) {
     if (err.name !== 'AbortError') reply.error = err.message;
   } finally {
     if (state.abort === abort) state.abort = null;
+    clearTimeout(warmTimer);
+    delete reply.warming;
     closeApproval();
+    if (!voice && !abort.signal.aborted && reply.content) sfx('done');
     cancelAnimationFrame(raf);
     raf = 0;
     reply.streaming = false;
@@ -956,6 +1090,7 @@ $('#approvalDeny').onclick = () => answerApproval(false);
 function handleToolEvent(ev) {
   if (['add_task', 'complete_task', 'delete_task'].includes(ev.name)) loadTasks();
   if (ev.name === 'set_timer' && ev.result?.timer_set) toast(`⏱ Timer started: ${fmtDuration(ev.result.seconds)}${ev.result.label && ev.result.label !== 'Timer' ? ` — ${ev.result.label}` : ''}`);
+  if (ev.name === 'start_focus' && ev.result?.focus_started) startFocus(ev.result.minutes, ev.result.task, ev.result.break_minutes);
   if (ev.name === 'set_reminder' && ev.result?.reminder_set) toast(`🔔 Reminder set for ${ev.result.reminder_set.when}`);
   if (['set_timer', 'set_reminder'].includes(ev.name) && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
 }
@@ -1304,6 +1439,10 @@ function openSettings(tab = 'general') {
   $('#setDirect').checked = !!s.direct_mode;
   fillPersonas();
   renderAccents();
+  $('#setTextSize').value = s.text_size || 'normal';
+  $('#setCompact').checked = !!s.compact;
+  $('#setSounds').checked = !!s.sound_effects;
+  $('#setBirthday').value = s.birthday ? `${new Date().getFullYear()}-${s.birthday}` : '';
   $('#setBargeIn').checked = s.voice_barge_in !== false;
   $('#setVoiceSleep').checked = s.voice_sleep !== false;
   $('#setPc').checked = !!s.pc_enabled;
@@ -1432,6 +1571,10 @@ bind('#setWeb', 'web_enabled', (el) => el.checked);
 bind('#setConfirm', 'confirm_changes', (el) => el.checked);
 bind('#setScreen', 'show_on_screen', (el) => el.checked);
 bind('#setPc', 'pc_enabled', (el) => el.checked);
+bind('#setTextSize', 'text_size');
+bind('#setCompact', 'compact', (el) => el.checked);
+bind('#setSounds', 'sound_effects', (el) => el.checked);
+bind('#setBirthday', 'birthday', (el) => el.value.slice(5));
 bind('#setBargeIn', 'voice_barge_in', (el) => el.checked);
 bind('#setVoiceSleep', 'voice_sleep', (el) => el.checked);
 bind('#setScreen2', 'screen_enabled', (el) => el.checked);
@@ -1820,6 +1963,173 @@ $('#makeShortcuts').onclick = async () => {
   } catch (e) { toast(e.message, 'error'); }
 };
 
+// ------------------------------------------------------------ save code as a file
+const CODE_EXT = { python: 'py', py: 'py', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', tsx: 'tsx', jsx: 'jsx', html: 'html', css: 'css',
+  json: 'json', bash: 'sh', sh: 'sh', shell: 'sh', powershell: 'ps1', ps1: 'ps1', batch: 'bat', bat: 'bat', cmd: 'bat', sql: 'sql', java: 'java',
+  c: 'c', cpp: 'cpp', 'c++': 'cpp', csharp: 'cs', cs: 'cs', go: 'go', rust: 'rs', rs: 'rs', ruby: 'rb', php: 'php', swift: 'swift', kotlin: 'kt',
+  yaml: 'yml', yml: 'yml', toml: 'toml', xml: 'xml', markdown: 'md', md: 'md', lua: 'lua', r: 'r', dart: 'dart', vue: 'vue', svelte: 'svelte' };
+function saveCodeBlock(btn) {
+  const code = btn.closest('.code-block').querySelector('code');
+  const lang = (code.dataset.lang || 'txt').toLowerCase();
+  const stem = (state.chat?.title || 'athena-code').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'athena-code';
+  const name = `${stem}.${CODE_EXT[lang] || 'txt'}`;
+  const url = URL.createObjectURL(new Blob([code.innerText], { type: 'text/plain' }));
+  const a = Object.assign(document.createElement('a'), { href: url, download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast(`Saved ${name} to your Downloads`);
+}
+
+// ------------------------------------------------------------ jump to bottom
+messagesEl.addEventListener('scroll', () => {
+  const far = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight > 400;
+  $('#jumpBtn').hidden = !far || !state.chat?.messages.length;
+}, { passive: true });
+$('#jumpBtn').onclick = () => { messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' }); };
+
+// ------------------------------------------------------------ saved replies
+async function toggleSaved(msg, btn) {
+  if (msg.savedId) {
+    await api(`/api/saved/${msg.savedId}`, { method: 'DELETE' }).catch(() => {});
+    delete msg.savedId;
+    toast('Removed from Saved');
+  } else {
+    const item = await api('/api/saved', json('POST', {
+      chat_id: state.chat.id, chat_title: state.chat.title, content: splitThinking(msg).content, model: msg.model,
+    }));
+    msg.savedId = item.id;
+    toast('⭐ Saved — find it under Saved in the sidebar');
+  }
+  btn.classList.toggle('starred', !!msg.savedId);
+  if (msg.versions) msg.versions[msg.v ?? msg.versions.length - 1].savedId = msg.savedId;
+  await saveChat();
+  if (!$('#savedDrawer').hidden) loadSaved();
+}
+
+async function loadSaved() {
+  const items = await api('/api/saved').catch(() => []);
+  $('#savedList').innerHTML = items.length ? items.map((it) => `
+    <div class="saved-item" data-id="${it.id}">
+      <div class="md">${renderMarkdown(it.content)}</div>
+      <div class="meta"><span>${escapeHtml(it.chat_title || 'Chat')} · ${new Date(it.time * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span><span class="spacer"></span>
+        <button data-saved="expand">More</button><button data-saved="copy">Copy</button>${it.chat_id ? '<button data-saved="open">Open chat</button>' : ''}<button data-saved="remove">Remove</button></div>
+    </div>`).join('') : '<p class="muted small" style="padding:8px">Nothing saved yet. Hover over one of Athena’s replies and click the ☆.</p>';
+  $('#savedList').dataset.items = JSON.stringify(items.map((i) => [i.id, i.chat_id]));
+  $('#savedList')._items = items;
+}
+function openSaved() {
+  $('#tasksDrawer').hidden = true;
+  $('#savedDrawer').hidden = false;
+  loadSaved();
+}
+$('#openSaved').onclick = () => ($('#savedDrawer').hidden ? openSaved() : ($('#savedDrawer').hidden = true));
+$('#closeSaved').onclick = () => ($('#savedDrawer').hidden = true);
+$('#savedList').onclick = async (e) => {
+  const b = e.target.closest('[data-saved]');
+  if (!b) return;
+  const card = b.closest('.saved-item');
+  const item = ($('#savedList')._items || []).find((i) => i.id === card.dataset.id);
+  if (!item) return;
+  const act = b.dataset.saved;
+  if (act === 'expand') { card.classList.toggle('open'); b.textContent = card.classList.contains('open') ? 'Less' : 'More'; }
+  if (act === 'copy') { await copyText(item.content); toast('Copied'); }
+  if (act === 'open') { await openChat(item.chat_id); if (isNarrow()) $('#savedDrawer').hidden = true; }
+  if (act === 'remove') {
+    await api(`/api/saved/${item.id}`, { method: 'DELETE' });
+    const m = state.chat?.messages.find((x) => x.savedId === item.id);
+    if (m) { delete m.savedId; renderMessages(); saveChat(); }
+    loadSaved();
+  }
+};
+$('#openTasks').addEventListener('click', () => { $('#savedDrawer').hidden = true; });
+
+// ------------------------------------------------------------ focus timer (Pomodoro)
+const focus = { orb: null, timer: null };
+function startFocus(minutes = 25, task = '', breakMinutes = 5) {
+  const f = { phase: 'focus', end: Date.now() + minutes * 60000, minutes, task, breakMinutes, paused: 0 };
+  try { localStorage.setItem('athena-focus', JSON.stringify(f)); } catch { /* ignore */ }
+  runFocus(f);
+  toast(`🎯 Focus for ${minutes} minutes${task ? ` — ${task}` : ''}`);
+}
+function runFocus(f) {
+  const w = $('#focusWidget');
+  w.hidden = false;
+  if (!focus.orb) { focus.orb = new VoiceOrb($('#focusOrb')); focus.orb.getLevel = () => 0; }
+  focus.state = f;
+  clearInterval(focus.timer);
+  const tick = () => {
+    const st = focus.state;
+    const left = st.paused || Math.max(0, st.end - Date.now());
+    const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+    $('#focusTime').textContent = `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+    $('#focusLabel').textContent = st.phase === 'break' ? 'Break time ☕' : (st.task || 'Focus');
+    w.classList.toggle('break', st.phase === 'break');
+    w.classList.toggle('paused', !!st.paused);
+    focus.orb.setState(st.paused ? 'idle' : st.phase === 'break' ? 'listening' : 'thinking');
+    if (!st.paused && left <= 0) {
+      chime();
+      speaker.reset();
+      if (st.phase === 'focus') {
+        speaker.say(`Nice work${state.settings.user_name ? `, ${state.settings.user_name}` : ''}! Time for a ${st.breakMinutes} minute break.`);
+        toast(`🎉 Focus done! ${st.breakMinutes}-minute break`, 'alarm');
+        Object.assign(st, { phase: 'break', end: Date.now() + st.breakMinutes * 60000 });
+        try { localStorage.setItem('athena-focus', JSON.stringify(st)); } catch { /* ignore */ }
+      } else {
+        speaker.say("Break's over. Ready for another round?");
+        toast("☕ Break's over — ready for another round?", 'alarm');
+        stopFocus();
+      }
+    }
+  };
+  tick();
+  focus.timer = setInterval(tick, 500);
+}
+function stopFocus() {
+  clearInterval(focus.timer);
+  focus.orb?.destroy();
+  focus.orb = null;
+  $('#focusWidget').hidden = true;
+  try { localStorage.removeItem('athena-focus'); } catch { /* ignore */ }
+}
+$('#focusStop').onclick = stopFocus;
+$('#focusPause').onclick = () => {
+  const st = focus.state;
+  if (!st) return;
+  if (st.paused) { st.end = Date.now() + st.paused; st.paused = 0; } else { st.paused = Math.max(0, st.end - Date.now()); }
+  $('#focusPause').title = st.paused ? 'Resume' : 'Pause';
+  $('#focusPause').innerHTML = st.paused ? '<svg viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></svg>' : '<svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg>';
+  try { localStorage.setItem('athena-focus', JSON.stringify(st)); } catch { /* ignore */ }
+};
+function resumeFocus() {
+  try {
+    const f = JSON.parse(localStorage.getItem('athena-focus') || 'null');
+    if (f && (f.paused || f.end > Date.now() - 60000)) runFocus(f);
+  } catch { /* ignore */ }
+}
+
+// ------------------------------------------------------------ sound effects
+let sfxCtx = null;
+function sfx(kind) {
+  if (!state.settings.sound_effects) return;
+  try {
+    sfxCtx = sfxCtx || new AudioContext();
+    const ctx = sfxCtx;
+    const notes = kind === 'send' ? [[1320, 0, 0.05]] : [[740, 0, 0.12], [988, 0.08, 0.16]];
+    for (const [f, delay, len] of notes) {
+      const t = ctx.currentTime + delay;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(kind === 'send' ? 0.05 : 0.06, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + len + 0.02);
+    }
+  } catch { /* no audio */ }
+}
+
 // ------------------------------------------------------------ boot
 async function init() {
   $$('[data-logo]').forEach((el) => { el.outerHTML = logoSvg(); });
@@ -1836,6 +2146,7 @@ async function init() {
   voicesReady();
   connectEvents();
   setupIdleLock();
+  resumeFocus();
   const stars = startStars($('#stars'));
   new MutationObserver(() => stars.redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   $('#lockBtn').hidden = !state.settings.pin_set;
