@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import events, files, knowledge, scheduler, security, speech, store, tts
+from . import events, files, knowledge, scheduler, security, speech, store, tts, workspace
 from .tools import BY_NAME, approval_summary, arun_tool, enabled_tools, parse_args, run_tool
 
 STATIC_DIR = store.ROOT / "static"
@@ -270,18 +270,27 @@ async def chat(request: Request):
     auto_approve = bool(body.get("auto_approve"))
     history = _clean_messages(body.get("messages") or [])
     project = store.get_project(body.get("project_id"))
+    try:
+        code_root = workspace.open_root(body.get("workspace")) if mode != "voice" else None
+    except workspace.WorkspaceError:
+        code_root = None
+    if code_root and model not in _no_tool_models:
+        use_tools = True
+    extra_prompt = project_context(project) + canvas_context(body.get("canvas"))
+    if code_root:
+        extra_prompt += await run_in_threadpool(workspace.prompt, code_root)
     shown: set[str] = set()
 
     async def generate() -> AsyncIterator[bytes]:
         nonlocal use_tools, auto_approve
         think_off = True
-        system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + project_context(project) + canvas_context(body.get("canvas"))}
+        system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
 
         for _round in range(MAX_TOOL_ROUNDS):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True}
             if use_tools:
-                payload["tools"] = [t.spec() for t in enabled_tools(settings)]
+                payload["tools"] = [t.spec() for t in enabled_tools(settings)] + (workspace.specs() if code_root else [])
             if mode == "voice" and think_off:
                 payload["think"] = False  # reasoning models answer much faster aloud without it
             content, calls, stats = "", [], {}
@@ -296,7 +305,7 @@ async def chat(request: Request):
                             # Model can't use tools: remember that and retry as plain chat.
                             _no_tool_models.add(model)
                             use_tools = False
-                            messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + project_context(project) + canvas_context(body.get("canvas"))}
+                            messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + extra_prompt}
                             continue
                         yield _event("error", message=_ollama_error(text, resp.status_code))
                         return
@@ -337,11 +346,19 @@ async def chat(request: Request):
                 step = store.new_id()
                 yield _event("tool_start", id=step, name=name, args=args)
 
-                summary = None if auto_approve else await run_in_threadpool(approval_summary, name, args, settings)
+                diff = None
+                if code_root and name in workspace.NAMES:
+                    try:
+                        ask = None if auto_approve else await run_in_threadpool(workspace.approval, code_root, name, args)
+                    except (workspace.WorkspaceError, OSError):
+                        ask = None  # the tool will report the problem itself
+                    summary, diff = (ask or {}).get("summary"), (ask or {}).get("diff")
+                else:
+                    summary = None if auto_approve else await run_in_threadpool(approval_summary, name, args, settings)
                 if summary:
                     future = asyncio.get_running_loop().create_future()
                     _approvals[step] = future
-                    yield _event("approval", id=step, name=name, summary=summary)
+                    yield _event("approval", id=step, name=name, summary=summary, **({"diff": diff} if diff else {}))
                     try:
                         decision = await asyncio.wait_for(future, APPROVAL_TIMEOUT)
                     except asyncio.TimeoutError:
@@ -366,7 +383,9 @@ async def chat(request: Request):
                             await asyncio.sleep(1.2)  # let the window appear so the user can watch
 
                 tool = BY_NAME.get(name)
-                if tool and tool.arun:
+                if code_root and name in workspace.NAMES:
+                    result = await run_in_threadpool(workspace.run, code_root, name, args)
+                elif tool and tool.arun:
                     ctx = {"client": client, "settings": settings, "look_at_screen": look_at_screen}
                     result = await arun_tool(name, args, ctx)
                 else:
@@ -730,6 +749,42 @@ async def make_title(request: Request):
     if not title:
         raise HTTPException(502, "No title")
     return {"title": title[:60], "icon": icon}
+
+
+# --------------------------------------------------------------- code projects
+
+RECENT_WORKSPACES = store.DATA_DIR / "recent_workspaces.json"
+
+
+@app.get("/api/workspace/recent")
+async def recent_workspaces():
+    return [p for p in store._read(RECENT_WORKSPACES, []) if Path(p).is_dir()]
+
+
+@app.post("/api/workspace/open")
+async def open_workspace(request: Request):
+    """Check a folder the user wants to open as a code project and describe it."""
+    path = str((await request.json()).get("path", ""))
+    try:
+        root = workspace.open_root(path)
+    except workspace.WorkspaceError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not root:
+        raise HTTPException(400, "No folder given")
+    info = await run_in_threadpool(workspace.summary, root)
+    recent = [str(root)] + [p for p in store._read(RECENT_WORKSPACES, []) if p != str(root)]
+    store._write(RECENT_WORKSPACES, recent[:8])
+    return info
+
+
+@app.post("/api/workspace/pick")
+async def pick_workspace():
+    try:
+        return {"path": await run_in_threadpool(workspace.pick_folder)}
+    except workspace.WorkspaceError as exc:
+        raise HTTPException(501, str(exc)) from exc
+    except Exception as exc:  # no display (e.g. running headless or on another PC)
+        raise HTTPException(501, f"Couldn't show a folder picker here ({exc}). Paste the folder path instead.") from exc
 
 
 # --------------------------------------------------------------- canvas

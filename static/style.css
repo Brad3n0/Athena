@@ -814,3 +814,24 @@ body.canvas-on .composer-wrap, body.canvas-on .thread { max-width: 100%; }
 body.canvas-on .mode-switch button svg { display: none; }
 body.canvas-on .mode-switch button { padding: 5px 9px; }
 body.canvas-on .model-btn #modelName { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------- Code projects + diffs ---------------- */
+.workspace-chip { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; padding: 6px 8px 6px 12px; border: 1px solid rgba(var(--accent-rgb), .35); border-radius: 12px; background: rgba(var(--accent-rgb), .06); font-size: 13px; cursor: pointer; }
+.workspace-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-chip button { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 6px; color: var(--text-3); flex: none; }
+.workspace-chip button:hover { background: var(--bg-hover); color: var(--text); }
+.workspace-chip svg { width: 14px; height: 14px; }
+#folderBtn.on { color: var(--accent); }
+.ws-row { display: flex; gap: 8px; }
+.ws-row input { flex: 1; font-family: var(--mono); font-size: 13px; }
+.ws-error { color: #ff8a80; font-size: 13px; min-height: 1.2em; margin-top: 6px; }
+.ws-recent { display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 8px; font: 12.5px var(--mono); color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws-recent:hover { background: var(--bg-hover); color: var(--text); }
+pre.diff { margin: 8px 0 0; padding: 10px 0; background: #0b0f17; border: 1px solid var(--border); border-radius: 10px; font: 12.5px/1.5 var(--mono); max-height: 360px; overflow: auto; white-space: pre; }
+pre.diff span { display: inline-block; min-width: 100%; padding: 0 12px; color: #c9d1d9; }
+pre.diff .d-add { background: rgba(46, 160, 67, .18); color: #aff5b4; }
+pre.diff .d-del { background: rgba(248, 81, 73, .16); color: #ffc1ba; }
+pre.diff .d-hunk { color: #79c0ff; }
+pre.diff .d-file { color: var(--text-3); font-weight: 600; }
+.approval.wide .approval-card { width: min(860px, 100%); }
+.approval.wide pre.diff { max-height: 50vh; }

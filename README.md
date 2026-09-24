@@ -72,6 +72,17 @@ Click **Study** at the top, next to Assistant and Code.
 - **Attach your material** with 📎: PDFs, Word documents, PowerPoint slides, text files, or photos of worksheets and handwritten notes (photos need a vision model like `qwen2.5vl:7b`). Everything she makes is based on your material.
 - Combine it with other features: *"remind me to study biology every day at 7pm"*, `/focus 25 minutes on chemistry`, or ⭐ a study guide to keep it under **Saved**.
 
+## Code projects
+
+In **Code** mode, click the 📂 folder button under the message box (or type `/folder`) and pick your project folder. Now she can work on the real code:
+
+- *"Explain how this project works"*, *"where is the login handled?"*: she browses the files, searches the code and reads what she needs.
+- *"Add a dark mode toggle"*, *"fix the bug where the total is wrong"*: each change appears as a **diff** (green lines added, red removed) and nothing is saved until you press **Allow**.
+- *"Run the tests"*: she runs commands like `npm test` or `pytest` in the project folder (after you OK them) and fixes what fails.
+- *"Undo that"* puts the last changed file back. Copies of the old versions are kept in `data/code_backups`.
+
+She skips `node_modules`, `.git`, build folders and anything in your `.gitignore`.
+
 ## Writing canvas
 
 For essays, emails, cover letters and stories, click the 📄 button at the top (or type `/canvas cover letter for a barista job`). A document editor opens next to the chat.
@@ -154,6 +165,7 @@ athena/          Python server (FastAPI)
   events.py      Live events to open windows (reminders, wake word)
   pc.py          Apps, volume/media keys, power, clipboard, screenshots, running code
   knowledge.py   Document indexing and search (Ollama embeddings)
+  workspace.py   Code projects: read, search and edit a folder of code, with diffs and undo
   integrations.py  Image generation (Stable Diffusion) and Home Assistant
   weather.py     Weather (Open-Meteo)
   security.py    PIN lock

@@ -372,6 +372,7 @@ function newChat() {
   renderMessages();
   renderSidebar();
   syncCanvas();
+  renderWorkspaceChip();
   if (isNarrow()) toggleSidebar(false);
   $('#input').focus();
 }
@@ -388,6 +389,7 @@ async function openChat(id) {
     renderMessages();
     renderSidebar();
     syncCanvas();
+    renderWorkspaceChip();
     if (isNarrow()) toggleSidebar(false);
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -743,6 +745,13 @@ const STEP_TEXT = {
   list_tasks: [() => 'Checking your tasks', (a, r) => `Checked your tasks (${r.count ?? 0})`],
   complete_task: [(a) => `Completing ${q(a.task)}`, (a, r) => `Completed: ${r.completed?.title}`],
   delete_task: [(a) => `Removing ${q(a.task)}`, (a, r) => `Removed task: ${r.deleted?.title}`],
+  project_tree: [() => 'Looking at the project files', (a, r) => r.files != null ? `Saw ${r.files} files` : 'Looked at the project'],
+  read_code: [(a) => `Reading ${a.path}`, (a, r) => `Read ${r.path || a.path}${r.lines ? ` (lines ${r.lines})` : ''}`],
+  search_code: [(a) => `Searching the code for ${q(a.query)}`, (a, r) => `Found ${r.matches?.length || 0} match${r.matches?.length === 1 ? '' : 'es'} for ${q(a.query)}`],
+  edit_code: [(a) => `Editing ${a.path}`, (a, r) => `Edited ${r.edited || a.path} (+${r.added_lines ?? 0} −${r.removed_lines ?? 0})`],
+  write_code: [(a) => `Writing ${a.path}`, (a, r) => r.created ? `Created ${r.created}` : `Rewrote ${r.edited || a.path} (+${r.added_lines ?? 0} −${r.removed_lines ?? 0})`],
+  undo_code_edit: [() => 'Undoing the last edit', (a, r) => r.restored ? `Restored ${r.restored}` : r.removed_new_file ? `Removed ${r.removed_new_file}` : 'Nothing to undo'],
+  run_in_project: [(a) => `Running ${a.command}`, (a, r) => r.timed_out ? `Stopped after ${r.seconds}s` : r.exit_code === 0 ? `Ran ${a.command}` : `${a.command} failed (exit ${r.exit_code})`],
   search_chats: [(a) => `Looking through past chats for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} past chat${r.results?.length === 1 ? '' : 's'}`],
   remember: [() => 'Saving to memory', (a, r) => `Remembered: ${r.remembered}`],
   forget: [() => 'Forgetting', (a, r) => `Forgot: ${r.forgot}`],
@@ -803,7 +812,13 @@ function stepHtml(t, i, openSteps) {
   } else if (r?.url && t.name === 'read_webpage') {
     detail = `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>`;
   }
-  else if (t.name === 'run_python' && r) {
+  else if (r?.diff) {
+    detail = `<pre class="diff">${diffHtml(r.diff)}</pre>`;
+  } else if (t.name === 'run_in_project' && r) {
+    detail = `<pre class="run-output">${runOutputHtml(r)}</pre>`;
+  } else if (t.name === 'search_code' && r?.matches?.length) {
+    detail = `<pre class="run-output">${escapeHtml(r.matches.join('\n'))}</pre>`;
+  } else if (t.name === 'run_python' && r) {
     detail = `<pre class="run-output">${runOutputHtml(r)}</pre>${r.images?.length ? runImagesHtml(r.images) : ''}`;
   } else if (t.name === 'search_documents' && r?.results) {
     detail = `<ul>${r.results.map((x) => `<li><b>${escapeHtml(x.file)}</b><div class="muted small">${escapeHtml(x.text.slice(0, 220))}…</div></li>`).join('')}</ul>`;
@@ -885,6 +900,7 @@ const COMMANDS = [
   { cmd: '/brief', desc: 'Morning briefing', action: () => startBriefing() },
   { cmd: '/voice', desc: 'Start talking', action: () => startVoice() },
   { cmd: '/new', desc: 'New chat', action: () => newChat() },
+  { cmd: '/folder', desc: 'Open a code project folder', action: () => openWorkspaceDialog() },
   { cmd: '/canvas', desc: 'Write a document together', hint: 'cover letter for a barista job', action: (r) => {
     openCanvas();
     if (r) sendMessage(`Write this in the canvas: ${r}`, { display: `/canvas ${r}` });
@@ -1019,7 +1035,7 @@ async function generateReply({ voice = false, model = null } = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model, mode, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, canvas: voice ? null : canvasForChat(),
+        model, mode, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, workspace: chat.workspace?.path || null, canvas: voice ? null : canvasForChat(),
         messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })),
       }),
       signal: abort.signal,
@@ -1202,6 +1218,9 @@ let pendingApproval = null;
 function askApproval(ev, chat, voice) {
   pendingApproval = { id: ev.id, chat };
   $('#approvalSummary').textContent = ev.summary;
+  $('#approvalDiff').hidden = !ev.diff;
+  $('#approvalDiff').innerHTML = ev.diff ? diffHtml(ev.diff) : '';
+  $('#approval').classList.toggle('wide', !!ev.diff);
   $('#approvalAlways').checked = false;
   $('#approval').hidden = false;
   $('#approvalAllow').focus();
@@ -1899,6 +1918,65 @@ function runOutputHtml(r) {
 }
 
 const runImagesHtml = (images) => `<div class="run-images">${images.map((src) => /^data:image\//.test(src) ? `<img src="${src}" alt="Output" />` : '').join('')}</div>`;
+
+// ------------------------------------------------------------ diffs + code projects
+function diffHtml(diff) {
+  return diff.split('\n').map((line) => {
+    const cls = line.startsWith('+++') || line.startsWith('---') ? 'd-file' : line.startsWith('@@') ? 'd-hunk'
+      : line.startsWith('+') ? 'd-add' : line.startsWith('-') ? 'd-del' : '';
+    return `<span class="${cls}">${escapeHtml(line) || ' '}</span>`;
+  }).join('\n');
+}
+
+function renderWorkspaceChip() {
+  const ws = state.chat?.workspace;
+  const chip = $('#workspaceChip');
+  chip.hidden = !ws;
+  $('#folderBtn').classList.toggle('on', !!ws);
+  if (ws) chip.innerHTML = `<span>📂 <b>${escapeHtml(ws.name)}</b> <span class="muted">· ${ws.files} files${ws.languages?.length ? ` · ${escapeHtml(ws.languages.slice(0, 3).join(' '))}` : ''}</span></span><button type="button" id="wsClose" title="Close the project">${ICONS.x}</button>`;
+}
+
+async function openWorkspaceDialog() {
+  $('#wsPath').value = state.chat?.workspace?.path || '';
+  $('#wsError').textContent = '';
+  const recent = await api('/api/workspace/recent').catch(() => []);
+  $('#wsRecent').innerHTML = recent.length ? `<div class="muted small" style="margin:12px 0 4px">Recent</div>` +
+    recent.map((p) => `<button type="button" class="ws-recent" data-ws="${escapeHtml(p)}">📁 ${escapeHtml(p)}</button>`).join('') : '';
+  $('#workspaceDlg').showModal();
+  $('#wsPath').focus();
+}
+
+async function openWorkspace(path) {
+  $('#wsError').textContent = '';
+  try {
+    const info = await api('/api/workspace/open', json('POST', { path }));
+    state.chat.workspace = info;
+    if (state.mode !== 'code') setMode('code', { keepModel: false });
+    $('#workspaceDlg').close();
+    renderWorkspaceChip();
+    toast(`📂 Opened ${info.name} (${info.files} files). Ask away, e.g. “explain how this project works”`);
+    if (state.chat.messages.length) saveChat();
+  } catch (e) { $('#wsError').textContent = e.message; }
+}
+
+$('#folderBtn').onclick = openWorkspaceDialog;
+$('#wsOpen').onclick = () => openWorkspace($('#wsPath').value.trim());
+$('#wsPath').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); openWorkspace($('#wsPath').value.trim()); } };
+$('#wsRecent').onclick = (e) => { const b = e.target.closest('[data-ws]'); if (b) openWorkspace(b.dataset.ws); };
+$('#wsBrowse').onclick = async () => {
+  $('#wsBrowse').disabled = true;
+  try {
+    const r = await api('/api/workspace/pick', { method: 'POST' });
+    if (r.path) { $('#wsPath').value = r.path; openWorkspace(r.path); }
+  } catch (e) { $('#wsError').textContent = e.message; }
+  $('#wsBrowse').disabled = false;
+};
+$('#workspaceChip').onclick = (e) => {
+  if (!e.target.closest('#wsClose')) return openWorkspaceDialog();
+  delete state.chat.workspace;
+  renderWorkspaceChip();
+  if (state.chat.messages.length) saveChat();
+};
 
 // ------------------------------------------------------------ live HTML preview
 // Runs in a sandboxed frame with no access to Athena (a unique, empty origin), so page code can't touch your chats or PC.

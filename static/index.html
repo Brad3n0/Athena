@@ -117,6 +117,7 @@
     <div class="composer-wrap">
       <form class="composer" id="composer">
         <div class="slash-menu" id="slashMenu" hidden></div>
+        <div class="workspace-chip" id="workspaceChip" hidden></div>
         <div class="attachments" id="attachments"></div>
         <textarea id="input" rows="1" placeholder="Message Athena" autocomplete="off"></textarea>
         <div class="composer-row">
@@ -124,6 +125,9 @@
             <input type="file" id="fileInput" multiple hidden />
             <svg viewBox="0 0 24 24"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 8"/></svg>
           </label>
+          <button type="button" class="icon-btn" id="folderBtn" title="Open a code project folder">
+            <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m10 11-2 2 2 2M14 11l2 2-2 2"/></svg>
+          </button>
           <button type="button" class="icon-btn" id="shotBtn" title="Show Athena your screen (screenshot in 3 seconds)">
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           </button>
@@ -449,6 +453,7 @@
   <div class="approval-card" role="alertdialog" aria-labelledby="approvalTitle">
     <div class="approval-title" id="approvalTitle"><span data-logo></span> Athena wants to</div>
     <div class="approval-summary" id="approvalSummary"></div>
+    <pre class="diff" id="approvalDiff" hidden></pre>
     <label class="check small"><input type="checkbox" id="approvalAlways" /> Allow everything else in this chat</label>
     <div class="approval-actions">
       <button type="button" class="ghost" id="approvalDeny">Deny</button>
@@ -456,6 +461,19 @@
     </div>
   </div>
 </div>
+
+<dialog class="settings project-dlg" id="workspaceDlg">
+  <form method="dialog" class="settings-inner">
+    <header><h2>Open a code project</h2><button class="icon-btn" value="close" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+    <div class="project-body">
+      <p class="muted small" style="margin-top:0">Athena can read, search and edit the code in this folder. You see every change as a diff and approve it first, and <b>undo</b> puts files back.</p>
+      <div class="pull-row ws-row"><input id="wsPath" placeholder="C:\Users\you\Projects\my-app" spellcheck="false" /><button type="button" class="ghost" id="wsBrowse">Browse…</button></div>
+      <div class="ws-error" id="wsError"></div>
+      <div id="wsRecent"></div>
+      <div class="pull-row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="primary" id="wsOpen">Open folder</button></div>
+    </div>
+  </form>
+</dialog>
 
 <dialog class="settings wizard" id="wizard">
   <div class="settings-inner">
