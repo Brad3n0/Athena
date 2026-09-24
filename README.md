@@ -103,7 +103,7 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 - Other options: `--port 9000` changes the port, and `--no-browser` stops the browser opening. `OLLAMA_HOST` is respected if Ollama runs elsewhere.
 - **Quick commands:** type **/** in the message box for a menu: `/remind`, `/timer`, `/weather`, `/search`, `/image`, `/find`, `/organize`, `/docs`, `/screen`, `/open`, `/remember`, `/run`, `/brief`, `/voice` and `/new`.
 - **Drag & drop** files onto the chat, or paste screenshots with **Ctrl+V**.
-- Chats name themselves with a short title and emoji; **pin** favourites to the top. Hover a message to see when it was sent, and click the suggestion chips under a reply to follow up. Press **?** for all keyboard shortcuts, pick an **accent colour** (gold, rose gold, silver, cyan, emerald) in Settings → General, and see **Your stats** in Settings.
+- Chats name themselves with a short title and emoji; **pin** favourites to the top. Hover a message to see when it was sent, and click the suggestion chips under a reply to follow up. Press **?** for all keyboard shortcuts, pick one of 11 **accent colours** (gold, rose gold, silver, cyan, emerald, aurora, sunset, violet, sakura, ice, neon lime) in Settings → General, and see **Your stats** in Settings.
 - In voice chat, captions light up word by word as she speaks, you can **interrupt her just by talking**, and she dozes after a minute of silence. Tap the orb or say *"Hey Athena"* to wake her. In voice chat, a soft chime tells you when she's listening and when she's heard you.
 - Shortcuts: **Enter** sends, **Shift+Enter** adds a new line, **Ctrl+Shift+O** starts a new chat and **Esc** stops a reply.
 

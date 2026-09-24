@@ -64,7 +64,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "theme": "dark",
-    "accent": "gold",  # gold | rose | silver | cyan | emerald
+    "accent": "gold",  # gold, rose, silver, cyan, emerald, aurora, sunset, violet, sakura, ice, lime
     "voice_barge_in": True,  # interrupt Athena just by talking
     "voice_sleep": True,  # dim after a minute of silence in voice chat
     # Speech-to-text (runs locally with faster-whisper)

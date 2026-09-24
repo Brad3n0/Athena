@@ -21,6 +21,30 @@ export const ACCENTS = {
     name: 'Emerald', accent: '#34d399', accent2: '#6ee7b7', deep: '#047857', rgb: [52, 211, 153], light: [110, 231, 183],
     logo: ['#a7f3d0', '#059669'], orb: [[110, 231, 183], [16, 185, 129], [209, 250, 229]], base: '#0b3b2c', star: [170, 240, 210],
   },
+  aurora: {
+    name: 'Aurora', accent: '#2dd4bf', accent2: '#a78bfa', deep: '#0f766e', rgb: [45, 212, 191], light: [167, 139, 250],
+    logo: ['#5eead4', '#8b5cf6'], orb: [[94, 234, 212], [139, 92, 246], [236, 254, 255]], base: '#1e1b4b', star: [180, 170, 255],
+  },
+  sunset: {
+    name: 'Sunset', accent: '#fb923c', accent2: '#f472b6', deep: '#c2410c', rgb: [251, 146, 60], light: [249, 168, 212],
+    logo: ['#fdba74', '#ec4899'], orb: [[253, 186, 116], [236, 72, 153], [255, 237, 213]], base: '#4a1530', star: [255, 196, 170],
+  },
+  violet: {
+    name: 'Violet', accent: '#a78bfa', accent2: '#c4b5fd', deep: '#6d28d9', rgb: [167, 139, 250], light: [196, 181, 253],
+    logo: ['#ddd6fe', '#7c3aed'], orb: [[196, 181, 253], [124, 58, 237], [245, 243, 255]], base: '#2e1065', star: [205, 195, 255],
+  },
+  sakura: {
+    name: 'Sakura', accent: '#f9a8d4', accent2: '#fbcfe8', deep: '#be185d', rgb: [249, 168, 212], light: [251, 207, 232],
+    logo: ['#fce7f3', '#ec4899'], orb: [[251, 207, 232], [236, 72, 153], [255, 241, 248]], base: '#4a1034', star: [255, 205, 230],
+  },
+  ice: {
+    name: 'Ice', accent: '#93c5fd', accent2: '#dbeafe', deep: '#1d4ed8', rgb: [147, 197, 253], light: [219, 234, 254],
+    logo: ['#eff6ff', '#60a5fa'], orb: [[191, 219, 254], [59, 130, 246], [255, 255, 255]], base: '#0c1e45', star: [205, 225, 255],
+  },
+  lime: {
+    name: 'Neon lime', accent: '#a3e635', accent2: '#d9f99d', deep: '#4d7c0f', rgb: [163, 230, 53], light: [217, 249, 157],
+    logo: ['#d9f99d', '#65a30d'], orb: [[217, 249, 157], [101, 163, 13], [247, 254, 231]], base: '#1a2e05', star: [215, 245, 170],
+  },
 };
 
 let current = ACCENTS.gold;
