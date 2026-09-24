@@ -1,4 +1,4 @@
-# 🦉 Athena AI
+# ✦ Athena AI
 
 A private, **fully offline** AI assistant for your home PC. It looks and works like ChatGPT, but it runs local AI models through [Ollama](https://ollama.com), so your chats never leave your computer.
 
