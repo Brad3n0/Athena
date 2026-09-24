@@ -328,13 +328,13 @@ svg.fill { fill: currentColor; stroke: none; }
 .voice-controls { display: flex; gap: 22px; }
 .round {
   width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center;
-  background: var(--accent); color: var(--accent-ink); border: 2px solid var(--accent);
-  box-shadow: 0 0 18px rgba(245, 197, 66, .25); transition: filter .15s, background .15s, color .15s;
+  background: transparent; color: var(--accent); border: 2px solid var(--accent);
+  transition: background .15s, box-shadow .15s;
 }
-.round:hover { filter: brightness(1.1); }
+.round:hover { background: rgba(245, 197, 66, .12); box-shadow: 0 0 16px rgba(245, 197, 66, .3); }
 .round svg { width: 24px; height: 24px; }
 .round .slash { display: none; }
-.round.off { background: transparent; color: var(--accent); box-shadow: none; }
+.round.off { opacity: .6; }
 .round.off .slash { display: inline; }
 
 /* ---------------- Toasts ---------------- */
