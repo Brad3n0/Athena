@@ -88,6 +88,12 @@ def _focus(a):
             "break_minutes": float(a.get("break_minutes") or 5)}
 
 
+def _decks():
+    from . import decks
+    items = decks.list_decks()
+    return {"decks": [{"name": d["name"], "cards": d["total"], "due_today": d["due"]} for d in items], "total_due": decks.total_due()}
+
+
 def _reminder(a):
     try:
         when = scheduler.parse_when(str(a.get("at", "")), a.get("minutes_from_now"))
@@ -274,6 +280,8 @@ TOOLS: list[Tool] = [
          "from the current time, or use minutes_from_now.",
          {"text": S("What to remind them about"), "at": S("Local date/time in ISO format, e.g. 2026-10-01T18:00"),
           "minutes_from_now": {"type": "number", "description": "Alternative to 'at'"}}, ["text"], run=_reminder),
+    Tool("flashcard_decks", "tasks", "List the user's saved flashcard decks and how many cards are due for review today. "
+         "Tell them they can review with the Decks button or by typing /review.", run=lambda a: _decks()),
     Tool("list_reminders", "tasks", "List upcoming reminders and timers.", run=_list_reminders),
     Tool("cancel_reminder", "tasks", "Cancel a reminder or timer.", {"reminder": S("Reminder id or words from it")}, ["reminder"], run=_cancel_reminder),
 

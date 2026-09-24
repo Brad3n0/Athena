@@ -70,6 +70,7 @@ function renderCards(w, cards) {
       <button type="button" data-fc="flip">Flip</button>
       <button type="button" data-fc="known" title="Mark as known">✓ Got it</button>
       <button type="button" data-fc="shuffle" title="Shuffle">⤮</button>
+      <button type="button" data-fc="save" title="Save as a deck to review later">💾</button>
       <button type="button" data-fc="next" title="Next (→)">›</button>
     </div>
     <div class="fc-progress"><div></div></div>
@@ -87,6 +88,8 @@ function showCard(w) {
   w.querySelector('.fc-count').textContent = `${s.i + 1} / ${s.cards.length}${s.known.size ? ` · ${s.known.size} known` : ''}`;
   w.querySelector('.fc-progress div').style.width = `${(s.known.size / s.cards.length) * 100}%`;
 }
+
+export function cardsOf(w) { return w?._fc?.cards || []; }
 
 export function flashcardAction(w, act) {
   const s = w._fc;

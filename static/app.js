@@ -4,7 +4,7 @@ import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices } f
 import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
-import { hydrateStudy, flashcardAction, quizAnswer, quizRetry } from './study.js';
+import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf } from './study.js';
 import { hydrateGraphs } from './graph.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -463,6 +463,7 @@ messagesEl.addEventListener('click', async (e) => {
   const starter = e.target.closest('[data-starter]');
   if (starter) { input.value = starter.dataset.starter; autosize(); input.focus(); input.setSelectionRange(input.value.length, input.value.length); return; }
   const fc = e.target.closest('[data-fc]');
+  if (fc?.dataset.fc === 'save') { saveDeck(fc.closest('.study-widget')); return; }
   if (fc) { flashcardAction(fc.closest('.study-widget'), fc.dataset.fc); return; }
   const card = e.target.closest('.fc-card');
   if (card) { flashcardAction(card.closest('.study-widget'), 'flip'); return; }
@@ -806,6 +807,8 @@ const COMMANDS = [
   { cmd: '/run', desc: 'Write and run Python', hint: 'count the words in a sentence', to: (r) => `Write Python code to ${r}, run it, and show me the result` },
   { cmd: '/focus', desc: 'Start a focus timer', hint: '25 minutes on homework', to: (r) => `Start a focus session${r ? `: ${r}` : ' for 25 minutes'}` },
   { cmd: '/saved', desc: 'Your saved replies', action: () => openSaved() },
+  { cmd: '/review', desc: 'Review due flashcards', action: () => startReview(null) },
+  { cmd: '/decks', desc: 'Your flashcard decks', action: () => openDecks() },
   { cmd: '/brief', desc: 'Morning briefing', action: () => startBriefing() },
   { cmd: '/voice', desc: 'Start talking', action: () => startVoice() },
   { cmd: '/new', desc: 'New chat', action: () => newChat() },
@@ -1834,7 +1837,7 @@ async function startBriefing() {
   if (state.abort || state.voice.active) return;
   newChat();
   setMode('assistant');
-  const prompt = "Give me my morning briefing: greet me, today's date, the weather (use get_weather), my open tasks and today's reminders, then one short motivating line. Keep it brief and friendly.";
+  const prompt = "Give me my morning briefing: greet me, today's date, the weather (use get_weather), my open tasks, today's reminders and any flashcards due for review (use flashcard_decks), then one short motivating line. Keep it brief and friendly.";
   const prev = state.settings.auto_speak;
   state.settings.auto_speak = true; // read the briefing aloud
   try {
@@ -2194,6 +2197,130 @@ function sfx(kind) {
   } catch { /* no audio */ }
 }
 
+// ------------------------------------------------------------ flashcard decks
+async function saveDeck(widget) {
+  const cards = cardsOf(widget);
+  if (!cards.length) return;
+  const name = (state.chat?.title || 'Flashcards').replace(/^(make|create)\s+(me\s+)?(\d+\s+)?/i, '').slice(0, 60) || 'Flashcards';
+  try {
+    const r = await api('/api/decks', json('POST', { name, cards }));
+    toast(r.added ? `💾 Saved ${r.added} card${r.added === 1 ? '' : 's'} to “${r.name}”` : `Those cards are already in “${r.name}”`, '', {
+      action: { label: 'Review', fn: () => startReview(r.id) },
+    });
+    refreshDeckBadge();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function refreshDeckBadge() {
+  const d = await api('/api/decks').catch(() => null);
+  if (!d) return null;
+  $('#deckBadge').textContent = d.due;
+  $('#deckBadge').hidden = !d.due;
+  $('#deckBadge').title = `${d.due} card${d.due === 1 ? '' : 's'} due today`;
+  return d;
+}
+
+const whenText = (ts) => {
+  if (!ts) return '';
+  const secs = ts - Date.now() / 1000;
+  return secs < 3600 ? `in ${Math.max(1, Math.round(secs / 60))} min` : secs < 0.9 * 86400 ? `in ${Math.round(secs / 3600)} h` : Math.round(secs / 86400) === 1 ? "tomorrow" : `in ${Math.round(secs / 86400)} days`;
+};
+
+async function loadDecks() {
+  const d = await refreshDeckBadge();
+  if (!d) return;
+  $('#reviewAll').hidden = !d.due;
+  $('#reviewAll').textContent = `Review all due cards (${d.due})`;
+  $('#deckList').innerHTML = d.decks.length ? d.decks.map((k) => `
+    <div class="deck" data-id="${k.id}">
+      <div class="dn"><span>${escapeHtml(k.name)}</span>${k.due ? `<span class="due">${k.due} due</span>` : ''}</div>
+      <div class="dm">${k.total} cards · ${k.learned} learned${!k.due && k.next_due ? ` · next review ${whenText(k.next_due)}` : ''}</div>
+      <div class="db">${k.due ? `<button class="primary" data-deck="review">Review ${k.due}</button>` : ''}<button data-deck="rename">Rename</button><button data-deck="delete">Delete</button></div>
+    </div>`).join('') : '<p class="muted small" style="padding:8px">No decks yet. Ask Athena for flashcards in the Study tab, then press 💾 under them.</p>';
+}
+function openDecks() {
+  $('#tasksDrawer').hidden = true; $('#savedDrawer').hidden = true;
+  $('#decksDrawer').hidden = false;
+  loadDecks();
+}
+$('#openDecks').onclick = () => ($('#decksDrawer').hidden ? openDecks() : ($('#decksDrawer').hidden = true));
+$('#closeDecks').onclick = () => ($('#decksDrawer').hidden = true);
+$('#openTasks').addEventListener('click', () => { $('#decksDrawer').hidden = true; });
+$('#openSaved').addEventListener('click', () => { $('#decksDrawer').hidden = true; });
+$('#reviewAll').onclick = () => startReview(null);
+$('#deckList').onclick = async (e) => {
+  const b = e.target.closest('[data-deck]');
+  if (!b) return;
+  const id = b.closest('.deck').dataset.id;
+  const act = b.dataset.deck;
+  if (act === 'review') startReview(id);
+  if (act === 'rename') {
+    const name = prompt('Deck name', b.closest('.deck').querySelector('.dn span').textContent);
+    if (name) { await api(`/api/decks/${id}`, json('PATCH', { name })); loadDecks(); }
+  }
+  if (act === 'delete' && confirm('Delete this deck and all its cards?')) { await api(`/api/decks/${id}`, { method: 'DELETE' }); loadDecks(); }
+};
+
+// Review session
+const review = { queue: [], done: 0, shown: false };
+async function startReview(deckId) {
+  const { cards } = await api(`/api/review${deckId ? `?deck=${deckId}` : ''}`);
+  review.queue = cards;
+  review.done = 0;
+  review.again = 0;
+  $('#reviewTitle').textContent = deckId ? (cards[0]?.deck || 'Review') : 'Review all decks';
+  $('#reviewDlg').showModal();
+  showReviewCard();
+}
+function showReviewCard() {
+  const body = $('#reviewBody');
+  const card = review.queue[0];
+  $('#reviewCount').textContent = card ? `${review.queue.length} left` : '';
+  if (!card) {
+    body.innerHTML = `<div class="review-done"><b>🎉 All done!</b>You reviewed ${review.done} card${review.done === 1 ? '' : 's'}${review.again ? ` — ${review.again} to practice again soon` : ''}.<br><span class="muted small">Come back tomorrow for the next ones.</span></div>`;
+    refreshDeckBadge();
+    if (!$('#decksDrawer').hidden) loadDecks();
+    return;
+  }
+  review.shown = false;
+  body.innerHTML = `<div class="review-deck">${escapeHtml(card.deck)}</div>
+    <div class="review-card">${inlineMarkdownFull(card.front)}</div>
+    <button type="button" class="primary review-show" id="reviewShow">Show answer <span class="muted small">(Space)</span></button>`;
+  $('#reviewShow').onclick = revealReview;
+}
+function revealReview() {
+  const card = review.queue[0];
+  if (!card || review.shown) return;
+  review.shown = true;
+  $('#reviewShow').remove();
+  const p = card.preview || {};
+  $('#reviewBody').insertAdjacentHTML('beforeend', `<div class="review-card back">${inlineMarkdownFull(card.back)}</div>
+    <div class="review-actions">
+      <button type="button" data-grade="again">Again<small>${p.again || ''} · 1</small></button>
+      <button type="button" data-grade="hard">Hard<small>${p.hard || ''} · 2</small></button>
+      <button type="button" data-grade="good">Good<small>${p.good || ''} · 3</small></button>
+      <button type="button" data-grade="easy">Easy<small>${p.easy || ''} · 4</small></button>
+    </div>`);
+}
+async function gradeReview(grade) {
+  const card = review.queue.shift();
+  if (!card) return;
+  review.done++;
+  try {
+    const updated = await api(`/api/review/${card.deck_id}/${card.id}`, json('POST', { grade }));
+    if (grade === 'again') { review.again++; review.queue.push({ ...card, ...updated, preview: { again: '10m', hard: '12h', good: '1d', easy: '4d' } }); }
+  } catch (e) { toast(e.message, 'error'); }
+  showReviewCard();
+}
+$('#reviewBody').addEventListener('click', (e) => { const g = e.target.closest('[data-grade]'); if (g) gradeReview(g.dataset.grade); });
+$('#reviewClose').onclick = () => { $('#reviewDlg').close(); refreshDeckBadge(); };
+$('#reviewDlg').addEventListener('keydown', (e) => {
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!review.shown) revealReview(); }
+  const g = { 1: 'again', 2: 'hard', 3: 'good', 4: 'easy' }[e.key];
+  if (g && review.shown) gradeReview(g);
+});
+const inlineMarkdownFull = (t) => renderMarkdown(String(t || '').replace(/(^|[^\\$])\$(?!\$)([^$\n]+?)\$/g, '$1$\\displaystyle $2$'));
+
 // ------------------------------------------------------------ setup wizard
 const wiz = { step: 0, hw: null, downloading: false };
 const WIZ_STEPS = ['welcome', 'models', 'voice', 'you', 'done'];
@@ -2402,6 +2529,8 @@ async function init() {
   connectEvents();
   setupIdleLock();
   resumeFocus();
+  refreshDeckBadge();
+  setInterval(refreshDeckBadge, 10 * 60000);
   if (!state.settings.setup_done) openWizard();
   const stars = startStars($('#stars'));
   new MutationObserver(() => stars.redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

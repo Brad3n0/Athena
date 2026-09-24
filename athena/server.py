@@ -856,6 +856,60 @@ def _pptx_text(path: str) -> str:
     return "\n".join(out)
 
 
+# ------------------------------------------------------------ flashcard decks
+
+@app.get("/api/decks")
+async def list_decks():
+    from . import decks
+
+    return {"decks": decks.list_decks(), "due": decks.total_due()}
+
+
+@app.post("/api/decks")
+async def save_deck(request: Request):
+    from . import decks
+
+    body = await request.json()
+    cards = body.get("cards") or []
+    if not isinstance(cards, list) or not cards:
+        raise HTTPException(400, "No cards to save")
+    return decks.save_cards(str(body.get("name", "")), cards, body.get("deck_id"))
+
+
+@app.patch("/api/decks/{deck_id}")
+async def rename_deck(deck_id: str, request: Request):
+    from . import decks
+
+    return {"ok": decks.rename_deck(deck_id, str((await request.json()).get("name", "")))}
+
+
+@app.delete("/api/decks/{deck_id}")
+async def delete_deck(deck_id: str):
+    from . import decks
+
+    return {"ok": decks.delete_deck(deck_id)}
+
+
+@app.get("/api/review")
+async def review_cards(deck: str | None = None):
+    from . import decks
+
+    return {"cards": decks.due_cards(deck)}
+
+
+@app.post("/api/review/{deck_id}/{card_id}")
+async def grade_card(deck_id: str, card_id: str, request: Request):
+    from . import decks
+
+    try:
+        card = decks.grade(deck_id, card_id, str((await request.json()).get("grade", "")))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not card:
+        raise HTTPException(404, "Card not found")
+    return card
+
+
 # ------------------------------------------------------------ saved replies
 
 @app.get("/api/saved")

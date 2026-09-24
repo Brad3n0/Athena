@@ -699,3 +699,33 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .graph-btns button:hover { color: var(--accent); border-color: var(--accent); }
 .graph-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font: 13px var(--mono); color: var(--text-2); }
 .graph-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+
+/* ---------------- Decks + review ---------------- */
+.deck-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.deck { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: var(--bg); }
+.deck .dn { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.deck .dn .due { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 10px; padding: 0 8px; }
+.deck .dm { font-size: 12.5px; color: var(--text-3); margin: 4px 0 8px; }
+.deck .db { display: flex; gap: 6px; flex-wrap: wrap; }
+.deck .db button { font-size: 13px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--text-2); }
+.deck .db button:hover { border-color: var(--accent); color: var(--text); }
+.deck .db button.primary { color: var(--accent-ink); border-color: var(--accent); }
+#reviewAll { width: 100%; margin-top: 8px; }
+.review { width: min(620px, calc(100vw - 32px)); }
+.review header { gap: 10px; }
+.review header h2 { margin-right: auto; }
+.review-body { padding: 20px 24px 24px; }
+.review-card { min-height: 180px; display: grid; place-items: center; text-align: center; font-size: 21px; padding: 22px; border-radius: 14px;
+  background: var(--bg); border: 1px solid var(--border); line-height: 1.45; }
+.review-card.back { border-color: rgba(var(--accent-rgb), .55); background: linear-gradient(160deg, rgba(var(--accent-rgb), .1), var(--bg) 60%); font-size: 18px; margin-top: 10px; }
+.review-card .katex { font-size: 1.3em; }
+.review-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 16px; }
+.review-actions button { border: 1px solid var(--border); border-radius: 12px; padding: 10px 6px; font-weight: 600; font-size: 14px; }
+.review-actions button small { display: block; font-weight: 400; color: var(--text-3); font-size: 12px; }
+.review-actions [data-grade="again"]:hover { border-color: var(--danger); }
+.review-actions [data-grade="good"], .review-actions [data-grade="easy"] { }
+.review-actions button:hover { border-color: var(--accent); }
+.review-show { width: 100%; margin-top: 16px; padding: 12px; font-size: 15px; }
+.review-done { text-align: center; padding: 30px 0; font-size: 17px; }
+.review-done b { display: block; font-size: 26px; margin-bottom: 6px; }
+.review-deck { font-size: 12px; color: var(--text-3); text-align: center; margin-bottom: 8px; }
