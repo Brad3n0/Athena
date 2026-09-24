@@ -64,6 +64,10 @@ function inline(text) {
 }
 
 function codeBlock(code, lang) {
+  if (/^(flashcards|quiz)$/i.test(lang || '')) {
+    // Turned into an interactive widget by the app (see hydrateStudy in app.js).
+    return `<div class="study-widget" data-kind="${lang.toLowerCase()}" data-src="${esc(code)}"></div>`;
+  }
   const label = esc(lang || 'code');
   const runnable = /^(python|py|python3)$/i.test(lang || '');
   const run = runnable ? `<button type="button" data-run>${RUN_ICON}Run</button>` : '';

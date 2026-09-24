@@ -4,6 +4,7 @@ import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices } f
 import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
+import { hydrateStudy, flashcardAction, quizAnswer, quizRetry } from './study.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -48,6 +49,7 @@ const RECOMMENDED = [
 const PREFERENCE = {
   assistant: ['gpt-oss', 'qwen3:', 'qwen3', 'gemma3', 'llama3.1', 'mistral', 'llama3'],
   code: ['qwen3-coder', 'devstral', 'qwen2.5-coder', 'deepseek-coder', 'codestral', 'codellama', 'gpt-oss', 'qwen3'],
+  study: ['gpt-oss', 'qwen3:', 'qwen3', 'gemma3', 'llama3.1', 'mistral', 'llama3'],
   voice: ['qwen3:4b', 'llama3.2', 'gemma3:4b', 'qwen3:1.7b', 'phi4-mini', 'qwen3:8b', 'gemma3', 'llama3.1', 'qwen3'],
 };
 
@@ -192,7 +194,7 @@ function setMode(mode, { keepModel = false } = {}) {
     state.chat.mode = mode;
     if (!keepModel) state.chat.model = pickDefaultModel(mode);
   }
-  $('#input').placeholder = mode === 'code' ? 'Ask Athena to write, explain or fix code' : 'Message Athena';
+  $('#input').placeholder = modePlaceholder(mode);
   renderModelButton();
   if (state.chat && !state.chat.messages.length) renderMessages();
 }
@@ -200,6 +202,12 @@ $('#modeSwitch').onclick = (e) => {
   const b = e.target.closest('[data-mode]');
   if (b) setMode(b.dataset.mode, { keepModel: false });
 };
+
+function modePlaceholder(mode) {
+  return mode === 'code' ? 'Ask Athena to write, explain or fix code'
+    : mode === 'study' ? 'What are you studying? Paste notes or attach a worksheet 📎'
+    : 'Message Athena';
+}
 
 // -------------------------------------------------------------- sidebar
 function groupLabel(ts) {
@@ -225,7 +233,7 @@ function renderSidebar() {
     const item = document.createElement('div');
     item.className = 'chat-item' + (state.chat?.id === c.id ? ' active' : '');
     item.dataset.id = c.id;
-    const icon = c.icon ? `<span class="chat-icon">${escapeHtml(c.icon)}</span>` : c.mode === 'code' ? '<span class="chat-icon mode-tag">&lt;/&gt;</span>' : '';
+    const icon = c.icon ? `<span class="chat-icon">${escapeHtml(c.icon)}</span>` : c.mode === 'code' ? '<span class="chat-icon mode-tag">&lt;/&gt;</span>' : c.mode === 'study' ? '<span class="chat-icon">📘</span>' : '';
     item.innerHTML = `${icon}<span class="title">${escapeHtml(c.title || 'New chat')}</span>
       <span class="actions"><button data-act="pin" title="${c.pinned ? 'Unpin' : 'Pin to top'}">${ICONS.pin}</button><button data-act="export" title="Export">${ICONS.download}</button><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
     list.append(item);
@@ -318,7 +326,7 @@ async function openChat(id) {
   try {
     const chat = await api(`/api/conversations/${id}`);
     state.chat = { ...chat, messages: chat.messages || [] };
-    setMode(chat.mode === 'code' ? 'code' : 'assistant', { keepModel: true });
+    setMode(['code', 'study'].includes(chat.mode) ? chat.mode : 'assistant', { keepModel: true });
     renderMessages();
     renderSidebar();
     if (isNarrow()) toggleSidebar(false);
@@ -364,15 +372,28 @@ function renderWelcome() {
   const night = hour < 6 || hour >= 18;
   const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const bday = isBirthday();
-  const heading = state.mode === 'code' ? `What are we building today${name}?` : bday ? `Happy birthday${name}! 🎂` : `${greet}${name}`;
+  const heading = state.mode === 'code' ? `What are we building today${name}?` : state.mode === 'study' ? `What are we studying today${name}?` : bday ? `Happy birthday${name}! 🎂` : `${greet}${name}`;
   const sub = state.mode === 'code' ? '' : `<div class="greet-sub">${night ? ICONS.moon : ICONS.sun}${escapeHtml(date)}</div>`;
-  const line = !body && state.mode !== 'code' ? `<div class="greet-line">${escapeHtml(bday ? "Today's all about you. What should we do?" : welcomeLine(hour))}</div>` : '';
+  let line = !body && state.mode === 'assistant' ? `<div class="greet-line">${escapeHtml(bday ? "Today's all about you. What should we do?" : welcomeLine(hour))}</div>` : '';
+  if (!body && state.mode === 'study') {
+    line = `<div class="study-chips">${STUDY_STARTERS.map(([label, text]) => `<button type="button" data-starter="${escapeHtml(text)}">${label}</button>`).join('')}</div>
+      <div class="study-hint">Tip: attach your notes, a PDF, slides or a photo of a worksheet with 📎 and she'll use it.</div>`;
+  }
   messagesEl.innerHTML = `<div class="welcome">${logoSvg()}<h1>${heading}</h1>${sub}${line}${body}</div>`;
   if (bday) celebrateOnce();
   $('#goModels')?.addEventListener('click', () => openSettings('models'));
 }
 
 // ------------------------------------------------------------ welcome lines + birthday
+const STUDY_STARTERS = [
+  ['📘 Study guide', 'Make me a study guide on '],
+  ['🃏 Flashcards', 'Make 15 flashcards on '],
+  ['📝 Practice quiz', 'Quiz me with 10 multiple-choice questions on '],
+  ['✏️ Homework help', 'Help me with this homework problem step by step: '],
+  ['💡 Explain simply', 'Explain this simply, with an example: '],
+  ['📅 Study plan', 'Make me a study plan. My test is on __ and it covers: '],
+  ['🎯 Summarize my notes', 'Summarize these notes into the key points I need to know: '],
+];
 const WELCOME_LINES = {
   any: ['Ready when you are.', "What's on your mind?", 'Ask me anything.', "Let's get something done.", "I'm all ears.", 'How can I help today?', 'What are we working on?'],
   morning: ['Coffee first, then world domination?', "Let's make today a good one.", 'Fresh start. What first?'],
@@ -427,7 +448,25 @@ function confetti() {
   })(t0);
 }
 
+messagesEl.addEventListener('keydown', (e) => {
+  const card = e.target.closest?.('.fc-card');
+  if (!card) return;
+  const w = card.closest('.study-widget');
+  const act = { ' ': 'flip', Enter: 'flip', ArrowRight: 'next', ArrowLeft: 'prev', k: 'known' }[e.key];
+  if (act) { e.preventDefault(); flashcardAction(w, act); }
+});
+
 messagesEl.addEventListener('click', async (e) => {
+  const starter = e.target.closest('[data-starter]');
+  if (starter) { input.value = starter.dataset.starter; autosize(); input.focus(); input.setSelectionRange(input.value.length, input.value.length); return; }
+  const fc = e.target.closest('[data-fc]');
+  if (fc) { flashcardAction(fc.closest('.study-widget'), fc.dataset.fc); return; }
+  const card = e.target.closest('.fc-card');
+  if (card) { flashcardAction(card.closest('.study-widget'), 'flip'); return; }
+  const choice = e.target.closest('[data-choice]');
+  if (choice) { quizAnswer(choice.closest('.study-widget'), Number(choice.closest('.qz-q').dataset.q), Number(choice.dataset.choice)); return; }
+  if (e.target.closest('[data-quiz="retry"]')) { quizRetry(e.target.closest('.study-widget')); return; }
+
   const follow = e.target.closest('[data-followup]');
   if (follow) { if (!state.abort) sendMessage(follow.dataset.followup); return; }
 
@@ -586,6 +625,7 @@ function updateAssistantEl(el, m) {
   } else if (m.streaming && !content && !m.error && !stillThinking) html += '<span class="typing"></span>';
   if (m.streaming && stillThinking && !thinking.trim()) html += '<span class="typing"></span>';
   el.querySelector('.content').innerHTML = html;
+  if (html.includes('study-widget')) hydrateStudy(el, !!m.streaming);
 
   el.classList.toggle('streaming', !!m.streaming);
   const actions = el.querySelector('.msg-actions');
@@ -603,7 +643,9 @@ function updateAssistantEl(el, m) {
   const idx = Number(el.dataset.idx);
   const isLast = state.chat && idx === state.chat.messages.length - 1;
   if (isLast && content && !m.error && !m.voice) {
-    const chips = /```/.test(content) ? ['Explain the code', 'Add comments', 'Make it simpler'] : ['Tell me more', 'Make it shorter', 'Give me an example'];
+    const chips = /```(flashcards|quiz)/.test(content) ? ['Make it harder', 'More questions', 'Explain the ones I missed']
+      : state.mode === 'study' ? ['Make flashcards from this', 'Quiz me on this', 'Explain it simpler']
+      : /```/.test(content) ? ['Explain the code', 'Add comments', 'Make it simpler'] : ['Tell me more', 'Make it shorter', 'Give me an example'];
     el.querySelector('.body').insertAdjacentHTML('beforeend', `<div class="followups">${chips.map((c) => `<button type="button" data-followup="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>`);
   }
 }
@@ -736,7 +778,7 @@ $('#composer').onsubmit = (e) => {
   input.value = '';
   autosize();
   closeSlashMenu();
-  input.placeholder = state.mode === 'code' ? 'Ask Athena to write, explain or fix code' : 'Message Athena';
+  input.placeholder = modePlaceholder(state.mode);
   const command = parseSlash(text);
   if (command?.action) { command.action(); return; }
   if (command) sendMessage(command.prompt, { display: text });
@@ -1006,6 +1048,17 @@ async function addFiles(fileList) {
     if (file.type.startsWith('image/')) {
       const url = await readFile(file, 'DataURL');
       state.attachments.push({ kind: 'image', name: file.name, data: url.split(',')[1] });
+    } else if (/\.(pdf|docx|pptx)$/i.test(file.name)) {
+      const form = new FormData();
+      form.append('file', file);
+      toast(`Reading ${file.name}…`);
+      try {
+        const res = await fetch('/api/extract', { method: 'POST', body: form });
+        const body = await res.json();
+        if (!res.ok) throw new Error(body.detail || 'Couldn’t read that file');
+        state.attachments.push({ kind: 'text', name: file.name, data: body.text, lang: 'text' });
+        if (body.truncated) toast(`${file.name} is long — using the first part`);
+      } catch (err) { toast(`${file.name}: ${err.message}`, 'error'); }
     } else if (file.type.startsWith('text/') || TEXT_EXT.test(file.name) || file.type === 'application/json') {
       if (file.size > 400_000) { toast(`${file.name} is too large (max ~400 KB)`, 'error'); continue; }
       const ext = file.name.split('.').pop().toLowerCase();

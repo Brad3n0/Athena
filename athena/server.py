@@ -89,6 +89,24 @@ PERSONAS = {
     "give clear ingredient lists and numbered steps with times and temperatures, offer substitutions, and "
     "offer to set cooking timers.",
 }
+STUDY_PROMPT = """You are in Study mode: a brilliant, patient tutor who helps the user learn, prepare for tests and finish homework.
+
+- Study guides: use clear Markdown with headings, a short overview, key terms in bold with definitions, the most important facts, common mistakes, and a "Know this for the test" checklist.
+- Homework: work through problems step by step, explaining the reasoning in simple words so the user can do the next one alone. Show the final answer clearly. For math, show every step.
+- Explanations: start simple, use a relatable example, then add detail.
+- Study plans: a day-by-day schedule with specific topics and times; offer to set reminders.
+- If the user shares notes, a worksheet or a document, base everything on it.
+
+When asked for FLASHCARDS, reply with one short intro line, then a fenced code block with the language tag `flashcards` containing ONLY a JSON array like:
+```flashcards
+[{"front": "Mitochondria", "back": "The organelle that makes energy (ATP) for the cell"}]
+```
+When asked for a QUIZ or practice questions, reply with one short intro line, then a fenced code block with the language tag `quiz` containing ONLY a JSON array like:
+```quiz
+[{"q": "What do mitochondria produce?", "choices": ["ATP", "DNA", "Glucose", "Oxygen"], "answer": 0, "explain": "Mitochondria make ATP through cellular respiration."}]
+```
+`answer` is the 0-based index of the correct choice. Use 4 choices, vary which position is correct, and keep the JSON valid (double quotes, no trailing commas). The app turns these blocks into interactive flashcards and quizzes."""
+
 BUILTIN_PERSONA_NAMES = {"assistant": "Assistant", "companion": "Companion", "coach": "Coach", "study": "Study Buddy", "chef": "Chef"}
 
 
@@ -122,6 +140,8 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
             "runnable code in fenced code blocks with the language tag. Explain briefly and precisely, "
             "point out bugs and edge cases, and prefer simple, idiomatic solutions."
         )
+    elif mode == "study":
+        parts.append(STUDY_PROMPT)
     elif mode == "voice":
         parts.append(
             "You are in Voice mode: everything you write is read aloud by a text-to-speech voice. "
@@ -206,7 +226,7 @@ def _event(kind: str, **data: Any) -> bytes:
 async def chat(request: Request):
     body = await request.json()
     model = str(body.get("model") or "")
-    mode = body.get("mode") if body.get("mode") in ("assistant", "code", "voice") else "assistant"
+    mode = body.get("mode") if body.get("mode") in ("assistant", "code", "voice", "study") else "assistant"
     if not model:
         raise HTTPException(400, "No model selected")
 
@@ -665,6 +685,52 @@ async def make_title(request: Request):
     if not title:
         raise HTTPException(502, "No title")
     return {"title": title[:60], "icon": icon}
+
+
+# ------------------------------------------------------- attach PDF / Word
+
+@app.post("/api/extract")
+async def extract_text(file: UploadFile = File(...)):
+    """Pull the text out of a PDF or Word file so it can be attached to a message."""
+    suffix = Path(file.filename or "doc").suffix.lower()
+    if suffix not in (".pdf", ".docx", ".pptx"):
+        raise HTTPException(400, "Only PDF, Word (.docx) and PowerPoint (.pptx) files can be read")
+    data = await file.read()
+    if len(data) > 40 * 1024 * 1024:
+        raise HTTPException(413, "That file is too large (max 40 MB)")
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        tmp.write(data)
+        path = tmp.name
+    try:
+        if suffix == ".pptx":
+            text = await run_in_threadpool(_pptx_text, path)
+        else:
+            text = await run_in_threadpool(knowledge.extract, Path(path))
+    except BaseException as exc:  # some PDF libraries raise non-standard errors
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        raise HTTPException(500, f"Couldn't read that file ({exc.__class__.__name__})") from None
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    text = text.strip()
+    if not text:
+        raise HTTPException(422, "No text found — if it's a scanned document, attach it as a photo instead")
+    return {"text": text[:120_000], "truncated": len(text) > 120_000}
+
+
+def _pptx_text(path: str) -> str:
+    import zipfile
+
+    out = []
+    with zipfile.ZipFile(path) as z:
+        slides = sorted((n for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)), key=lambda n: int(re.findall(r"\d+", n)[-1]))
+        for i, name in enumerate(slides, 1):
+            words = re.findall(r"<a:t>([^<]*)</a:t>", z.read(name).decode("utf-8", "ignore"))
+            out.append(f"Slide {i}: " + " ".join(words))
+    return "\n".join(out)
 
 
 # ------------------------------------------------------------ saved replies

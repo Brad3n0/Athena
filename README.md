@@ -4,6 +4,7 @@ A private, **fully offline** AI assistant for your home PC. It looks and works l
 
 - 💬 **Assistant mode**: everyday chat, writing, planning and questions
 - 🧑‍💻 **Code mode**: a coding model with syntax-highlighted code blocks, one-click copy, and file attachments (attach your source files and ask about them)
+- 📘 **Study mode**: study guides, interactive **flashcards** (flip, shuffle, mark as known), clickable **practice quizzes** with scores, step-by-step homework help and study plans. Attach your notes as PDF, Word, PowerPoint or photos
 - 🎙️ **Voice mode**: talk to Athena hands-free. She listens, answers out loud in a natural offline voice, and you can tap to interrupt
 - 🟡 **Voice orb**: a living gold orb that reacts to her voice and yours
 - 🧠 **Memory**: say *"remember that my sister's birthday is June 3rd"* and she knows it in every future chat
@@ -57,6 +58,16 @@ Athena adds no filters of her own, but most models come with their makers' built
 
 - **Direct mode** (Settings → General) tells Athena to answer plainly, without lecturing or adding unneeded disclaimers. It works with any model.
 - **Community "abliterated" or "uncensored" models** have the refusal behaviour removed. Athena lists a few under **Settings → Models → Fewer refusals** (`huihui_ai/qwen3-abliterated`, `dolphin3`), and more can be found by searching "abliterated" on [ollama.com](https://ollama.com/search?q=abliterated). They're made by the community rather than the original companies. They're usually a little less accurate, and they may not handle Athena's tasks and timers as reliably. After downloading one, pick it as your default in **Settings → Models**.
+
+## Study mode
+
+Click **Study** at the top, next to Assistant and Code.
+
+- Tap a starter (**Study guide**, **Flashcards**, **Practice quiz**, **Homework help**, **Explain simply**, **Study plan** or **Summarize my notes**) and finish the sentence, or just ask: *"quiz me on the causes of World War I"*.
+- **Flashcards** appear as real cards. Click (or press Space) to flip, use ← → to move, **✓ Got it** to track what you know, and ⤮ to shuffle.
+- **Quizzes** are clickable. Each answer shows whether you were right, with an explanation, and you get a score at the end.
+- **Attach your material** with 📎: PDFs, Word documents, PowerPoint slides, text files, or photos of worksheets and handwritten notes (photos need a vision model like `qwen2.5vl:7b`). Everything she makes is based on your material.
+- Combine it with other features: *"remind me to study biology every day at 7pm"*, `/focus 25 minutes on chemistry`, or ⭐ a study guide to keep it under **Saved**.
 
 ## Desktop app, "Hey Athena" and more
 
@@ -133,5 +144,6 @@ static/          The web app (plain HTML/CSS/JS, no internet or build step neede
   app.js         Chat UI, model picker, tasks, settings, voice mode
   voice.js       Microphone + voice activity detection, text-to-speech + lip-sync level
   orb.js         The animated voice orb
+  study.js       Study mode flashcards and quizzes
   markdown.js    Markdown + code highlighting
 ```
