@@ -788,12 +788,45 @@ messagesEl.addEventListener('click', async (e) => {
       await toggleSaved(msg, act);
       break;
     case 'edit': {
+      // Edit in place. Nothing changes until you press Send; Cancel or Esc puts everything back.
       if (state.abort) return;
-      $('#input').value = msg.display ?? msg.content;
-      state.chat.messages.splice(idx);
-      renderMessages();
-      autosize();
-      $('#input').focus();
+      const bubble = act.closest('.msg').querySelector('.bubble');
+      if (!bubble || bubble.querySelector('textarea')) return;
+      const original = msg.display ?? msg.content;
+      const before = bubble.innerHTML;
+      bubble.classList.add('editing');
+      bubble.innerHTML = `<textarea class="edit-box"></textarea><div class="edit-actions"><button type="button" class="ghost" data-edit="cancel">Cancel</button><button type="button" class="primary" data-edit="send">Send</button></div>`;
+      const box = bubble.querySelector('textarea');
+      box.value = original;
+      const fit = () => { box.style.height = 'auto'; box.style.height = `${Math.min(box.scrollHeight, 360)}px`; };
+      fit();
+      box.focus();
+      box.setSelectionRange(box.value.length, box.value.length);
+      const cancel = () => { bubble.classList.remove('editing'); bubble.innerHTML = before; };
+      const submit = async () => {
+        const text = box.value.trim();
+        if (!text || state.abort) return;
+        if (text === original.trim()) { cancel(); return; }
+        const { images, files } = msg;
+        state.chat.messages.splice(idx);
+        if (images?.length || files?.length) { // keep what was attached to the original message
+          const edited = { role: 'user', content: text, display: text, time: Date.now(), images, files };
+          if (files?.length) edited.content = msg.content.replace(original, text);
+          state.chat.messages.push(edited);
+          renderMessages();
+          await generateReply();
+        } else sendMessage(text);
+      };
+      box.oninput = fit;
+      box.onkeydown = (ev) => {
+        if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
+        if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); submit(); }
+      };
+      bubble.querySelector('.edit-actions').onclick = (ev) => {
+        const which = ev.target.closest('[data-edit]')?.dataset.edit;
+        if (which === 'cancel') cancel();
+        if (which === 'send') submit();
+      };
       break;
     }
   }

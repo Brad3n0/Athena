@@ -912,3 +912,10 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 }
 @keyframes goldCaret { 50% { opacity: .15; } }
 @media (prefers-reduced-motion: reduce) { .msg.streaming .md > *::after { animation: none !important; } }
+
+/* ---------------- Edit a sent message in place ---------------- */
+.msg.user .bubble.editing { width: min(620px, 100%); max-width: 100%; padding: 10px; }
+.edit-box { width: 100%; min-height: 60px; resize: none; border: 1px solid rgba(var(--accent-rgb), .45); border-radius: 12px; background: var(--bg-input);
+  color: var(--text); padding: 10px 12px; font: inherit; outline: 0; }
+.edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.edit-actions button { padding: 6px 14px; border-radius: 99px; font-size: 13.5px; }
