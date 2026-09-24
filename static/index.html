@@ -199,6 +199,7 @@
         <button type="button" data-tab="desktop">Desktop app</button>
         <button type="button" data-tab="privacy">Privacy &amp; data</button>
         <button type="button" data-tab="stats">Your stats</button>
+        <button type="button" data-tab="health">Health check</button>
       </nav>
 
       <section data-panel="general">
@@ -328,6 +329,16 @@
         <button type="button" class="ghost" id="makeShortcuts">Create desktop &amp; Start menu shortcuts</button>
       </section>
 
+      <section data-panel="health" hidden>
+        <p class="muted small" style="margin-top:0">Tries every part of Athena and shows what's working. If something shows ✗, the note says how to fix it.</p>
+        <div class="pull-row">
+          <button type="button" class="primary" id="healthRun">Check everything</button>
+          <button type="button" class="ghost" id="healthCopy" hidden>Copy report</button>
+          <button type="button" class="ghost" id="wizardAgain">Run setup again</button>
+        </div>
+        <ul class="health-list" id="healthList"></ul>
+      </section>
+
       <section data-panel="stats" hidden>
         <div class="stat-grid" id="statGrid"></div>
         <h3>Most-used models</h3>
@@ -405,6 +416,19 @@
     </div>
   </div>
 </div>
+
+<dialog class="settings wizard" id="wizard">
+  <div class="settings-inner">
+    <div class="wizard-steps" id="wizardDots"></div>
+    <div class="wizard-body" id="wizardBody"></div>
+    <div class="wizard-nav">
+      <button type="button" class="ghost" id="wizardSkip">Skip setup</button>
+      <span class="spacer"></span>
+      <button type="button" class="ghost" id="wizardBack">Back</button>
+      <button type="button" class="primary" id="wizardNext">Next</button>
+    </div>
+  </div>
+</dialog>
 
 <dialog class="settings shortcuts" id="shortcutsDlg">
   <form method="dialog" class="settings-inner">

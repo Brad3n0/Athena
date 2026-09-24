@@ -12,6 +12,7 @@ import re
 import sys
 import tempfile
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -690,6 +691,119 @@ async def make_title(request: Request):
     if not title:
         raise HTTPException(502, "No title")
     return {"title": title[:60], "icon": icon}
+
+
+# --------------------------------------------------- setup wizard + self-test
+
+@app.get("/api/system")
+async def system_info():
+    from . import system
+
+    return await run_in_threadpool(system.hardware)
+
+
+@app.get("/api/selftest")
+async def selftest():
+    """Try every part of Athena and report what works (Settings → Check everything)."""
+    from . import system, web
+
+    settings = store.get_settings()
+    checks: list[dict[str, Any]] = []
+
+    async def check(name, coro):
+        t = time.time()
+        try:
+            status, detail = await coro
+        except Exception as exc:
+            status, detail = "fail", f"{exc.__class__.__name__}: {exc}"[:300]
+        checks.append({"name": name, "status": status, "detail": detail, "ms": round((time.time() - t) * 1000)})
+
+    async def ollama():
+        r = await client.get(f"{OLLAMA}/api/version", timeout=4)
+        return "ok", f"Running · version {r.json().get('version')}"
+    await check("Ollama", ollama())
+    names: list[str] = []
+    try:
+        names = [m["name"] for m in (await client.get(f"{OLLAMA}/api/tags", timeout=5)).json().get("models", [])]
+    except Exception:
+        pass
+
+    async def models():
+        if not names:
+            return "fail", "No models downloaded yet — run the setup wizard or Settings → Models"
+        chosen = {k: v for k, v in (settings.get("models") or {}).items() if v}
+        missing = [f"{k}: {v}" for k, v in chosen.items() if v not in names]
+        detail = f"{len(names)} installed: {', '.join(names[:8])}{'…' if len(names) > 8 else ''}"
+        return ("warn", detail + f" · chosen but missing → {', '.join(missing)}") if missing else ("ok", detail)
+    await check("AI models", models())
+
+    test_model = next((n for n in names if not re.search(r"embed", n)), None)
+    if (settings.get("models") or {}).get("assistant") in names:
+        test_model = settings["models"]["assistant"]
+
+    async def reply():
+        if not test_model:
+            return "skip", "No chat model to test"
+        r = await client.post(f"{OLLAMA}/api/chat", json={
+            "model": test_model, "stream": False, "options": {"num_predict": 12},
+            "messages": [{"role": "user", "content": "Reply with just the word: ready"}]}, timeout=httpx.Timeout(10, read=240))
+        data = r.json()
+        if data.get("error"):
+            return "fail", data["error"]
+        secs = (data.get("total_duration") or 0) / 1e9
+        return "ok", f"{test_model} answered in {secs:.1f}s" + (" (first load is slower)" if secs > 20 else "")
+    await check("Chat reply", reply())
+
+    async def tools_check():
+        if not test_model:
+            return "skip", "No chat model to test"
+        from .tools import BY_NAME
+        r = await client.post(f"{OLLAMA}/api/chat", json={
+            "model": test_model, "stream": False, "tools": [BY_NAME["get_current_datetime"].spec()],
+            "messages": [{"role": "user", "content": "What time is it? Use your tool."}]}, timeout=httpx.Timeout(10, read=240))
+        data = r.json()
+        if data.get("error"):
+            return "fail", f"{test_model} can't use tools — pick gpt-oss or qwen3 for tasks, files, web and more"
+        if (data.get("message") or {}).get("tool_calls"):
+            return "ok", f"{test_model} can use Athena's abilities"
+        return "warn", f"{test_model} answered without using its tool — abilities may be unreliable with this model"
+    await check("Abilities (tool use)", tools_check())
+
+    async def web_check():
+        if not settings.get("web_enabled"):
+            return "skip", "Turned off (Settings → Abilities)"
+        r = await web.search(client, "weather")
+        return ("ok", f"Online · {len(r['results'])} results") if "results" in r else ("warn", r.get("error", "No results") + " (only matters when you want web answers)")
+    await check("Web search", web_check())
+
+    async def docs_check():
+        if not settings.get("knowledge_folders"):
+            return "skip", "No Knowledge folders set"
+        model = settings.get("embed_model") or "nomic-embed-text"
+        if not any(n.split(":")[0] == model.split(":")[0] for n in names):
+            return "fail", f"Download '{model}' in Settings → Knowledge"
+        k = knowledge.summary()
+        return ("ok", f"{k['documents']} documents indexed") if k["documents"] else ("warn", "Folders set but not indexed yet — press 'Index now'")
+    await check("Your documents", docs_check())
+
+    async def images_check():
+        api = (settings.get("image_api") or "").rstrip("/")
+        if not api:
+            return "skip", "Not set up (optional)"
+        r = await client.get(f"{api}/sdapi/v1/sd-models", timeout=6)
+        return "ok", f"Connected · {len(r.json())} models"
+    await check("Image generation", images_check())
+
+    async def home_check():
+        if not (settings.get("ha_url") and settings.get("ha_token")):
+            return "skip", "Not set up (optional)"
+        from . import integrations
+        r = await integrations.list_devices(client)
+        return ("ok", f"{r['count']} devices") if "error" not in r else ("fail", r["error"])
+    await check("Smart home", home_check())
+
+    checks += await run_in_threadpool(system.local_checks)
+    return {"checks": checks, "platform": sys.platform, "time": datetime.now().isoformat(timespec="seconds")}
 
 
 # ------------------------------------------------------- attach PDF / Word

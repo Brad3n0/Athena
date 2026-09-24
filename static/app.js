@@ -1700,6 +1700,30 @@ $('#pullBtn').onclick = () => { const n = $('#pullName').value.trim(); if (n) pu
 $('#pullName').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#pullBtn').click(); } };
 
 let pulling = false;
+
+/** Download a model through Ollama, reporting progress as (fraction 0..1 or null, text). */
+async function downloadModel(name, onProgress = () => {}) {
+  const res = await fetch('/api/models/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', failed = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split('\n');
+    buf = lines.pop();
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const ev = JSON.parse(line);
+      if (ev.error) { failed = ev.error; continue; }
+      if (ev.total && ev.completed != null) onProgress(ev.completed / ev.total, `${Math.round((ev.completed / ev.total) * 100)}% of ${fmtSize(ev.total)}`);
+      else onProgress(null, ev.status);
+    }
+  }
+  if (failed) throw new Error(failed);
+}
+
 async function pullModel(name) {
   if (pulling) { toast('A download is already running.'); return; }
   pulling = true;
@@ -1709,28 +1733,10 @@ async function pullModel(name) {
   label.textContent = `Starting ${name}…`;
   $('#pullBtn').disabled = true;
   try {
-    const res = await fetch('/api/models/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '', failed = '';
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop();
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const ev = JSON.parse(line);
-        if (ev.error) { failed = ev.error; continue; }
-        if (ev.total && ev.completed != null) {
-          const pct = (ev.completed / ev.total) * 100;
-          bar.style.width = `${pct}%`;
-          label.textContent = `${name}: ${pct.toFixed(0)}% of ${fmtSize(ev.total)}`;
-        } else label.textContent = `${name}: ${ev.status}`;
-      }
-    }
-    if (failed) throw new Error(failed);
+    await downloadModel(name, (frac, text) => {
+      if (frac != null) bar.style.width = `${frac * 100}%`;
+      label.textContent = `${name}: ${text}`;
+    });
     label.textContent = `✓ ${name} installed`;
     bar.style.width = '100%';
     toast(`${name} is ready to use`);
@@ -2185,6 +2191,197 @@ function sfx(kind) {
   } catch { /* no audio */ }
 }
 
+// ------------------------------------------------------------ setup wizard
+const wiz = { step: 0, hw: null, downloading: false };
+const WIZ_STEPS = ['welcome', 'models', 'voice', 'you', 'done'];
+const ROLE_NAMES = { assistant: 'Chat', study: 'Study & math', code: 'Code', voice: 'Voice chat', vision: 'Photos & screen', documents: 'Your documents' };
+
+async function openWizard(step = 0) {
+  wiz.step = step;
+  $('#wizard').showModal();
+  await renderWizard();
+}
+
+function wzStatus(kind, title, note = '') {
+  return `<div class="wz-status ${kind}"><span class="dot"></span><div>${title}${note ? `<small>${note}</small>` : ''}</div></div>`;
+}
+
+async function renderWizard() {
+  const name = WIZ_STEPS[wiz.step];
+  $('#wizardDots').innerHTML = WIZ_STEPS.map((_, i) => `<span class="${i === wiz.step ? 'on' : ''}"></span>`).join('');
+  $('#wizardBack').hidden = wiz.step === 0;
+  $('#wizardSkip').hidden = wiz.step === WIZ_STEPS.length - 1;
+  $('#wizardNext').textContent = name === 'done' ? 'Start chatting' : name === 'models' ? 'Next' : 'Next';
+  $('#wizardNext').disabled = false;
+  const body = $('#wizardBody');
+  if (name === 'welcome') {
+    await refreshStatus();
+    body.innerHTML = `<div class="big-logo">${logoSvg()}</div><h2>Welcome to Athena</h2>
+      <p class="lead">Let's get you set up. It takes a few minutes, and after this everything runs offline on your PC.</p>
+      ${state.status.ollama ? wzStatus('ok', `Ollama is running (version ${escapeHtml(state.status.ollama_version || '?')})`, 'This is the engine that runs the AI models.')
+        : wzStatus('bad', 'Ollama isn’t running yet', 'Install it from ollama.com/download (one time), open it, then click Check again.')}
+      ${state.status.ollama ? '' : '<button type="button" class="ghost" id="wzRecheck">Check again</button>'}`;
+    $('#wzRecheck')?.addEventListener('click', renderWizard);
+  } else if (name === 'models') {
+    body.innerHTML = '<h2>Your AI models</h2><p class="lead">Checking your PC…</p>';
+    wiz.hw = wiz.hw || await api('/api/system').catch(() => null);
+    const hw = wiz.hw;
+    if (!hw) { body.innerHTML += wzStatus('bad', 'Couldn’t check your PC'); return; }
+    const have = new Set(modelNames().flatMap((n) => [n, n.replace(/:latest$/, '')]));
+    const gpu = hw.gpus[0];
+    body.innerHTML = `<h2>Your AI models</h2>
+      <div class="wz-hw">${gpu ? `Graphics card: <b>${escapeHtml(gpu.name)}</b> with <b>${gpu.vram_gb} GB</b> of memory` : 'No dedicated graphics card found — models will run on your processor (slower)'} · System memory: <b>${hw.ram_gb} GB</b></div>
+      <p class="lead">These are the best models for your PC. Tick what you want and press <b>Download</b> — you can use Athena while they download.</p>
+      <ul class="wz-models">${hw.models.map((m) => `
+        <li data-model="${m.name}"><input type="checkbox" ${have.has(m.name) ? 'checked disabled' : m.optional && !(m.roles.includes('vision') && hw.vram_gb >= 8) ? '' : 'checked'}>
+          <div><div class="nm">${m.name}</div><div class="roles">${m.roles.map((r) => ROLE_NAMES[r] || r).join(' · ')}${m.optional ? ' · optional' : ''}</div><div class="prog"></div></div>
+          <span class="sz">${have.has(m.name) ? '✓ installed' : m.size_gb ? `${m.size_gb} GB` : ''}</span></li>`).join('')}</ul>
+      <button type="button" class="primary" id="wzDownload">Download selected</button> <span class="muted small" id="wzTotal"></span>`;
+    const total = () => {
+      const gb = [...body.querySelectorAll('li')].filter((li) => { const c = li.querySelector('input'); return c.checked && !c.disabled; })
+        .reduce((a, li) => a + (hw.models.find((m) => m.name === li.dataset.model)?.size_gb || 0), 0);
+      $('#wzTotal').textContent = gb ? `about ${gb.toFixed(1)} GB to download` : 'Nothing to download';
+    };
+    body.querySelectorAll('input').forEach((c) => c.addEventListener('change', total));
+    total();
+    $('#wzDownload').onclick = wizardDownload;
+  } else if (name === 'voice') {
+    await refreshStatus();
+    const s = state.status;
+    body.innerHTML = `<h2>Voice</h2><p class="lead">Talk to Athena and hear her answer — fully offline.</p>
+      ${s.whisper ? wzStatus('ok', 'Speech recognition is installed', 'Athena can hear you.') : wzStatus('warn', 'Speech recognition isn’t installed yet', 'Close Athena, double-click install-voice.bat, then start Athena again.')}
+      ${s.kokoro ? wzStatus('ok', 'Athena’s natural voice is installed') : wzStatus('warn', 'Natural voice isn’t installed yet', 'install-voice.bat adds it too. Until then she uses your Windows voices.')}
+      <label style="display:block;margin:14px 0 6px">Her voice</label>
+      <div class="pull-row"><select id="wzVoice">${Object.entries(s.kokoro_voices || { athena_silk: 'Athena Silk' }).map(([id, l]) => `<option value="${id}">${escapeHtml(l)}</option>`).join('')}</select>
+      <button type="button" class="ghost" id="wzTest">▶ Test</button></div>`;
+    $('#wzVoice').value = state.settings.kokoro_voice || 'athena_silk';
+    $('#wzVoice').onchange = (e) => saveSettings({ kokoro_voice: e.target.value });
+    $('#wzTest').onclick = () => { speaker.stop(); speaker.reset(); speaker.say("Hi! I'm Athena. It's nice to meet you."); };
+  } else if (name === 'you') {
+    body.innerHTML = `<h2>About you</h2><p class="lead">So Athena can make it personal.</p>
+      <label style="display:block;margin-bottom:12px">Your name<input id="wzName" class="wz-input" placeholder="What should Athena call you?" value="${escapeHtml(state.settings.user_name || '')}"></label>
+      <label style="display:block;margin-bottom:12px">Personality<select id="wzPersona" class="wz-input">${Object.entries(BUILTIN_PERSONAS).map(([id, l]) => `<option value="${id}">${escapeHtml(l)}</option>`).join('')}</select></label>
+      <label style="display:block">Accent colour</label><div class="swatches" id="wzAccents"></div>`;
+    $('#wzPersona').value = state.settings.persona || 'assistant';
+    const drawAccents = () => {
+      $('#wzAccents').innerHTML = Object.entries(ACCENTS).map(([id, a]) => `<button type="button" class="swatch${id === (state.settings.accent || 'gold') ? ' active' : ''}" data-accent="${id}"><span style="background:linear-gradient(135deg, ${a.logo[0]}, ${a.logo[1]})"></span>${a.name}</button>`).join('');
+    };
+    drawAccents();
+    $('#wzAccents').onclick = async (e) => {
+      const id = e.target.closest('[data-accent]')?.dataset.accent;
+      if (!id) return;
+      state.settings.accent = id; applyTheme(); drawAccents();
+      await saveSettings({ accent: id });
+    };
+  } else {
+    body.innerHTML = `<div class="big-logo">${logoSvg()}</div><h2>You're all set${state.settings.user_name ? `, ${escapeHtml(state.settings.user_name)}` : ''}!</h2>
+      <p class="lead">A few things to try:</p>
+      <ul style="line-height:1.9;margin-top:0">
+        <li>Click the gold <b>voice button</b> and just talk</li>
+        <li>Open the <b>Study</b> tab: <i>“quiz me on fractions”</i></li>
+        <li>Type <b>/</b> for quick commands, or press <b>?</b> for shortcuts</li>
+        <li><i>“Remind me at 6pm to call mom”</i> · <i>“Organize my Downloads”</i></li>
+      </ul>
+      <button type="button" class="ghost" id="wzHealth">Run a health check</button>`;
+    $('#wzHealth').onclick = () => { finishWizard(); openSettings('health'); runHealth(); };
+  }
+}
+
+async function wizardDownload() {
+  if (wiz.downloading) return;
+  const items = [...$$('#wizardBody .wz-models li')].filter((li) => { const c = li.querySelector('input'); return c.checked && !c.disabled; });
+  if (!items.length) { toast('Nothing selected'); return; }
+  wiz.downloading = true;
+  $('#wzDownload').disabled = true;
+  $('#wzDownload').textContent = 'Downloading…';
+  for (const li of items) {
+    const name = li.dataset.model;
+    const prog = li.querySelector('.prog');
+    try {
+      await downloadModel(name, (frac, text) => { prog.textContent = text; });
+      prog.textContent = '';
+      li.querySelector('.sz').textContent = '✓ installed';
+      li.querySelector('input').disabled = true;
+    } catch (e) { prog.textContent = `Failed: ${e.message}`; }
+  }
+  await refreshModels();
+  // Use the recommended models for each job (only ones that are installed).
+  const picks = wiz.hw?.picks || {};
+  const installed = new Set(modelNames().flatMap((n) => [n, n.replace(/:latest$/, '')]));
+  const models = Object.fromEntries(Object.entries(picks).filter(([, m]) => installed.has(m)));
+  if (Object.keys(models).length) await saveSettings({ models });
+  if (installed.has('nomic-embed-text')) await saveSettings({ embed_model: 'nomic-embed-text' });
+  wiz.downloading = false;
+  $('#wzDownload').textContent = 'Done ✓';
+  if (state.chat && !state.chat.messages.length) { state.chat.model = ''; renderModelButton(); renderMessages(); }
+  toast('Models are ready');
+}
+
+async function finishWizard() {
+  $('#wizard').close();
+  if (!state.settings.setup_done) await saveSettings({ setup_done: true });
+}
+
+$('#wizardNext').onclick = async () => {
+  if (WIZ_STEPS[wiz.step] === 'you') {
+    await saveSettings({ user_name: $('#wzName').value.trim(), persona: $('#wzPersona').value });
+  }
+  if (wiz.step >= WIZ_STEPS.length - 1) { await finishWizard(); renderMessages(); return; }
+  wiz.step++;
+  renderWizard();
+};
+$('#wizardBack').onclick = () => { wiz.step = Math.max(0, wiz.step - 1); renderWizard(); };
+$('#wizardSkip').onclick = () => { finishWizard(); };
+$('#wizard').addEventListener('cancel', (e) => { e.preventDefault(); });
+$('#wizardAgain').onclick = () => { dlg.close(); openWizard(); };
+
+// ------------------------------------------------------------ health check
+let healthReport = '';
+async function runHealth() {
+  const list = $('#healthList');
+  $('#healthRun').disabled = true;
+  $('#healthRun').textContent = 'Checking… (can take a minute)';
+  list.innerHTML = '<li class="skip"><span class="spin"></span><span>Testing each part of Athena…</span></li>';
+  const checks = [];
+  // Browser-side checks
+  const b = async (name, fn) => { try { const [status, detail] = await fn(); checks.push({ name, status, detail }); } catch (e) { checks.push({ name, status: 'fail', detail: e.message }); } };
+  await b('Microphone (this window)', async () => {
+    if (!navigator.mediaDevices?.getUserMedia) return ['fail', 'Not allowed on this address — open Athena at http://localhost:8765'];
+    const st = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const label = st.getAudioTracks()[0]?.label || 'microphone';
+    st.getTracks().forEach((t) => t.stop());
+    return ['ok', `Allowed · ${label}`];
+  });
+  await b('Speakers / audio', async () => {
+    const ctx = new AudioContext(); const ok = ctx.state !== 'closed'; ctx.close();
+    return ok ? ['ok', 'Audio output available'] : ['fail', 'Audio blocked'];
+  });
+  await b('Windows voices (fallback)', async () => {
+    const v = await voicesReady();
+    const offline = v.filter((x) => x.localService).length;
+    return offline ? ['ok', `${offline} offline voices`] : ['warn', 'No offline system voices (only matters without the natural voice)'];
+  });
+  await b('Notifications', async () => {
+    if (!('Notification' in window)) return ['warn', 'Not supported'];
+    if (Notification.permission === 'default') await Notification.requestPermission();
+    return Notification.permission === 'granted' ? ['ok', 'Allowed — reminders can pop up'] : ['warn', 'Blocked — reminders still show inside Athena'];
+  });
+  try {
+    const server = await api('/api/selftest');
+    checks.unshift(...server.checks);
+  } catch (e) { checks.unshift({ name: 'Athena server', status: 'fail', detail: e.message }); }
+  const icon = { ok: '✓', fail: '✗', warn: '!', skip: '–' };
+  list.innerHTML = checks.map((c) => `<li class="${c.status}"><span class="ic">${icon[c.status] || '?'}</span><div><div class="nm">${escapeHtml(c.name)}</div><div class="dt">${escapeHtml(c.detail || '')}</div></div></li>`).join('');
+  const n = (k) => checks.filter((c) => c.status === k).length;
+  list.insertAdjacentHTML('beforeend', `<li class="${n('fail') ? 'fail' : 'ok'}"><span class="ic"></span><div class="health-summary">${n('ok')} working · ${n('warn')} to look at · ${n('fail')} not working · ${n('skip')} off or not set up</div></li>`);
+  healthReport = `Athena health check — ${new Date().toLocaleString()}\n` + checks.map((c) => `${icon[c.status]} ${c.name}: ${c.detail}`).join('\n');
+  $('#healthCopy').hidden = false;
+  $('#healthRun').disabled = false;
+  $('#healthRun').textContent = 'Check again';
+}
+$('#healthRun').onclick = runHealth;
+$('#healthCopy').onclick = async () => { await copyText(healthReport); toast('Report copied — paste it to share'); };
+
 // ------------------------------------------------------------ boot
 async function init() {
   $$('[data-logo]').forEach((el) => { el.outerHTML = logoSvg(); });
@@ -2202,6 +2399,7 @@ async function init() {
   connectEvents();
   setupIdleLock();
   resumeFocus();
+  if (!state.settings.setup_done) openWizard();
   const stars = startStars($('#stars'));
   new MutationObserver(() => stars.redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   $('#lockBtn').hidden = !state.settings.pin_set;

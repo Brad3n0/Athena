@@ -649,3 +649,40 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .katex { font-size: 1.08em; }
 .fc-face .katex, .qz-choices .katex { font-size: 1em; }
 .fc-face .katex { font-size: 1.35em; }
+
+/* ---------------- Setup wizard ---------------- */
+.wizard { width: min(640px, calc(100vw - 32px)); }
+.wizard-steps { display: flex; justify-content: center; gap: 8px; padding: 18px 0 0; }
+.wizard-steps span { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: all .2s; }
+.wizard-steps span.on { background: var(--accent); width: 22px; border-radius: 4px; }
+.wizard-body { padding: 18px 28px 8px; min-height: 330px; overflow-y: auto; }
+.wizard-body h2 { margin: 6px 0 6px; font-size: 22px; }
+.wizard-body .lead { color: var(--text-2); margin: 0 0 16px; }
+.wizard-body .big-logo svg.logo-mark { width: 64px; height: 64px; filter: drop-shadow(0 0 18px rgba(var(--accent-rgb), .35)); }
+.wizard-nav { display: flex; gap: 8px; padding: 14px 20px 18px; border-top: 1px solid var(--border); }
+.wz-status { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; font-size: 14.5px; }
+.wz-status .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--text-3); }
+.wz-status.ok .dot { background: var(--ok); } .wz-status.bad .dot { background: var(--danger); } .wz-status.warn .dot { background: var(--accent); }
+.wz-status small { color: var(--text-3); display: block; }
+.wz-models { list-style: none; padding: 0; margin: 8px 0; }
+.wz-models li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; }
+.wz-models li:hover { background: var(--bg-hover); }
+.wz-models input { accent-color: var(--accent); width: 16px; height: 16px; }
+.wz-models .nm { font-family: var(--mono); font-size: 13.5px; font-weight: 600; }
+.wz-models .roles { font-size: 12px; color: var(--accent); }
+.wz-models .sz { margin-left: auto; color: var(--text-3); font-size: 13px; white-space: nowrap; }
+.wz-models .prog { font-size: 12px; color: var(--text-2); }
+.wz-hw { font-size: 14px; color: var(--text-2); margin-bottom: 10px; }
+.wz-hw b { color: var(--text); }
+
+/* ---------------- Health check ---------------- */
+.health-list { list-style: none; padding: 0; margin: 14px 0; }
+.health-list li { display: flex; gap: 10px; padding: 8px 10px; border-radius: 10px; font-size: 14px; align-items: flex-start; }
+.health-list li:hover { background: var(--bg-hover); }
+.health-list .ic { flex: none; width: 22px; text-align: center; font-weight: 700; }
+.health-list .ok .ic { color: var(--ok); } .health-list .fail .ic { color: var(--danger); } .health-list .warn .ic { color: var(--accent); } .health-list .skip .ic { color: var(--text-3); }
+.health-list .nm { font-weight: 600; }
+.health-list .dt { color: var(--text-3); font-size: 13px; }
+.health-summary { font-weight: 600; margin-top: 10px; }
+.wz-input { display: block; width: 100%; margin-top: 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; outline: 0; color: var(--text); }
+#wzVoice { flex: 1; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; color: var(--text); }

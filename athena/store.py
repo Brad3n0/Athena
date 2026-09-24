@@ -65,6 +65,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "theme": "dark",
+    "setup_done": False,  # first-run wizard finished
     "text_size": "normal",  # small | normal | large
     "compact": False,
     "sound_effects": False,
