@@ -12,7 +12,7 @@ A private, **fully offline** AI assistant for your home PC. It looks and works l
 - 🌐 **Web search** (when you're online): *"what's the weather in Chicago this weekend?"*, *"look up the newest Ollama models"*
 - 👀 **Watch her work**: every step shows up live in the chat, and she opens folders in File Explorer and pages in your browser as she works
 - ✅ **Tasks & timers**: say *"remind me to pay rent Friday"*, *"what's on my list?"*, *"I finished the laundry"* or *"set a 10 minute timer for the pasta"*
-- 🗂️ Chat history with search, rename and delete, plus a model picker, dark/light themes, image understanding (with a vision model) and a phone-friendly layout
+- 🗂️ Chat history with search inside every message (**Ctrl+K**, and she can look through past chats herself: *"what did we decide about my resume last week?"*), rename and delete, plus a model picker, dark/light themes, image understanding (with a vision model) and a phone-friendly layout
 
 ---
 

@@ -161,6 +161,12 @@ def _search_docs(a):
 
 # ------------------------------------------------------------------ memory
 
+def _search_chats(a):
+    found = store.search_messages(str(a.get("query", "")), limit=8)
+    return {"results": [{"chat": r["title"], "date": datetime.fromtimestamp(r["updated"] or 0).strftime("%Y-%m-%d"),
+                         "matches": [f'{h["role"]}: {h["snippet"]}' for h in r["hits"]]} for r in found]} if found else {"results": [], "message": "No past chats matched."}
+
+
 def _remember(a):
     text = str(a.get("fact", "")).strip()
     if not text:
@@ -244,6 +250,9 @@ TOOLS: list[Tool] = [
     Tool("remember", "memory", "Save a lasting fact about the user or their preferences to long-term memory "
          "(e.g. birthdays, names, likes, projects). Use when they share something worth remembering or ask you to remember.",
          {"fact": S("The fact, written as a short sentence")}, ["fact"], run=_remember),
+    Tool("search_chats", "memory", "Search the user's past conversations with you by words (e.g. when they ask 'what did we say about X' "
+         "or refer to an earlier chat). Returns matching chats with snippets.",
+         {"query": S("Words to look for")}, ["query"], run=lambda a: _search_chats(a)),
     Tool("forget", "memory", "Delete something from long-term memory.", {"memory": S("Memory id or words from it")}, ["memory"], run=_forget),
 
     Tool("list_folder", "files", "List what's inside a folder. Call with no path to see which folders you may use.",

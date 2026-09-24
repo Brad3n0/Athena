@@ -154,6 +154,45 @@ def list_conversations() -> list[dict[str, Any]]:
     return items
 
 
+def _snippet(text: str, words: list[str], width: int = 150) -> str:
+    low = text.lower()
+    at = min((low.find(w) for w in words if w in low), default=0)
+    start = max(0, at - width // 3)
+    if start:
+        space = text.find(" ", start)
+        start = space + 1 if 0 <= space < at else start
+    piece = re.sub(r"```\w*|\*\*|^#+ ", " ", text[start:start + width], flags=re.M)
+    return ("…" if start else "") + " ".join(piece.split()) + ("…" if start + width < len(text) else "")
+
+
+def search_messages(query: str, limit: int = 30, project_id: str | None = None) -> list[dict[str, Any]]:
+    """Find chats whose messages (or title) contain every word of the query."""
+    words = [w for w in query.lower().split() if w][:8]
+    if not words:
+        return []
+    _ensure_dirs()
+    results = []
+    for path in CHATS_DIR.glob("*.json"):
+        chat = _read(path, None)
+        if not chat or (project_id and chat.get("project_id") != project_id):
+            continue
+        title = (chat.get("title") or "").lower()
+        hits = []
+        for i, m in enumerate(chat.get("messages") or []):
+            if m.get("role") not in ("user", "assistant"):
+                continue
+            text = str(m.get("display") or m.get("content") or "")
+            low = text.lower()
+            if all(w in low or w in title for w in words) and any(w in low for w in words):
+                hits.append({"idx": i, "role": m["role"], "snippet": _snippet(text, words)})
+        in_title = all(w in title for w in words)
+        if hits or in_title:
+            results.append({k: chat.get(k) for k in ("id", "title", "icon", "mode", "updated", "project_id")}
+                           | {"title_match": in_title, "count": len(hits), "hits": hits[:3]})
+    results.sort(key=lambda r: (not r["title_match"], -min(r["count"], 5), -(r.get("updated") or 0)))
+    return results[:limit]
+
+
 def get_conversation(chat_id: str) -> dict[str, Any] | None:
     if not valid_id(chat_id):
         return None

@@ -635,6 +635,12 @@ async def list_conversations():
     return store.list_conversations()
 
 
+@app.get("/api/search")
+async def search(q: str = "", project_id: str | None = None):
+    """Search inside every message of every chat."""
+    return await run_in_threadpool(store.search_messages, q[:200], 30, project_id)
+
+
 @app.get("/api/conversations/{chat_id}")
 async def get_conversation(chat_id: str):
     chat = store.get_conversation(chat_id)

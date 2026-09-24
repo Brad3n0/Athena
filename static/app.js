@@ -245,8 +245,51 @@ function renderSidebar() {
       <span class="actions"><button data-act="pin" title="${c.pinned ? 'Unpin' : 'Pin to top'}">${ICONS.pin}</button><button data-act="move" title="Move to project">${ICONS.folder}</button><button data-act="export" title="Export">${ICONS.download}</button><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
     list.append(item);
   }
-  if (!list.children.length) list.innerHTML = `<div class="chat-group">${q ? 'No matches' : state.project ? 'No chats in this project yet' : 'Your chats will appear here'}</div>`;
+  if (q.length >= 2) {
+    list.insertAdjacentHTML('beforeend', '<div class="search-hits" id="searchHits"></div>');
+    searchMessages(q);
+  } else if (!list.children.length) list.innerHTML = `<div class="chat-group">${state.project ? 'No chats in this project yet' : 'Your chats will appear here'}</div>`;
 }
+
+// Full-text search: every message of every chat, shown under the title matches.
+let searchTimer = 0;
+let searchSeq = 0;
+function searchMessages(q) {
+  clearTimeout(searchTimer);
+  const seq = ++searchSeq;
+  searchTimer = setTimeout(async () => {
+    const results = await api(`/api/search?q=${encodeURIComponent(q)}${state.project ? `&project_id=${state.project}` : ''}`).catch(() => []);
+    const box = $('#searchHits');
+    if (!box || seq !== searchSeq) return;
+    const hits = results.filter((r) => r.hits.length);
+    const titleShown = $$('#chatList .chat-item').length;
+    if (!hits.length) { box.innerHTML = titleShown ? '' : '<div class="chat-group">No matches</div>'; return; }
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const mark = (text) => {
+      let html = escapeHtml(text);
+      for (const w of words) html = html.replace(new RegExp(`(${escapeHtml(w).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'), '<mark>$1</mark>');
+      return html;
+    };
+    box.innerHTML = `<div class="chat-group">In messages</div>` + hits.map((r) => `
+      <div class="search-hit">
+        <div class="sh-title">${r.icon ? `${escapeHtml(r.icon)} ` : ''}${escapeHtml(r.title || 'Chat')}${r.count > 1 ? ` <span class="muted">· ${r.count}</span>` : ''}</div>
+        ${r.hits.map((h) => `<button type="button" data-open-hit="${r.id}" data-idx="${h.idx}"><span class="sh-who">${h.role === 'user' ? 'You' : 'Athena'}</span>${mark(h.snippet)}</button>`).join('')}
+      </div>`).join('');
+  }, 180);
+}
+
+$('#chatList').addEventListener('click', async (e) => {
+  const hit = e.target.closest('[data-open-hit]');
+  if (!hit) return;
+  e.stopPropagation();
+  await openChat(hit.dataset.openHit);
+  const el = messagesEl.querySelector(`.msg[data-idx="${hit.dataset.idx}"]`);
+  if (el) {
+    el.scrollIntoView({ block: 'center' });
+    el.classList.add('found');
+    setTimeout(() => el.classList.remove('found'), 2200);
+  }
+}, true);
 
 $('#chatList').onclick = async (e) => {
   const item = e.target.closest('.chat-item');
@@ -684,6 +727,7 @@ const STEP_TEXT = {
   list_tasks: [() => 'Checking your tasks', (a, r) => `Checked your tasks (${r.count ?? 0})`],
   complete_task: [(a) => `Completing ${q(a.task)}`, (a, r) => `Completed: ${r.completed?.title}`],
   delete_task: [(a) => `Removing ${q(a.task)}`, (a, r) => `Removed task: ${r.deleted?.title}`],
+  search_chats: [(a) => `Looking through past chats for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} past chat${r.results?.length === 1 ? '' : 's'}`],
   remember: [() => 'Saving to memory', (a, r) => `Remembered: ${r.remembered}`],
   forget: [() => 'Forgetting', (a, r) => `Forgot: ${r.forgot}`],
   list_folder: [(a) => `Looking in ${a.path || 'your folders'}`, (a, r) => r.folder ? `Looked in ${r.folder} (${r.count} items)` : 'Checked which folders I can use'],
