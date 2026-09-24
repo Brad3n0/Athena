@@ -484,7 +484,7 @@ async function saveChat() {
   if (!c.id) c.id = crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '').slice(0, 16) : Math.random().toString(36).slice(2, 18);
   if (!c.title) {
     const first = c.messages.find((m) => m.role === 'user');
-    c.title = (first?.display ?? first?.content ?? (c.canvas?.title || 'New chat')).replace(/\s+/g, ' ').trim().slice(0, 60) || 'New chat';
+    c.title = (first?.display ?? first?.content ?? (c.canvas?.title || (c.canvas?.text || '').replace(/^[#\s]+/, '').split('\n')[0] || 'New chat')).replace(/\s+/g, ' ').trim().slice(0, 60) || 'New chat';
   }
   const payload = { ...c, messages: c.messages.map(({ streaming, ...m }) => m) };
   try {
