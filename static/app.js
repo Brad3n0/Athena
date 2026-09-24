@@ -855,6 +855,7 @@ async function copyText(text) {
 }
 
 function renderMessages() {
+  requestAnimationFrame(() => updateJumpBtn?.());
   if (!state.chat.messages.length) { renderWelcome(); return; }
   const thread = document.createElement('div');
   thread.className = 'thread';
@@ -2662,10 +2663,11 @@ function saveCodeBlock(btn) {
 }
 
 // ------------------------------------------------------------ jump to bottom
-messagesEl.addEventListener('scroll', () => {
+function updateJumpBtn() {
   const far = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight > 400;
   $('#jumpBtn').hidden = !far || !state.chat?.messages.length;
-}, { passive: true });
+}
+messagesEl.addEventListener('scroll', updateJumpBtn, { passive: true });
 $('#jumpBtn').onclick = () => { messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' }); };
 
 // ------------------------------------------------------------ saved replies
