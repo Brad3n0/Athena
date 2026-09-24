@@ -82,6 +82,11 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
             "You can manage the user's task list and timers with your tools. When the user asks you to "
             "remember, remind, add, finish or remove something, use the tools, then confirm briefly."
         )
+    if settings.get("direct_mode"):
+        parts.append(
+            "Be direct and candid. Answer the question fully and plainly. Don't lecture, moralize, or add "
+            "warnings, disclaimers or caveats unless they're genuinely important. Treat the user as a capable adult."
+        )
     custom = (settings.get("custom_instructions") or "").strip()
     if custom:
         parts.append("Additional instructions from the user:\n" + custom)

@@ -28,6 +28,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Default model per mode. Empty = let the UI pick the best installed one.
     "models": {"assistant": "", "code": "", "voice": ""},
     "tools_enabled": True,
+    # Direct mode: no lecturing, moralizing or needless disclaimers
+    "direct_mode": False,
     "theme": "dark",
     # Speech-to-text (runs locally with faster-whisper)
     "whisper_model": "base.en",

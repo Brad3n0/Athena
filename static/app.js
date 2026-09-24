@@ -30,6 +30,10 @@ const RECOMMENDED = [
   { name: 'qwen3:4b', role: 'Voice', desc: 'Quick, snappy replies for voice chat, supports tasks. ~2.5 GB' },
   { name: 'llama3.2:3b', role: 'Voice', desc: 'Very fast and light. ~2 GB' },
   { name: 'gemma3:12b', role: 'Vision', desc: 'Understands images you attach. ~8 GB · 12 GB VRAM' },
+  // Community versions with the refusal behaviour removed. Slightly less polished than the originals.
+  { name: 'huihui_ai/qwen3-abliterated:14b', role: 'Fewer refusals', desc: 'Community Qwen3 14B with refusals removed. ~9 GB · 12 GB VRAM' },
+  { name: 'huihui_ai/qwen3-abliterated:8b', role: 'Fewer refusals', desc: 'Community Qwen3 8B with refusals removed. ~5 GB · 8 GB VRAM' },
+  { name: 'dolphin3', role: 'Fewer refusals', desc: 'Dolphin 3 (Llama 3.1 8B), tuned to follow instructions without refusing. ~4.9 GB' },
 ];
 
 // Preference order used when you haven't chosen a default model yet.
@@ -887,6 +891,7 @@ function openSettings(tab = 'general') {
   $('#setInstructions').value = s.custom_instructions || '';
   $('#setTheme').value = s.theme || 'dark';
   $('#setTools').checked = !!s.tools_enabled;
+  $('#setDirect').checked = !!s.direct_mode;
   $('#setRate').value = s.tts_rate || 1;
   $('#setAutoSpeak').checked = !!s.auto_speak;
   $('#setWhisper').value = s.whisper_model || 'base.en';
@@ -915,7 +920,7 @@ function fillModelSelects() {
       state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
     sel.value = modelNames().includes(state.settings.models?.[mode]) ? state.settings.models[mode] : '';
   }
-  const have = new Set(modelNames());
+  const have = new Set(modelNames().flatMap((n) => [n, n.replace(/:latest$/, '')]));
   $('#recommend').innerHTML = RECOMMENDED.map((r) => `
     <div class="rec${have.has(r.name) ? ' have' : ''}">
       <div class="info"><div class="name">${r.name}<span class="tag">${r.role}</span></div><div class="desc">${r.desc}</div></div>
@@ -946,6 +951,7 @@ bind('#setName', 'user_name');
 bind('#setInstructions', 'custom_instructions');
 bind('#setTheme', 'theme');
 bind('#setTools', 'tools_enabled', (el) => el.checked);
+bind('#setDirect', 'direct_mode', (el) => el.checked);
 bind('#setVoice', 'tts_voice');
 bind('#setRate', 'tts_rate', (el) => Number(el.value));
 bind('#setAutoSpeak', 'auto_speak', (el) => el.checked);

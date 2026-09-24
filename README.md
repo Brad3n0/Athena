@@ -46,6 +46,13 @@ Athena picks sensible defaults automatically. You can choose a model per mode in
 
 > To find your VRAM on Windows, open Task Manager → Performance → GPU → "Dedicated GPU memory".
 
+## Fewer refusals
+
+Athena adds no filters of her own, but most models come with their makers' built-in safety training, so they still refuse some requests. You have two options:
+
+- **Direct mode** (Settings → General) tells Athena to answer plainly, without lecturing or adding unneeded disclaimers. It works with any model.
+- **Community "abliterated" or "uncensored" models** have the refusal behaviour removed. Athena lists a few under **Settings → Models → Fewer refusals** (`huihui_ai/qwen3-abliterated`, `dolphin3`), and more can be found by searching "abliterated" on [ollama.com](https://ollama.com/search?q=abliterated). They're made by the community rather than the original companies. They're usually a little less accurate, and they may not handle Athena's tasks and timers as reliably. After downloading one, pick it as your default in **Settings → Models**.
+
 ## Voice tips
 
 - Click the **waveform button** next to the message box to start a voice conversation. Just talk, and Athena replies when you pause. Tap the orb to interrupt her. Say *"goodbye"* or press **Esc** to end.
