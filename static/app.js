@@ -1304,7 +1304,6 @@ async function generateReply({ voice = false, model = null } = {}) {
     if (raf) return;
     raf = requestAnimationFrame(() => { raf = 0; updateAssistantEl(el, reply); scrollBottom(); });
   };
-  const t0 = Date.now();
   let thinkStart = 0;
   // Let you know when the model has to load into memory first (can take a while on the first message).
   const warmTimer = setTimeout(() => { if (!reply.content && !reply.thinking && !reply.tools.length) { reply.warming = true; paint(); } }, 2500);
