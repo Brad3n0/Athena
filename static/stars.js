@@ -1,3 +1,5 @@
+import { palette } from './palette.js';
+
 // Faint, slowly drifting and twinkling stars behind the chat (dark theme only).
 
 export function startStars(canvas) {
@@ -27,18 +29,19 @@ export function startStars(canvas) {
 
   function draw(now) {
     const t = now / 1000;
+    const G = palette().star.join(', ');
     ctx.clearRect(0, 0, w, h);
     if (document.documentElement.dataset.theme !== 'dark') return;
     for (const s of stars) {
       const alpha = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fillStyle = s.gold ? `rgba(255, 222, 150, ${alpha})` : `rgba(210, 222, 255, ${alpha * 0.8})`;
+      ctx.fillStyle = s.gold ? `rgba(${G}, ${alpha})` : `rgba(210, 222, 255, ${alpha * 0.8})`;
       ctx.fill();
       if (s.r > 1.1) { // soft glow on the few bigger stars
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r * 3.2, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255, 222, 150, ${alpha * 0.12})`;
+        ctx.fillStyle = `rgba(${G}, ${alpha * 0.12})`;
         ctx.fill();
       }
     }

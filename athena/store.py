@@ -64,6 +64,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "theme": "dark",
+    "accent": "gold",  # gold | rose | silver | cyan | emerald
+    "voice_barge_in": True,  # interrupt Athena just by talking
+    "voice_sleep": True,  # dim after a minute of silence in voice chat
     # Speech-to-text (runs locally with faster-whisper)
     "whisper_model": "base.en",
     "whisper_device": "cpu",
@@ -139,7 +142,7 @@ def list_conversations() -> list[dict[str, Any]]:
         chat = _read(path, None)
         if not chat:
             continue
-        items.append({k: chat.get(k) for k in ("id", "title", "mode", "model", "created", "updated")})
+        items.append({k: chat.get(k) for k in ("id", "title", "mode", "model", "created", "updated", "pinned", "icon")})
     items.sort(key=lambda c: c.get("updated") or 0, reverse=True)
     return items
 

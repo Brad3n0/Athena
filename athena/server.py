@@ -639,7 +639,7 @@ async def make_title(request: Request):
         "model": model, "stream": False, "think": False,
         "options": {"temperature": 0.3, "num_predict": 24},
         "messages": [
-            {"role": "system", "content": "You name conversations. Reply with only a 2 to 5 word title in Title Case. No quotes, no emoji, no ending punctuation."},
+            {"role": "system", "content": "You name conversations. Reply with one fitting emoji, a space, then a 2 to 5 word title in Title Case. Example: 🍝 Easy Pasta Dinner. No quotes, no ending punctuation."},
             {"role": "user", "content": f"Name this conversation:\n\nUser: {user}\n\nAssistant: {reply}"},
         ],
     }
@@ -658,9 +658,53 @@ async def make_title(request: Request):
     title = next((line for line in text.splitlines() if line.strip()), "").strip()
     title = re.sub(r"^\W*(title|conversation title)\s*:\s*", "", title, flags=re.I)
     title = title.strip("\"'*#` ").rstrip(".!?:").strip("\"'*#` ")
+    icon = ""
+    first = title.split(" ", 1)
+    if len(first) == 2 and not any(ch.isalnum() for ch in first[0]):
+        icon, title = first[0][:4], first[1].strip("\"'*#` ")
     if not title:
         raise HTTPException(502, "No title")
-    return {"title": title[:60]}
+    return {"title": title[:60], "icon": icon}
+
+
+# -------------------------------------------------------------------- stats
+
+@app.get("/api/stats")
+async def stats():
+    from collections import Counter
+
+    week_ago = datetime.now().timestamp() - 7 * 86400
+    chats = [store.get_conversation(c["id"]) or {} for c in store.list_conversations()]
+    models: Counter = Counter()
+    sent = replies = voice = 0
+    days: Counter = Counter()
+    for chat in chats:
+        for m in chat.get("messages", []):
+            if m.get("role") == "user":
+                sent += 1
+                if m.get("time"):
+                    days[datetime.fromtimestamp(m["time"] / 1000).strftime("%A")] += 1
+            elif m.get("role") == "assistant":
+                replies += 1
+                if m.get("model"):
+                    models[m["model"]] += 1
+                if m.get("voice"):
+                    voice += 1
+    tasks = store.list_tasks()
+    return {
+        "chats": len(chats),
+        "chats_this_week": sum(1 for c in chats if (c.get("created") or 0) >= week_ago),
+        "messages_sent": sent,
+        "replies": replies,
+        "voice_replies": voice,
+        "tasks_done": sum(1 for t in tasks if t.get("done")),
+        "tasks_open": sum(1 for t in tasks if not t.get("done")),
+        "memories": len(store.list_memories()),
+        "reminders_pending": len(scheduler.pending()),
+        "top_models": models.most_common(5),
+        "busiest_day": days.most_common(1)[0][0] if days else None,
+        "first_chat": min((c.get("created") or 0 for c in chats), default=None),
+    }
 
 
 # ------------------------------------------------------------ live events

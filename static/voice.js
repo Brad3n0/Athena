@@ -232,6 +232,7 @@ export class Speaker {
     src.playbackRate.value = item.pitch;
     src.connect(this.analyser);
     item.src = src;
+    this.current = { text: item.text, start: this.ctx.currentTime, duration: buffer.duration / item.pitch };
     src.onended = () => {
       if (item.gen !== this.gen) return;
       this._finishOne();
@@ -250,8 +251,8 @@ export class Speaker {
     if (v) { u.voice = v; u.lang = v.lang; }
     u.rate = Number(settings.tts_rate) || 1;
     u.pitch = Math.min(2, Number(settings.voice_pitch) || 1);
-    u.onstart = () => this.onStart?.();
-    u.onboundary = () => { this._pulse = performance.now(); };
+    u.onstart = () => { this.current = { text, charIndex: 0 }; this.onStart?.(); };
+    u.onboundary = (e) => { this._pulse = performance.now(); if (this.current) this.current.charIndex = e.charIndex; };
     u.onend = u.onerror = () => this._finishOne();
     this.sysSpeaking = true;
     speechSynthesis.speak(u);
@@ -260,6 +261,14 @@ export class Speaker {
   _finishOne() {
     this.pending = Math.max(0, this.pending - 1);
     if (!this.pending) { this.sysSpeaking = false; this.onEnd?.(); this._resolveWaiters(); }
+  }
+
+  /** What she's saying right now and how far through it she is (0..1), for live captions. */
+  progress() {
+    const c = this.current;
+    if (!c || !this.speaking) return null;
+    if (c.duration) return { text: c.text, frac: Math.min(1, (this.ctx.currentTime - c.start) / c.duration) };
+    return { text: c.text, frac: Math.min(1, (c.charIndex || 0) / Math.max(1, c.text.length)) };
   }
 
   /** Current loudness 0..1 for lip-sync. */
@@ -284,6 +293,7 @@ export class Speaker {
     this.queue = [];
     try { this.playing?.src?.stop(); } catch { /* already stopped */ }
     this.playing = null;
+    this.current = null;
     window.speechSynthesis?.cancel();
     this.sysSpeaking = false;
     this.pending = 0;

@@ -1,6 +1,8 @@
 // Athena's voice orb: a liquid-gold sphere drawn on a canvas.
 // It ripples with her voice, reacts to your mic while listening, swirls while thinking.
 
+import { palette } from './palette.js';
+
 const TAU = Math.PI * 2;
 const lerp = (a, b, t) => a + (b - a) * t;
 
@@ -62,6 +64,9 @@ export class VoiceOrb {
     this._last = now;
     const t = now / 1000;
     const { ctx, size } = this;
+    const pal = palette();
+    const A = pal.rgb.join(', '), L = pal.light.join(', ');
+    pal.orb.forEach((c, i) => { BLOBS[i].c = c; });
     if (!size) { this._raf = requestAnimationFrame((tt) => this._tick(tt)); return; }
 
     // Inputs, smoothed
@@ -81,9 +86,9 @@ export class VoiceOrb {
 
     // Outer glow
     const glow = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, size * 0.5);
-    glow.addColorStop(0, `rgba(245, 197, 66, ${0.28 + energy * 0.35 + this.flash * 0.3})`);
-    glow.addColorStop(0.45, `rgba(245, 165, 36, ${0.08 + energy * 0.12})`);
-    glow.addColorStop(1, 'rgba(245, 165, 36, 0)');
+    glow.addColorStop(0, `rgba(${A}, ${0.28 + energy * 0.35 + this.flash * 0.3})`);
+    glow.addColorStop(0.45, `rgba(${pal.orb[1].join(', ')}, ${0.08 + energy * 0.12})`);
+    glow.addColorStop(1, `rgba(${pal.orb[1].join(', ')}, 0)`);
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, size, size);
 
@@ -93,7 +98,7 @@ export class VoiceOrb {
         const k = ((t * 0.6 + i / 3) % 1);
         ctx.beginPath();
         ctx.arc(cx, cy, R * (1.05 + k * 0.55 + this.mic * 0.25), 0, TAU);
-        ctx.strokeStyle = `rgba(255, 217, 112, ${(1 - k) * (0.12 + this.mic * 0.5)})`;
+        ctx.strokeStyle = `rgba(${L}, ${(1 - k) * (0.12 + this.mic * 0.5)})`;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
@@ -118,7 +123,7 @@ export class VoiceOrb {
 
     // Deep base
     const base = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.35, R * 0.1, cx, cy, R * 1.1);
-    base.addColorStop(0, '#6b4210');
+    base.addColorStop(0, pal.base);
     base.addColorStop(0.55, '#2a1c20');
     base.addColorStop(1, '#0b1224');
     ctx.fillStyle = base;
@@ -178,7 +183,7 @@ export class VoiceOrb {
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
     ctx.closePath();
-    ctx.strokeStyle = `rgba(255, 217, 112, ${0.35 + energy * 0.4})`;
+    ctx.strokeStyle = `rgba(${L}, ${0.35 + energy * 0.4})`;
     ctx.lineWidth = 1.2;
     ctx.stroke();
 
@@ -189,7 +194,7 @@ export class VoiceOrb {
         const a0 = this.spin * (i ? -1.6 : 2.1) + i * Math.PI;
         ctx.beginPath();
         ctx.arc(cx, cy, R * (1.18 + i * 0.12), a0, a0 + 1.1 + i * 0.5);
-        ctx.strokeStyle = `rgba(255, 217, 112, ${this.think * (0.75 - i * 0.3)})`;
+        ctx.strokeStyle = `rgba(${L}, ${this.think * (0.75 - i * 0.3)})`;
         ctx.lineWidth = 2.2 - i * 0.8;
         ctx.stroke();
       }
@@ -207,7 +212,7 @@ export class VoiceOrb {
       const alpha = Math.sin(p.life * Math.PI) * (0.35 + energy * 0.65);
       ctx.beginPath();
       ctx.arc(x, y, p.s * (1 + energy * 0.6), 0, TAU);
-      ctx.fillStyle = `rgba(255, 225, 140, ${alpha})`;
+      ctx.fillStyle = `rgba(${L}, ${alpha})`;
       ctx.fill();
     }
 

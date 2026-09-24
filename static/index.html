@@ -13,7 +13,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-top">
       <div class="brand">
-        <img src="logo.svg" alt="" class="brand-logo" />
+        <span data-logo></span>
         <span>Athena AI</span>
       </div>
       <button class="icon-btn" id="closeSidebar" title="Close sidebar">
@@ -166,6 +166,7 @@
         <button type="button" data-tab="integrations">Integrations</button>
         <button type="button" data-tab="desktop">Desktop app</button>
         <button type="button" data-tab="privacy">Privacy &amp; data</button>
+        <button type="button" data-tab="stats">Your stats</button>
       </nav>
 
       <section data-panel="general">
@@ -173,6 +174,8 @@
         <label>Custom instructions
           <textarea id="setInstructions" rows="4" placeholder="e.g. I'm learning Python. Keep explanations beginner friendly."></textarea>
         </label>
+        <label>Accent colour</label>
+        <div class="swatches" id="accentPicker"></div>
         <label>Theme
           <select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select>
         </label>
@@ -286,6 +289,12 @@
         <button type="button" class="ghost" id="makeShortcuts">Create desktop &amp; Start menu shortcuts</button>
       </section>
 
+      <section data-panel="stats" hidden>
+        <div class="stat-grid" id="statGrid"></div>
+        <h3>Most-used models</h3>
+        <ul class="memories" id="statModels"></ul>
+      </section>
+
       <section data-panel="privacy" hidden>
         <h3 style="margin-top:0">PIN lock</h3>
         <p class="muted small">Require a PIN to open Athena — useful if others use this PC or you use her from your phone.</p>
@@ -319,7 +328,9 @@
         <label>Speaking speed <input type="range" id="setRate" min="0.6" max="1.6" step="0.05" /></label>
         <label>Voice pitch <span class="muted small">(lower = sultrier, higher = cuter)</span> <input type="range" id="setPitch" min="0.85" max="1.35" step="0.01" /></label>
         <button type="button" class="ghost" id="testVoice">▶ Test voice</button>
-        <label class="check" style="margin-top:14px"><input type="checkbox" id="setAutoSpeak" /> Read every reply aloud in text chats</label>
+        <label class="check" style="margin-top:14px"><input type="checkbox" id="setBargeIn" /> Interrupt her just by talking (works best with headphones)</label>
+        <label class="check"><input type="checkbox" id="setVoiceSleep" /> Doze after a minute of silence (tap the orb or say “Hey Athena” to wake her)</label>
+        <label class="check"><input type="checkbox" id="setAutoSpeak" /> Read every reply aloud in text chats</label>
 
         <h3>“Hey Athena”</h3>
         <label class="check"><input type="checkbox" id="setWake" /> Listen for “Hey Athena” and start talking hands-free</label>
@@ -346,7 +357,7 @@
 
 <div class="approval" id="approval" hidden>
   <div class="approval-card" role="alertdialog" aria-labelledby="approvalTitle">
-    <div class="approval-title" id="approvalTitle"><img src="logo.svg" alt="" /> Athena wants to</div>
+    <div class="approval-title" id="approvalTitle"><span data-logo></span> Athena wants to</div>
     <div class="approval-summary" id="approvalSummary"></div>
     <label class="check small"><input type="checkbox" id="approvalAlways" /> Allow everything else in this chat</label>
     <div class="approval-actions">
@@ -356,8 +367,27 @@
   </div>
 </div>
 
+<dialog class="settings shortcuts" id="shortcutsDlg">
+  <form method="dialog" class="settings-inner">
+    <header><h2>Keyboard shortcuts</h2><button class="icon-btn" value="close" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+    <div class="shortcut-list">
+      <div><kbd>Enter</kbd><span>Send message</span></div>
+      <div><kbd>Shift</kbd>+<kbd>Enter</kbd><span>New line</span></div>
+      <div><kbd>/</kbd><span>Quick commands menu</span></div>
+      <div><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd><span>New chat</span></div>
+      <div><kbd>Ctrl</kbd>+<kbd>K</kbd><span>Search chats</span></div>
+      <div><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd><span>Start voice chat</span></div>
+      <div><kbd>Ctrl</kbd>+<kbd>V</kbd><span>Paste a screenshot or image</span></div>
+      <div><kbd>Esc</kbd><span>Stop reply / close / end voice chat</span></div>
+      <div><kbd>?</kbd><span>Show these shortcuts</span></div>
+      <div><kbd>Ctrl</kbd>+<kbd>Space</kbd><span>Open Athena from anywhere (desktop app)</span></div>
+      <div><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd><span>Talk to Athena from anywhere (desktop app)</span></div>
+    </div>
+  </form>
+</dialog>
+
 <div class="lock-screen" id="lockScreen" hidden>
-  <img src="logo.svg" alt="" class="lock-logo" />
+  <span data-logo></span>
   <div class="lock-title">Athena is locked</div>
   <form id="unlockForm" class="lock-form">
     <input id="unlockPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Enter PIN" maxlength="12" />

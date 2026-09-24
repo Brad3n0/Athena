@@ -3,6 +3,7 @@ import { renderMarkdown, toSpeech } from './markdown.js';
 import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices } from './voice.js';
 import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
+import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -19,6 +20,9 @@ const ICONS = {
   tool: '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
   warn: '<svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+  pin: '<svg viewBox="0 0 24 24"><path d="M12 17v5M8 3h8l-1 6 3 3v2H6v-2l3-3z"/></svg>',
+  sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon: '<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
   file: '<svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>',
 };
 
@@ -94,6 +98,7 @@ function applyTheme() {
   const t = state.settings.theme || 'dark';
   const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  applyAccent(state.settings.accent || 'gold');
 }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 
@@ -201,15 +206,17 @@ function renderSidebar() {
   const list = $('#chatList');
   list.innerHTML = '';
   let group = '';
-  for (const c of state.chats) {
+  const ordered = [...state.chats.filter((c) => c.pinned), ...state.chats.filter((c) => !c.pinned)];
+  for (const c of ordered) {
     if (q && !(c.title || '').toLowerCase().includes(q)) continue;
-    const g = groupLabel(c.updated || c.created || Date.now() / 1000);
+    const g = c.pinned ? 'Pinned' : groupLabel(c.updated || c.created || Date.now() / 1000);
     if (g !== group) { group = g; list.insertAdjacentHTML('beforeend', `<div class="chat-group">${g}</div>`); }
     const item = document.createElement('div');
     item.className = 'chat-item' + (state.chat?.id === c.id ? ' active' : '');
     item.dataset.id = c.id;
-    item.innerHTML = `${c.mode === 'code' ? '<span class="mode-tag">&lt;/&gt;</span>' : ''}<span class="title">${escapeHtml(c.title || 'New chat')}</span>
-      <span class="actions"><button data-act="export" title="Export">${ICONS.download}</button><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
+    const icon = c.icon ? `<span class="chat-icon">${escapeHtml(c.icon)}</span>` : c.mode === 'code' ? '<span class="chat-icon mode-tag">&lt;/&gt;</span>' : '';
+    item.innerHTML = `${icon}<span class="title">${escapeHtml(c.title || 'New chat')}</span>
+      <span class="actions"><button data-act="pin" title="${c.pinned ? 'Unpin' : 'Pin to top'}">${ICONS.pin}</button><button data-act="export" title="Export">${ICONS.download}</button><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
     list.append(item);
   }
   if (!list.children.length) list.innerHTML = `<div class="chat-group">${q ? 'No matches' : 'Your chats will appear here'}</div>`;
@@ -220,6 +227,13 @@ $('#chatList').onclick = async (e) => {
   if (!item) return;
   const act = e.target.closest('[data-act]')?.dataset.act;
   const id = item.dataset.id;
+  if (act === 'pin') {
+    const c = state.chats.find((x) => x.id === id);
+    await api(`/api/conversations/${id}`, json('PUT', { pinned: !c?.pinned }));
+    if (state.chat?.id === id) state.chat.pinned = !c?.pinned;
+    await loadChats();
+    return;
+  }
   if (act === 'export') {
     openExportMenu(id, e.target.closest('[data-act]'));
     return;
@@ -317,7 +331,7 @@ function scrollBottom(force = false) { if (force || nearBottom()) messagesEl.scr
 function renderWelcome() {
   const name = state.settings.user_name ? `, ${escapeHtml(state.settings.user_name)}` : '';
   const hour = new Date().getHours();
-  const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const greet = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   let body;
   if (!state.status.ollama) {
     body = `<div class="setup-card"><h3>Almost there!</h3>
@@ -330,11 +344,17 @@ function renderWelcome() {
   } else {
     body = '';
   }
-  messagesEl.innerHTML = `<div class="welcome"><img src="logo.svg" alt=""><h1>${state.mode === 'code' ? `What are we building today${name}?` : `${greet}${name}`}</h1>${body}</div>`;
+  const night = hour < 6 || hour >= 18;
+  const date = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const sub = state.mode === 'code' ? '' : `<div class="greet-sub">${night ? ICONS.moon : ICONS.sun}${escapeHtml(date)}</div>`;
+  messagesEl.innerHTML = `<div class="welcome">${logoSvg()}<h1>${state.mode === 'code' ? `What are we building today${name}?` : `${greet}${name}`}</h1>${sub}${body}</div>`;
   $('#goModels')?.addEventListener('click', () => openSettings('models'));
 }
 
 messagesEl.addEventListener('click', async (e) => {
+  const follow = e.target.closest('[data-followup]');
+  if (follow) { if (!state.abort) sendMessage(follow.dataset.followup); return; }
+
   const runBtn = e.target.closest('[data-run]');
   if (runBtn) { runCodeBlock(runBtn); return; }
 
@@ -399,6 +419,7 @@ function renderMessages() {
 }
 
 function markLast() {
+  $$('.followups', messagesEl).forEach((f) => f !== $$('.followups', messagesEl).at(-1) && f.remove());
   $$('.msg', messagesEl).forEach((el, i, all) => el.classList.toggle('last', i === all.length - 1));
 }
 
@@ -411,9 +432,9 @@ function messageEl(m, idx) {
     const imgs = (m.images || []).map((b64) => `<img class="thumb" src="data:image/*;base64,${b64}" alt="">`).join('');
     el.innerHTML = `<div class="col">${files || imgs ? `<div class="files">${imgs}${files}</div>` : ''}
       <div class="bubble">${escapeHtml(m.display ?? m.content)}</div>
-      <div class="msg-actions"><button data-msg-act="edit" title="Edit">${ICONS.edit}</button><button data-msg-act="copy" title="Copy">${ICONS.copy}</button></div></div>`;
+      <div class="msg-actions">${m.time ? `<span class="time">${fmtTime(m.time)}</span>` : ''}<button data-msg-act="edit" title="Edit">${ICONS.edit}</button><button data-msg-act="copy" title="Copy">${ICONS.copy}</button></div></div>`;
   } else {
-    el.innerHTML = `<img class="avatar" src="logo.svg" alt=""><div class="body"><div class="content"></div><div class="msg-actions"></div></div>`;
+    el.innerHTML = `${logoSvg('avatar')}<div class="body"><div class="content"></div><div class="msg-actions"></div></div>`;
     updateAssistantEl(el, m);
   }
   return el;
@@ -449,13 +470,26 @@ function updateAssistantEl(el, m) {
   if (m.streaming && stillThinking && !thinking.trim()) html += '<span class="typing"></span>';
   el.querySelector('.content').innerHTML = html;
 
+  el.classList.toggle('streaming', !!m.streaming);
   const actions = el.querySelector('.msg-actions');
+  el.querySelector('.followups')?.remove();
   if (m.streaming) { actions.innerHTML = ''; return; }
   const tps = m.stats?.eval_count && m.stats?.eval_duration ? `${(m.stats.eval_count / (m.stats.eval_duration / 1e9)).toFixed(1)} tok/s` : '';
   actions.innerHTML = `<button data-msg-act="copy" title="Copy">${ICONS.copy}</button>
     <button data-msg-act="speak" title="Read aloud">${ICONS.speak}</button>
     <button data-msg-act="retry" title="Regenerate">${ICONS.retry}</button>
-    <span class="stats">${escapeHtml([m.model, tps].filter(Boolean).join(' · '))}</span>`;
+    <span class="stats">${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
+  const idx = Number(el.dataset.idx);
+  const isLast = state.chat && idx === state.chat.messages.length - 1;
+  if (isLast && content && !m.error && !m.voice) {
+    const chips = /```/.test(content) ? ['Explain the code', 'Add comments', 'Make it simpler'] : ['Tell me more', 'Make it shorter', 'Give me an example'];
+    el.querySelector('.body').insertAdjacentHTML('beforeend', `<div class="followups">${chips.map((c) => `<button type="button" data-followup="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('')}</div>`);
+  }
+}
+
+function fmtTime(ms) {
+  const d = new Date(ms), today = new Date().toDateString() === d.toDateString();
+  return d.toLocaleString(undefined, today ? { hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 // ---- live activity steps (what Athena is doing, as it happens)
@@ -679,7 +713,7 @@ async function sendMessage(text, { voice = false, display = null } = {}) {
     else toast('To understand images, download a vision model like qwen2.5vl:7b or gemma3:12b (Settings → Models).', 'error');
   }
 
-  const msg = { role: 'user', content: text, display: display ?? text };
+  const msg = { role: 'user', content: text, display: display ?? text, time: Date.now() };
   if (state.attachments.length) {
     const textFiles = state.attachments.filter((a) => a.kind === 'text');
     const images = state.attachments.filter((a) => a.kind === 'image');
@@ -700,7 +734,7 @@ async function generateReply({ voice = false, model = null } = {}) {
   const chat = state.chat;
   const mode = voice ? 'voice' : state.mode;
   model = model || currentModel();
-  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true };
+  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), ...(voice ? { voice: true } : {}) };
   chat.messages.push(reply);
 
   const thread = $('.thread', messagesEl);
@@ -754,7 +788,7 @@ async function generateReply({ voice = false, model = null } = {}) {
           if (speakThis) speaker.feed(splitThinking(reply).content);
           if (voice) {
             const said = splitThinking(reply).content;
-            setVoiceCaption(said, 'athena');
+            if (!speaker.speaking) setVoiceCaption(said, 'athena');
             if (/\b(ha(ha)+|he(he)+|yay|lol|hooray)\b|[♪♡]/i.test(said.slice(-40))) state.voice.avatar?.cheer?.();
           }
         } else if (ev.type === 'thinking') {
@@ -814,11 +848,12 @@ async function smartTitle(chat, reply) {
   const user = chat.messages.find((m) => m.role === 'user');
   const model = pickDefaultModel('voice') || reply.model; // a small, fast model is plenty for a title
   try {
-    const { title } = await api('/api/title', json('POST', { model, user: user?.display ?? user?.content ?? '', reply: splitThinking(reply).content }));
+    const { title, icon } = await api('/api/title', json('POST', { model, user: user?.display ?? user?.content ?? '', reply: splitThinking(reply).content }));
     if (!title || chat.autoTitle === false) return;
     chat.title = title;
     chat.autoTitle = false;
-    await api(`/api/conversations/${chat.id}`, json('PUT', { title, autoTitle: false }));
+    if (icon) chat.icon = icon;
+    await api(`/api/conversations/${chat.id}`, json('PUT', { title, autoTitle: false, ...(icon ? { icon } : {}) }));
     await loadChats();
   } catch { /* keep the first-message title */ }
 }
@@ -1067,11 +1102,42 @@ function setVoiceState(s, label) {
 }
 function setVoiceCaption(text, who) {
   const cap = $('#voiceCaption');
+  cap.dataset.who = who;
+  cap.dataset.key = '';
   cap.textContent = who === 'you' ? `“${text}”` : toSpeech(text).trim();
   cap.scrollTop = cap.scrollHeight;
 }
 
-$('#voiceBtn').onclick = startVoice;
+// Runs every frame during voice chat: karaoke-style captions + "interrupt by talking".
+function voiceTick() {
+  if (!state.voice.active) return;
+  requestAnimationFrame(voiceTick);
+  const prog = speaker.progress();
+  const cap = $('#voiceCaption');
+  if (prog) {
+    const words = prog.text.split(/\s+/).filter(Boolean);
+    const k = Math.round(prog.frac * words.length);
+    const key = `${prog.text}|${k}`;
+    if (cap.dataset.key !== key) {
+      cap.dataset.key = key;
+      cap.dataset.who = 'athena';
+      cap.innerHTML = words.map((w, i) => `<span class="w${i < k ? ' said' : ''}">${escapeHtml(w)}</span>`).join(' ');
+    }
+  }
+  // Barge-in: if you start talking while she speaks, she stops and listens.
+  const b = state.voice.barge;
+  if (state.settings.voice_barge_in && speaker.speaking && mic.stream && !mic.muted) {
+    const lvl = mic.level();
+    b.hits = lvl > 0.06 ? b.hits + 1 : Math.max(0, b.hits - 1);
+    if (b.hits > 14) { // ~0.25 s of clear speech
+      b.hits = 0;
+      speaker.stop();
+      stopGenerating();
+    }
+  } else b.hits = 0;
+}
+
+$('#voiceBtn').onclick = () => startVoice();
 $('#voiceEnd').onclick = endVoice;
 $('#voiceMute').onclick = () => {
   mic.muted = !mic.muted;
@@ -1080,6 +1146,7 @@ $('#voiceMute').onclick = () => {
   else if (!speaker.speaking && !state.abort) setVoiceState('listening');
 };
 $('#avatarStage').onclick = () => {
+  if (state.voice.sleeping) { state.voice.wakeUp?.(); return; }
   // Interrupt Athena and go straight back to listening.
   if (speaker.speaking || state.abort) { speaker.stop(); stopGenerating(); }
 };
@@ -1100,12 +1167,16 @@ function hideAvatar() {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.voice.active) endVoice(); });
 
 async function startVoice(firstCommand = '') {
+  if (typeof firstCommand !== 'string') firstCommand = '';
   if (state.voice.active) return;
   if (!state.status.ollama) { toast('Ollama is not running.', 'error'); return; }
   const model = pickDefaultModel('voice');
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); return; }
   state.voice.active = true;
   state.voice.chimeNext = true;
+  state.voice.barge = { hits: 0 };
+  state.voice.silent = 0;
+  state.voice.sleeping = false;
   pauseWake(true);
   mic.muted = false;
   $('#voiceMute').classList.remove('off');
@@ -1113,6 +1184,7 @@ async function startVoice(firstCommand = '') {
   $('#voiceModel').textContent = `Voice chat · ${model}${state.status.whisper ? ' · Whisper (offline)' : ''}`;
   $('#voiceCaption').textContent = '';
   showAvatar();
+  requestAnimationFrame(voiceTick);
   setVoiceState('listening', 'Starting microphone…');
   await voicesReady();
   try {
@@ -1148,6 +1220,7 @@ async function startVoice(firstCommand = '') {
 
 function endVoice() {
   state.voice.active = false;
+  state.voice.wakeUp?.();
   state.voice.listenAbort?.abort();
   speaker.stop();
   speaker.onStart = speaker.onEnd = null;
@@ -1170,6 +1243,8 @@ async function voiceLoop() {
         if (state.voice.chimeNext !== false) listenChime('start');
         const blob = await mic.record({ signal: abort.signal });
         state.voice.chimeNext = !!blob; // no chime again after a silent timeout
+        state.voice.silent = blob || abort.signal.aborted ? 0 : state.voice.silent + 1;
+        if (!blob && state.voice.silent >= 3 && state.settings.voice_sleep && state.voice.active) { await voiceDoze(); continue; }
         if (!blob || !state.voice.active) continue;
         listenChime('end');
         setVoiceState('transcribing');
@@ -1196,6 +1271,19 @@ async function voiceLoop() {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// After a minute of silence the orb dims and waits; tap it or say "Hey Athena" to continue.
+async function voiceDoze() {
+  state.voice.sleeping = true;
+  setVoiceState('sleeping', state.settings.wake_enabled ? 'Dozing — tap the orb or say “Hey Athena”' : 'Dozing — tap the orb to wake me');
+  pauseWake(false);
+  await new Promise((resolve) => { state.voice.wakeUp = resolve; });
+  state.voice.wakeUp = null;
+  state.voice.sleeping = false;
+  state.voice.silent = 0;
+  state.voice.chimeNext = true;
+  if (state.voice.active) pauseWake(true);
+}
+
 // ------------------------------------------------------------ settings
 const dlg = $('#settings');
 
@@ -1215,6 +1303,9 @@ function openSettings(tab = 'general') {
   loadMemories();
   $('#setDirect').checked = !!s.direct_mode;
   fillPersonas();
+  renderAccents();
+  $('#setBargeIn').checked = s.voice_barge_in !== false;
+  $('#setVoiceSleep').checked = s.voice_sleep !== false;
   $('#setPc').checked = !!s.pc_enabled;
   $('#setScreen2').checked = !!s.screen_enabled;
   $('#setCode').checked = !!s.code_enabled;
@@ -1258,7 +1349,38 @@ function openSettings(tab = 'general') {
 }
 $('#openSettings').onclick = () => openSettings();
 
+function renderAccents() {
+  const current = state.settings.accent || 'gold';
+  $('#accentPicker').innerHTML = Object.entries(ACCENTS).map(([id, a]) =>
+    `<button type="button" class="swatch${id === current ? ' active' : ''}" data-accent="${id}" title="${a.name}"><span style="background:linear-gradient(135deg, ${a.logo[0]}, ${a.logo[1]})"></span>${a.name}</button>`).join('');
+}
+$('#accentPicker').onclick = async (e) => {
+  const id = e.target.closest('[data-accent]')?.dataset.accent;
+  if (!id) return;
+  state.settings.accent = id;
+  applyTheme();
+  renderAccents();
+  await saveSettings({ accent: id });
+};
+
+async function loadStats() {
+  const st = await api('/api/stats').catch(() => null);
+  if (!st) return;
+  const tiles = [
+    [st.chats, 'chats'], [st.chats_this_week, 'new this week'], [st.messages_sent, 'messages sent'],
+    [st.voice_replies, 'voice replies'], [st.tasks_done, 'tasks done'], [st.tasks_open, 'tasks open'],
+    [st.memories, 'memories'], [st.reminders_pending, 'upcoming reminders'],
+  ];
+  if (st.busiest_day) tiles.push([st.busiest_day, 'busiest day']);
+  if (st.first_chat) tiles.push([new Date(st.first_chat * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }), 'first chat']);
+  $('#statGrid').innerHTML = tiles.map(([n, label]) => `<div class="stat"><b${typeof n === 'number' ? '' : ' class="text"'}>${escapeHtml(String(n ?? 0))}</b><span>${label}</span></div>`).join('');
+  $('#statModels').innerHTML = st.top_models.length
+    ? st.top_models.map(([m, n]) => `<li><span>${escapeHtml(m)}</span><span class="muted small">${n} replies</span></li>`).join('')
+    : '<li class="muted small">No replies yet.</li>';
+}
+
 function switchTab(tab) {
+  if (tab === 'stats') loadStats();
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('[data-panel]', dlg).forEach((p) => (p.hidden = p.dataset.panel !== tab));
 }
@@ -1310,6 +1432,8 @@ bind('#setWeb', 'web_enabled', (el) => el.checked);
 bind('#setConfirm', 'confirm_changes', (el) => el.checked);
 bind('#setScreen', 'show_on_screen', (el) => el.checked);
 bind('#setPc', 'pc_enabled', (el) => el.checked);
+bind('#setBargeIn', 'voice_barge_in', (el) => el.checked);
+bind('#setVoiceSleep', 'voice_sleep', (el) => el.checked);
 bind('#setScreen2', 'screen_enabled', (el) => el.checked);
 bind('#setCode', 'code_enabled', (el) => el.checked);
 bind('#setDocs', 'docs_enabled', (el) => el.checked);
@@ -1428,6 +1552,10 @@ async function pullModel(name) {
 document.addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.shiftKey && e.key.toLowerCase() === 'o') { e.preventDefault(); newChat(); }
+  if (mod && !e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); toggleSidebar(true); $('#searchChats').focus(); }
+  if (mod && e.shiftKey && e.key.toLowerCase() === 'v') { e.preventDefault(); startVoice(); }
+  const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
+  if ((e.key === '?' && !typing) || (mod && e.key === '/')) { e.preventDefault(); $('#shortcutsDlg').showModal(); }
   if (e.key === 'Escape' && state.abort && !state.voice.active) stopGenerating();
 });
 
@@ -1479,7 +1607,12 @@ function connectEvents() {
     try { ev = JSON.parse(e.data); } catch { return; }
     if (ev.type === 'reminder') fireReminder(ev);
     else if (ev.type === 'briefing') startBriefing();
-    else if (ev.type === 'wake') { if (state.voice.active) return; chime(); startVoice(ev.command || ''); }
+    else if (ev.type === 'wake') {
+      if (state.voice.sleeping) { state.voice.wakeUp?.(); return; }
+      if (state.voice.active) return;
+      chime();
+      startVoice(ev.command || '');
+    }
     else if (ev.type === 'start_voice') startVoice();
   };
 }
@@ -1689,6 +1822,7 @@ $('#makeShortcuts').onclick = async () => {
 
 // ------------------------------------------------------------ boot
 async function init() {
+  $$('[data-logo]').forEach((el) => { el.outerHTML = logoSvg(); });
   const lock = await fetch('/api/lock').then((r) => r.json()).catch(() => ({}));
   if (lock.pin_set && !lock.unlocked) { showLock(); await new Promise((resolve) => unlockWaiters.push(resolve)); }
   state.settings = await api('/api/settings').catch(() => ({}));
