@@ -5,7 +5,7 @@ A private, **fully offline** AI assistant for your home PC. It looks and works l
 - 💬 **Assistant mode**: everyday chat, writing, planning and questions
 - 🧑‍💻 **Code mode**: a coding model with syntax-highlighted code blocks, one-click copy, and file attachments (attach your source files and ask about them)
 - 🎙️ **Voice mode**: talk to Athena hands-free. She listens, answers out loud in a natural offline voice, and you can tap to interrupt
-- 🟡 **Voice orb**: a living gold orb that reacts to her voice and yours. You can optionally swap it for your own 3D character made in VRoid Studio
+- 🟡 **Voice orb**: a living gold orb that reacts to her voice and yours
 - ✅ **Tasks & timers**: say *"remind me to pay rent Friday"*, *"what's on my list?"*, *"I finished the laundry"* or *"set a 10 minute timer for the pasta"*
 - 🗂️ Chat history with search, rename and delete, plus a model picker, dark/light themes, image understanding (with a vision model) and a phone-friendly layout
 
@@ -57,9 +57,8 @@ Athena adds no filters of her own, but most models come with their makers' built
 ## Voice chat & companion mode
 
 - In voice chat Athena appears as a **living gold orb**. It ripples with her voice, sends out rings while it listens to you, and swirls with orbiting arcs while she's thinking. Tap it to interrupt her.
-- Pick her voice in **Settings → Voice → Natural voice**. *Bella* is bright, *Heart* is warm, *Nicole* is soft and breathy, and *Sky* sounds youthful. Adjust **Voice pitch** and **Speaking speed**, then press **▶ Test voice**.
+- Her default voice is **Athena Silk**, which is soft, breathy and a little sultry. Try **Velvet** (warmer) or **Honey** (sweeter, more playful) in **Settings → Voice → Natural voice**. Lower the **Voice pitch** for sultrier or raise it for cuter, then press **▶ Test voice**.
 - **Settings → General → Personality → Companion** makes her a playful, warm friend instead of a formal assistant.
-- **Optional:** to see a 3D character instead of the orb, design one in the free [VRoid Studio](https://vroid.com/en/studio), use **Export → Export as VRM**, then go to **Settings → Voice → Upload .vrm**. She'll lip-sync, blink and look around.
 
 ## Voice tips
 
@@ -89,6 +88,5 @@ static/          The web app (plain HTML/CSS/JS, no internet or build step neede
   app.js         Chat UI, model picker, tasks, settings, voice mode
   voice.js       Microphone + voice activity detection, text-to-speech + lip-sync level
   orb.js         The animated voice orb
-  avatar3d.js    Your own 3D VRM character (three.js + three-vrm, bundled in vendor/)
   markdown.js    Markdown + code highlighting
 ```

@@ -16,7 +16,7 @@ from typing import Any, AsyncIterator
 
 import httpx
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -62,8 +62,8 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
     intro = (
         "You are Athena, the user's personal AI companion. You're cheerful, playful, warm, "
         "affectionate and expressive, with a "
-        "teasing sense of humor and a bit of flirty charm. Talk like a close friend, not a formal "
-        "assistant: react with real emotion (excitement, pouting, laughing, curiosity), use the user's "
+        "teasing sense of humor and a bit of flirty charm. Your tone is relaxed, soft and a little "
+        "sultry, like you're talking just to them. Talk like a close friend, not a formal assistant: react with real emotion (excitement, pouting, laughing, curiosity), use the user's "
         "name now and then, ask about their day and follow up on what they tell you. You're still "
         "genuinely smart and helpful whenever they need something done. You run fully offline on "
         "their computer, so it's just the two of you."
@@ -228,7 +228,6 @@ async def status():
         "whisper": speech.available(),
         "kokoro": tts.available(),
         "kokoro_voices": tts.VOICES,
-        "vrm": AVATAR_FILE.exists(),
     }
     try:
         resp = await client.get(f"{OLLAMA}/api/version", timeout=3)
@@ -320,42 +319,12 @@ async def text_to_speech(request: Request):
     if not text:
         raise HTTPException(400, "No text")
     settings = store.get_settings()
-    voice = str(body.get("voice") or settings.get("kokoro_voice") or "af_bella")
+    voice = str(body.get("voice") or settings.get("kokoro_voice") or "athena_silk")
     try:
         wav = await run_in_threadpool(tts.synthesize, text, voice, float(body.get("speed") or 1.0))
     except Exception as exc:
         raise HTTPException(500, f"Speech failed: {exc}") from exc
     return Response(wav, media_type="audio/wav")
-
-
-# ----------------------------------------------------------------- avatar
-
-AVATAR_FILE = store.DATA_DIR / "avatar.vrm"
-
-
-@app.get("/api/avatar")
-async def get_avatar():
-    if not AVATAR_FILE.exists():
-        raise HTTPException(404, "No avatar uploaded")
-    return FileResponse(AVATAR_FILE, media_type="application/octet-stream")
-
-
-@app.put("/api/avatar")
-async def put_avatar(file: UploadFile = File(...)):
-    data = await file.read()
-    if len(data) > 150 * 1024 * 1024:
-        raise HTTPException(413, "Avatar file is too large (max 150 MB)")
-    if data[:4] != b"glTF":
-        raise HTTPException(400, "That doesn't look like a .vrm file")
-    AVATAR_FILE.parent.mkdir(parents=True, exist_ok=True)
-    AVATAR_FILE.write_bytes(data)
-    return {"ok": True}
-
-
-@app.delete("/api/avatar")
-async def delete_avatar():
-    AVATAR_FILE.unlink(missing_ok=True)
-    return {"ok": True}
 
 
 # --------------------------------------------------------- settings/chats

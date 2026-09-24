@@ -17,11 +17,21 @@ FILES = {
     "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin",
 }
 
-# Friendly names for the female English voices (Kokoro also has male and other-language voices).
+# Athena's signature voices: blends of Kokoro voices for a soft, breathy, sultry sound.
+PRESETS = {
+    "athena_silk": [("af_nicole", 0.55), ("af_bella", 0.45)],
+    "athena_velvet": [("af_nicole", 0.5), ("af_heart", 0.5)],
+    "athena_honey": [("af_bella", 0.6), ("af_sky", 0.25), ("af_nicole", 0.15)],
+}
+
+# Friendly names for the voices (Kokoro also has male and other-language voices).
 VOICES = {
+    "athena_silk": "Athena Silk — soft, breathy, sultry (default)",
+    "athena_velvet": "Athena Velvet — warm, smooth, sultry",
+    "athena_honey": "Athena Honey — sweet, playful, flirty",
     "af_bella": "Bella — bright, energetic (US)",
     "af_heart": "Heart — warm, expressive (US)",
-    "af_nicole": "Nicole — soft, breathy (US)",
+    "af_nicole": "Nicole — whispery, ASMR-like (US)",
     "af_sky": "Sky — light, youthful (US)",
     "af_sarah": "Sarah — friendly, clear (US)",
     "af_nova": "Nova — calm, confident (US)",
@@ -78,16 +88,20 @@ def warm_up() -> None:
         pass
 
 
-def synthesize(text: str, voice: str = "af_bella", speed: float = 1.0) -> bytes:
+def synthesize(text: str, voice: str = "athena_silk", speed: float = 1.0) -> bytes:
     """Return a 16-bit mono WAV file of ``text`` spoken by ``voice``."""
     import numpy as np
 
     if voice not in VOICES:
-        voice = "af_bella"
+        voice = "athena_silk"
     lang = "en-gb" if voice.startswith("b") else "en-us"
     speed = min(max(float(speed), 0.5), 2.0)
     with _lock:
-        samples, rate = _get_engine().create(text[:2000], voice=voice, speed=speed, lang=lang)
+        engine = _get_engine()
+        style = voice
+        if voice in PRESETS:
+            style = sum(engine.get_voice_style(name) * weight for name, weight in PRESETS[voice]).astype(np.float32)
+        samples, rate = engine.create(text[:2000], voice=style, speed=speed, lang=lang)
     pcm = (np.clip(samples, -1.0, 1.0) * 32767).astype("<i2").tobytes()
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:

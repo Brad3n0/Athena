@@ -36,15 +36,13 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "whisper_device": "cpu",
     # Text-to-speech (browser / Windows voices, work offline)
     "tts_voice": "",
-    "tts_rate": 1.05,
+    "tts_rate": 0.97,
     # "auto" uses Kokoro (natural offline voice) when installed, else the system voices
     "tts_engine": "auto",
-    "kokoro_voice": "af_bella",
-    "voice_pitch": 1.08,
+    "kokoro_voice": "athena_silk",
+    "voice_pitch": 0.95,
     # "assistant" = helpful and professional, "companion" = playful, warm friend
     "persona": "assistant",
-    # What appears in voice chat: "orb" or "vrm" (your own 3D character)
-    "avatar": "orb",
     "auto_speak": False,
 }
 
