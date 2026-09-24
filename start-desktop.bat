@@ -1,6 +1,6 @@
 @echo off
 cd /d "%~dp0"
-if not exist ".venv\Scripts\pythonw.exe" (
+if not exist ".venv\athena-ready" (
   echo Run start.bat once first to set Athena up.
   pause
   exit /b 1
