@@ -13,7 +13,15 @@ def main() -> None:
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--preload-whisper", metavar="MODEL", help="Download a Whisper model for offline use and exit")
     parser.add_argument("--download-voice", action="store_true", help="Download the natural Kokoro voice and exit")
+    parser.add_argument("--desktop", action="store_true", help="Run as a desktop app with a tray icon and hotkey")
+    parser.add_argument("--hidden", action="store_true", help="With --desktop: start in the tray without opening a window")
     args = parser.parse_args()
+
+    if args.desktop:
+        from .desktop import main as desktop_main
+
+        desktop_main(args.host, args.port, hidden=args.hidden)
+        return
 
     if args.download_voice:
         from .tts import download

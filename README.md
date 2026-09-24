@@ -58,6 +58,20 @@ Athena adds no filters of her own, but most models come with their makers' built
 - **Direct mode** (Settings → General) tells Athena to answer plainly, without lecturing or adding unneeded disclaimers. It works with any model.
 - **Community "abliterated" or "uncensored" models** have the refusal behaviour removed. Athena lists a few under **Settings → Models → Fewer refusals** (`huihui_ai/qwen3-abliterated`, `dolphin3`), and more can be found by searching "abliterated" on [ollama.com](https://ollama.com/search?q=abliterated). They're made by the community rather than the original companies. They're usually a little less accurate, and they may not handle Athena's tasks and timers as reliably. After downloading one, pick it as your default in **Settings → Models**.
 
+## Desktop app, "Hey Athena" and more
+
+- **Desktop app:** double-click **`start-desktop.bat`**. Athena opens in her own window and lives in the system tray. Press **Ctrl+Space** anywhere to bring her up, or **Ctrl+Shift+Space** to start talking. In **Settings → Desktop app** you can turn on **Start with Windows** and create Desktop/Start menu shortcuts.
+- **"Hey Athena":** turn it on in **Settings → Voice**. Say *"Hey Athena"*, or *"Hey Athena, what's the weather?"*, and she starts listening. It needs `install-voice`. Everything is processed offline, and nothing is recorded or kept.
+- **Reminders & morning briefing:** *"remind me at 6pm to call mom"* pops up and speaks at 6pm, even if the window was closed; the tray shows a notification. Set a **Morning briefing** time and your **home city** in **Settings → Integrations**, and she greets you with the weather, your tasks and your reminders.
+- **"What's on my screen?":** ask her, or click the 🖥 button next to the paperclip to attach a screenshot. This needs a vision model like `qwen2.5vl:7b` or `gemma3:12b`.
+- **Your documents:** in **Settings → Knowledge**, add folders of notes, PDFs and Word files, then click **Index now**. Ask things like *"what does my lease say about pets?"*
+- **PC control:** *"open Spotify"*, *"volume to 30"*, *"pause the music"*, *"lock my PC"*, *"shut down in an hour"*, and *"rewrite what I copied to sound professional"* (clipboard).
+- **Run code:** Python code blocks get a **▶ Run** button, and in chat she can run code to check her own work (she asks first).
+- **Images:** connect Stable Diffusion WebUI Forge in **Settings → Integrations**, then say *"draw a gold owl on a night sky"*.
+- **Smart home:** connect Home Assistant in **Settings → Integrations**: *"turn off the kitchen lights"*, *"set the thermostat to 70"*.
+- **Personalities:** Assistant, Companion, Coach, Study Buddy and Chef, or create your own with its own voice (**Settings → General**).
+- **PIN lock, export & backup:** **Settings → Privacy & data**. To export a single chat, hover over it in the sidebar and click ⤓ to save it as Markdown, Word or PDF.
+
 ## Abilities: files, web, memory
 
 Turn these on or off in **Settings → Abilities**. They need a model that supports tools; `gpt-oss:20b` and `qwen3` work best.
@@ -97,6 +111,16 @@ athena/          Python server (FastAPI)
   tools.py       Tools the AI can call (tasks, timers, memory, files, web) + approval rules
   files.py       Safe file operations limited to allowed folders, with undo journal
   web.py         Web search (DuckDuckGo) and page reading
+  scheduler.py   Reminders, timers and the morning briefing
+  events.py      Live events to open windows (reminders, wake word)
+  pc.py          Apps, volume/media keys, power, clipboard, screenshots, running code
+  knowledge.py   Document indexing and search (Ollama embeddings)
+  integrations.py  Image generation (Stable Diffusion) and Home Assistant
+  weather.py     Weather (Open-Meteo)
+  security.py    PIN lock
+  exporter.py    Chat export and backup/restore
+  wake.py        "Hey Athena" wake word
+  desktop.py     Tray icon, hotkeys, app window, start with Windows
   speech.py      Offline Whisper transcription
   tts.py         Offline natural voice (Kokoro)
   store.py       JSON storage for chats, tasks, settings

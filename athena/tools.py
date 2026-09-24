@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from . import files, store
+from . import files, knowledge, pc, scheduler, store
 
 
 @dataclass
@@ -21,7 +21,8 @@ class Tool:
     description: str
     params: dict[str, Any] = field(default_factory=dict)
     required: list[str] = field(default_factory=list)
-    run: Callable[..., Any] | None = None  # sync; web tools are run by the server (async)
+    run: Callable[..., Any] | None = None  # sync, runs in a worker thread
+    arun: Callable[..., Any] | None = None  # async (args, ctx) for network tools; ctx has client/ollama/settings
     approve: Callable[[dict[str, Any]], str | None] | None = None  # returns a summary if approval is needed
 
     def spec(self) -> dict[str, Any]:
@@ -74,7 +75,74 @@ def _timer(a):
     minutes = float(a.get("minutes", 0))
     if minutes <= 0 or minutes > 24 * 60:
         return {"error": "minutes must be between 0 and 1440"}
-    return {"timer_set": True, "seconds": round(minutes * 60), "label": str(a.get("label", "") or "Timer")}
+    label = str(a.get("label", "") or "Timer")
+    item = scheduler.add(label, scheduler.parse_when(minutes=minutes), kind="timer")
+    return {"timer_set": True, "seconds": round(minutes * 60), "label": label, "id": item["id"]}
+
+
+def _reminder(a):
+    try:
+        when = scheduler.parse_when(str(a.get("at", "")), a.get("minutes_from_now"))
+        item = scheduler.add(str(a.get("text", "")), when)
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return {"reminder_set": scheduler.describe(item)}
+
+
+def _list_reminders(_a):
+    items = [scheduler.describe(r) for r in scheduler.pending()]
+    return {"reminders": items, "count": len(items)}
+
+
+def _cancel_reminder(a):
+    r = scheduler.cancel(str(a.get("reminder", "")))
+    return {"cancelled": scheduler.describe(r)} if r else {"error": "No matching reminder"}
+
+
+# ------------------------------------------------------------- async tools
+
+async def _web_search(a, ctx):
+    from . import web
+    return await web.search(ctx["client"], str(a.get("query", "")))
+
+
+async def _read_webpage(a, ctx):
+    from . import web
+    return await web.read_page(ctx["client"], str(a.get("url", "")))
+
+
+async def _weather(a, ctx):
+    from . import weather
+    loc = str(a.get("location") or ctx["settings"].get("home_location") or "")
+    return await weather.get_weather(ctx["client"], loc, ctx["settings"].get("units", "imperial"))
+
+
+async def _generate_image(a, ctx):
+    from . import integrations
+    return await integrations.generate_image(ctx["client"], str(a.get("prompt", "")), str(a.get("negative", "")),
+                                             int(a.get("width") or 1024), int(a.get("height") or 1024))
+
+
+async def _ha_list(a, ctx):
+    from . import integrations
+    return await integrations.list_devices(ctx["client"], str(a.get("query", "")))
+
+
+async def _ha_control(a, ctx):
+    from . import integrations
+    return await integrations.control_device(ctx["client"], str(a.get("device", "")), str(a.get("action", "")), a.get("value"))
+
+
+async def _look(a, ctx):
+    return await ctx["look_at_screen"](str(a.get("question", "")))
+
+
+def _search_docs(a):
+    from .server import OLLAMA
+    try:
+        return knowledge.search(OLLAMA, str(a.get("query", "")), int(a.get("count") or 6))
+    except knowledge.KnowledgeError as exc:
+        return {"error": str(exc)}
 
 
 # ------------------------------------------------------------------ memory
@@ -118,6 +186,29 @@ def _approve_open(a):
 
 def _open(a):
     return {"opened": files.open_on_screen(str(a.get("target", "")))}
+
+
+def _approve_code(a):
+    code = str(a.get("code", "")).strip()
+    first = "\n".join(code.splitlines()[:12])
+    more = "\n…" if len(code.splitlines()) > 12 else ""
+    return f"Run this Python code on your PC:\n{first}{more}"
+
+
+def _approve_home(a):
+    action = str(a.get("action", "")).lower()
+    if action in ("unlock", "open"):
+        return f"{action.title()} {a.get('device')}"
+    return None
+
+
+def _pc(fn):
+    def run(a):
+        try:
+            return fn(**a)
+        except pc.PCError as exc:
+            return {"error": str(exc)}
+    return run
 
 
 TOOLS: list[Tool] = [
@@ -168,9 +259,53 @@ TOOLS: list[Tool] = [
     Tool("open_on_screen", "files", "Open a file, folder or web address on the user's screen (in its app, File Explorer or the browser).",
          {"target": S("File/folder path or https:// URL")}, ["target"], run=_open, approve=_approve_open),
 
+    Tool("set_reminder", "tasks", "Remind the user at a specific time (pops up and speaks). Work out the exact date/time "
+         "from the current time, or use minutes_from_now.",
+         {"text": S("What to remind them about"), "at": S("Local date/time in ISO format, e.g. 2026-10-01T18:00"),
+          "minutes_from_now": {"type": "number", "description": "Alternative to 'at'"}}, ["text"], run=_reminder),
+    Tool("list_reminders", "tasks", "List upcoming reminders and timers.", run=_list_reminders),
+    Tool("cancel_reminder", "tasks", "Cancel a reminder or timer.", {"reminder": S("Reminder id or words from it")}, ["reminder"], run=_cancel_reminder),
+
     Tool("web_search", "web", "Search the internet for current information. Returns titles, links and snippets.",
-         {"query": S("What to search for")}, ["query"]),
-    Tool("read_webpage", "web", "Read the text of a web page (use after web_search to get details).", {"url": S("Page address")}, ["url"]),
+         {"query": S("What to search for")}, ["query"], arun=_web_search),
+    Tool("read_webpage", "web", "Read the text of a web page (use after web_search to get details).", {"url": S("Page address")}, ["url"], arun=_read_webpage),
+    Tool("get_weather", "web", "Current weather and 3-day forecast. Leave location empty for the user's home city.",
+         {"location": S("City, e.g. 'Chicago' or 'Springfield, IL'")}, arun=_weather),
+
+    Tool("open_app", "pc", "Open an app on the PC (e.g. Spotify, Chrome, Notepad, Calculator, Steam, Discord).",
+         {"name": S("App name")}, ["name"], run=_pc(pc.open_app)),
+    Tool("media_control", "pc", "Control music/video playback on the PC.",
+         {"action": S("play_pause, next, previous or stop", enum=["play_pause", "next", "previous", "stop"])}, ["action"], run=_pc(pc.media)),
+    Tool("set_volume", "pc", "Change the PC's volume: set a level, change it up/down, or toggle mute.",
+         {"level": {"type": "number", "description": "0-100"}, "change": {"type": "number", "description": "e.g. 10 or -20"},
+          "mute": {"type": "boolean", "description": "true to toggle mute"}}, run=_pc(pc.volume)),
+    Tool("lock_computer", "pc", "Lock the PC (Windows lock screen).", run=_pc(lambda: pc.lock())),
+    Tool("power", "pc", "Shut down, restart or sleep the PC, optionally after some minutes; or cancel a scheduled shutdown.",
+         {"action": S("shutdown, restart, sleep or cancel", enum=["shutdown", "restart", "sleep", "cancel"]),
+          "minutes": {"type": "number", "description": "Delay in minutes (shutdown/restart)"}}, ["action"], run=_pc(pc.power),
+         approve=lambda a: None if a.get("action") == "cancel" else f"{str(a.get('action', '')).title()} the PC" + (f" in {a.get('minutes')} minutes" if a.get("minutes") else " now")),
+    Tool("get_clipboard", "pc", "Read the text the user last copied (their clipboard).", run=_pc(lambda: pc.get_clipboard())),
+    Tool("set_clipboard", "pc", "Put text on the user's clipboard so they can paste it.", {"text": S("Text to copy")}, ["text"], run=_pc(pc.set_clipboard)),
+
+    Tool("look_at_screen", "screen", "Take a screenshot of the user's screen and look at it. Use when they ask about "
+         "what's on their screen, an error they're seeing, a window, a game, a page, etc.",
+         {"question": S("What to look for or answer about the screen")}, arun=_look),
+    Tool("run_python", "code", "Run Python code on the user's PC and get its output (for calculations, data work, testing code). "
+         "Print results. Runs in a temporary folder with a 30 second limit.", {"code": S("Complete Python script")}, ["code"],
+         run=_pc(pc.run_python), approve=_approve_code),
+    Tool("search_documents", "docs", "Search the user's own documents (notes, PDFs, Word files in their Knowledge folders) by meaning. "
+         "Use it for questions about their files, schoolwork, work docs, manuals, leases, etc. Cite the file names.",
+         {"query": S("What to look for"), "count": {"type": "integer", "description": "How many passages (default 6)"}}, ["query"], run=_search_docs),
+
+    Tool("generate_image", "images", "Create an image from a text description (Stable Diffusion). Write a detailed visual prompt.",
+         {"prompt": S("Detailed description of the image"), "negative": S("Things to avoid"),
+          "width": {"type": "integer"}, "height": {"type": "integer"}}, ["prompt"], arun=_generate_image),
+    Tool("list_home_devices", "home", "List smart home devices (lights, switches, thermostats, locks...) and their state.",
+         {"query": S("Optional filter, e.g. 'kitchen' or 'light'")}, arun=_ha_list),
+    Tool("control_home_device", "home", "Control a smart home device.",
+         {"device": S("Device name or entity id"), "action": S("on, off, toggle, brightness, temperature, volume, open, close, lock, unlock, activate, play, pause, start, stop, return_home"),
+          "value": {"type": "number", "description": "Brightness %, temperature or volume % when needed"}}, ["device", "action"],
+         arun=_ha_control, approve=_approve_home),
 ]
 BY_NAME = {t.name: t for t in TOOLS}
 
@@ -179,9 +314,16 @@ def enabled_tools(settings: dict[str, Any]) -> list[Tool]:
     groups = {"core"}
     if settings.get("tools_enabled"):
         groups.add("tasks")
-    for key, group in (("memory_enabled", "memory"), ("files_enabled", "files"), ("web_enabled", "web")):
+    for key, group in (("memory_enabled", "memory"), ("files_enabled", "files"), ("web_enabled", "web"),
+                       ("pc_enabled", "pc"), ("screen_enabled", "screen"), ("code_enabled", "code")):
         if settings.get(key):
             groups.add(group)
+    if settings.get("docs_enabled") and settings.get("knowledge_folders"):
+        groups.add("docs")
+    if settings.get("image_api"):
+        groups.add("images")
+    if settings.get("ha_url") and settings.get("ha_token"):
+        groups.add("home")
     return [t for t in TOOLS if t.group in groups]
 
 
@@ -199,13 +341,22 @@ def run_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
     tool = BY_NAME.get(name)
     if not tool or not tool.run:
         return {"error": f"Unknown tool: {name}"}
-    args = {k: v for k, v in args.items() if v is not None}
+    args = {k: v for k, v in args.items() if v is not None and v != ""}
     try:
         return tool.run(args)
     except files.FileError as exc:
         return {"error": str(exc)}
     except TypeError as exc:
         return {"error": f"Bad arguments: {exc}"}
+    except Exception as exc:  # never let a tool crash the chat
+        return {"error": str(exc)}
+
+
+async def arun_tool(name: str, args: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
+    tool = BY_NAME.get(name)
+    args = {k: v for k, v in args.items() if v is not None and v != ""}
+    try:
+        return await tool.arun(args, ctx)
     except Exception as exc:  # never let a tool crash the chat
         return {"error": str(exc)}
 

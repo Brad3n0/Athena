@@ -27,7 +27,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "user_name": "",
     "custom_instructions": "",
     # Default model per mode. Empty = let the UI pick the best installed one.
-    "models": {"assistant": "", "code": "", "voice": ""},
+    "models": {"assistant": "", "code": "", "voice": "", "vision": ""},
     "tools_enabled": True,
     # Abilities
     "memory_enabled": True,
@@ -36,6 +36,31 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "confirm_changes": True,  # ask before moving/deleting/writing files
     "show_on_screen": True,  # open folders/pages on screen while Athena works
     "file_folders": [],  # empty = Desktop, Documents, Downloads, Pictures, Music, Videos
+    "pc_enabled": True,  # open apps, volume, media keys, lock, clipboard
+    "screen_enabled": True,  # "what's on my screen?"
+    "code_enabled": True,  # run Python code (always asks first)
+    "docs_enabled": True,  # search your documents
+    "knowledge_folders": [],
+    "embed_model": "nomic-embed-text",
+    # Briefing / weather
+    "briefing_time": "",  # e.g. "07:30"; empty = off
+    "briefing_last": "",
+    "home_location": "",
+    "units": "imperial",
+    # Integrations
+    "image_api": "",  # Stable Diffusion WebUI / Forge, e.g. http://127.0.0.1:7860
+    "ha_url": "",  # Home Assistant, e.g. http://homeassistant.local:8123
+    "ha_token": "",
+    # Custom personalities: [{"id","name","instructions","voice"}]
+    "personas": [],
+    # PIN lock
+    "pin_hash": "",
+    "pin_salt": "",
+    "auto_lock_minutes": 0,
+    # Desktop app
+    "wake_enabled": False,
+    "hotkey": "<ctrl>+<space>",
+    "voice_hotkey": "<ctrl>+<shift>+<space>",
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "theme": "dark",

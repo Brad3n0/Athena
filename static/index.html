@@ -42,6 +42,10 @@
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         Settings
       </button>
+      <button class="side-link" id="lockBtn" hidden>
+        <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        Lock Athena
+      </button>
       <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
     </div>
   </aside>
@@ -87,6 +91,9 @@
             <input type="file" id="fileInput" multiple hidden />
             <svg viewBox="0 0 24 24"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 8"/></svg>
           </label>
+          <button type="button" class="icon-btn" id="shotBtn" title="Show Athena your screen (screenshot in 3 seconds)">
+            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </button>
           <div class="spacer"></div>
           <button type="button" class="icon-btn" id="micBtn" title="Dictate">
             <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
@@ -153,6 +160,10 @@
         <button type="button" data-tab="models">Models</button>
         <button type="button" data-tab="voice">Voice</button>
         <button type="button" data-tab="abilities">Abilities</button>
+        <button type="button" data-tab="knowledge">Knowledge</button>
+        <button type="button" data-tab="integrations">Integrations</button>
+        <button type="button" data-tab="desktop">Desktop app</button>
+        <button type="button" data-tab="privacy">Privacy &amp; data</button>
       </nav>
 
       <section data-panel="general">
@@ -163,12 +174,15 @@
         <label>Theme
           <select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select>
         </label>
-        <label>Personality
-          <select id="setPersona">
-            <option value="assistant">Assistant — helpful and professional</option>
-            <option value="companion">Companion — playful, warm friend</option>
-          </select>
-        </label>
+        <label>Personality <select id="setPersona"></select></label>
+        <details class="persona-editor" id="personaEditor">
+          <summary>Create your own personality</summary>
+          <ul class="memories" id="personaList"></ul>
+          <input id="personaName" placeholder="Name, e.g. Gym Bro, Pirate, Therapist-style listener" />
+          <textarea id="personaText" rows="3" placeholder="How should she act? e.g. Talk like a laid-back surfer, keep it short and funny."></textarea>
+          <select id="personaVoice"><option value="">Voice: same as usual</option></select>
+          <button type="button" class="ghost" id="personaSave">Save personality</button>
+        </details>
         <label class="check"><input type="checkbox" id="setDirect" /> Direct mode — straight answers, no lecturing or unnecessary disclaimers</label>
       </section>
 
@@ -176,6 +190,7 @@
         <label>Assistant model <select id="setModelAssistant"></select></label>
         <label>Code model <select id="setModelCode"></select></label>
         <label>Voice model <span class="muted small">(pick a fast one)</span> <select id="setModelVoice"></select></label>
+        <label>Vision model <span class="muted small">(for "what's on my screen?" and images)</span> <select id="setModelVision"></select></label>
 
         <h3>Download a model</h3>
         <p class="muted small">Needs internet once. Pick based on your graphics card memory (VRAM). Bigger = smarter but slower.</p>
@@ -195,7 +210,11 @@
         <label class="check"><input type="checkbox" id="setTools" /> Tasks &amp; timers</label>
         <label class="check"><input type="checkbox" id="setMemory" /> Memory — remembers things you tell her, across all chats</label>
         <label class="check"><input type="checkbox" id="setFiles" /> Files — find, read, move, organize, create and delete files</label>
-        <label class="check"><input type="checkbox" id="setWeb" /> Web — search the internet and read pages (when you're online)</label>
+        <label class="check"><input type="checkbox" id="setWeb" /> Web — search the internet, read pages, check the weather (when you're online)</label>
+        <label class="check"><input type="checkbox" id="setPc" /> PC control — open apps, volume, music, lock/shutdown, clipboard</label>
+        <label class="check"><input type="checkbox" id="setScreen2" /> Screen — "what's on my screen?" (needs a vision model)</label>
+        <label class="check"><input type="checkbox" id="setCode" /> Run code — she can run Python to check her work (always asks first)</label>
+        <label class="check"><input type="checkbox" id="setDocs" /> Documents — search your Knowledge folders</label>
         <label class="check"><input type="checkbox" id="setConfirm" /> Ask me before she moves, writes or deletes anything</label>
         <label class="check"><input type="checkbox" id="setScreen" /> Show her work on my screen (opens folders in File Explorer and pages in the browser as she works)</label>
         <label>Folders Athena may use <span class="muted small">(one per line)</span>
@@ -204,6 +223,84 @@
         <p class="muted small" style="margin-top:-8px">Leave empty to use your Desktop, Documents, Downloads, Pictures, Music and Videos. She can't see anything outside these.</p>
         <h3>Memories</h3>
         <ul class="memories" id="memoryList"></ul>
+      </section>
+
+      <section data-panel="knowledge" hidden>
+        <p class="muted small" style="margin-top:0">Point Athena at folders of notes, PDFs and Word documents, then ask about them: <i>“what does my lease say about pets?”</i> Everything is indexed and searched on your PC.</p>
+        <label>Knowledge folders <span class="muted small">(one per line)</span>
+          <textarea id="setKnowledge" rows="4" spellcheck="false" placeholder="C:\Users\you\Documents\School&#10;C:\Users\you\Documents\Work"></textarea>
+        </label>
+        <label>Embedding model
+          <select id="setEmbed">
+            <option value="nomic-embed-text">nomic-embed-text — fast, recommended (270 MB)</option>
+            <option value="mxbai-embed-large">mxbai-embed-large — more accurate (670 MB)</option>
+            <option value="embeddinggemma">embeddinggemma — Google, multilingual (620 MB)</option>
+          </select>
+        </label>
+        <div class="pull-row">
+          <button type="button" class="primary" id="indexBtn">Index now</button>
+          <button type="button" class="ghost" id="embedPull">Download embedding model</button>
+        </div>
+        <div class="progress" id="indexProgress" hidden><div class="bar"></div><span></span></div>
+        <p class="muted small" id="indexStatus"></p>
+      </section>
+
+      <section data-panel="integrations" hidden>
+        <h3 style="margin-top:0">Weather &amp; morning briefing</h3>
+        <label>Home city <input id="setCity" placeholder="e.g. Chicago or Springfield, IL" /></label>
+        <label>Units
+          <select id="setUnits"><option value="imperial">°F, mph</option><option value="metric">°C, km/h</option></select>
+        </label>
+        <label>Morning briefing at <span class="muted small">(Athena greets you with the weather, your tasks and reminders)</span>
+          <input type="time" id="setBriefing" />
+        </label>
+        <div class="pull-row">
+          <button type="button" class="ghost" id="testWeather">Test weather</button>
+          <button type="button" class="ghost" id="briefNow">☀ Brief me now</button>
+        </div>
+        <p class="muted small" id="weatherStatus"></p>
+
+        <h3>Image generation</h3>
+        <p class="muted small">Uses Stable Diffusion running on your PC. Install <b>Stable Diffusion WebUI Forge</b> (free, one-click), start it with <code>--api</code>, then enter its address.</p>
+        <label>Image generator address <input id="setImageApi" placeholder="http://127.0.0.1:7860" /></label>
+        <button type="button" class="ghost" id="testImages">Test connection</button>
+        <p class="muted small" id="imagesStatus"></p>
+
+        <h3>Smart home</h3>
+        <p class="muted small">Connect <b>Home Assistant</b> to control lights, thermostats, locks and more. Create a token in Home Assistant → your profile → Security → Long-lived access tokens.</p>
+        <label>Home Assistant address <input id="setHaUrl" placeholder="http://homeassistant.local:8123" /></label>
+        <label>Access token <input id="setHaToken" type="password" autocomplete="off" /></label>
+        <button type="button" class="ghost" id="testHome">Test connection</button>
+        <p class="muted small" id="homeStatus"></p>
+      </section>
+
+      <section data-panel="desktop" hidden>
+        <p class="muted small" style="margin-top:0">Run Athena as a desktop app: she lives in the system tray, opens in her own window, and pops up with a shortcut from anywhere. Start it with <b>start-desktop.bat</b>.</p>
+        <p class="small" id="desktopStatus"></p>
+        <label>Open Athena shortcut <input id="setHotkey" placeholder="<ctrl>+<space>" /></label>
+        <label>Start talking shortcut <input id="setVoiceHotkey" placeholder="<ctrl>+<shift>+<space>" /></label>
+        <p class="muted small" style="margin-top:-8px">Format: <code>&lt;ctrl&gt;+&lt;space&gt;</code>, <code>&lt;ctrl&gt;+&lt;alt&gt;+a</code>, <code>&lt;cmd&gt;+&lt;shift&gt;+a</code>. Takes effect right away in the desktop app.</p>
+        <label class="check"><input type="checkbox" id="setAutostart" /> Start Athena when Windows starts (quietly, in the tray)</label>
+        <button type="button" class="ghost" id="makeShortcuts">Create desktop &amp; Start menu shortcuts</button>
+      </section>
+
+      <section data-panel="privacy" hidden>
+        <h3 style="margin-top:0">PIN lock</h3>
+        <p class="muted small">Require a PIN to open Athena — useful if others use this PC or you use her from your phone.</p>
+        <p class="small" id="pinStatus"></p>
+        <label id="pinCurrentWrap">Current PIN <input id="pinCurrent" type="password" inputmode="numeric" autocomplete="off" /></label>
+        <label>New PIN <span class="muted small">(4–12 digits, leave empty to remove)</span> <input id="pinNew" type="password" inputmode="numeric" autocomplete="off" /></label>
+        <button type="button" class="ghost" id="pinSave">Save PIN</button>
+        <label style="margin-top:14px">Lock automatically after
+          <select id="setAutoLock"><option value="0">Never</option><option value="5">5 minutes idle</option><option value="15">15 minutes idle</option><option value="60">1 hour idle</option></select>
+        </label>
+
+        <h3>Backup</h3>
+        <p class="muted small">One file with all your chats, tasks, memories, reminders and settings.</p>
+        <div class="pull-row">
+          <a class="ghost file-btn" id="backupBtn" href="/api/backup">Download backup</a>
+          <label class="ghost file-btn">Restore from backup<input type="file" id="restoreFile" accept=".zip" hidden /></label>
+        </div>
       </section>
 
       <section data-panel="voice" hidden>
@@ -221,6 +318,10 @@
         <label>Voice pitch <span class="muted small">(lower = sultrier, higher = cuter)</span> <input type="range" id="setPitch" min="0.85" max="1.35" step="0.01" /></label>
         <button type="button" class="ghost" id="testVoice">▶ Test voice</button>
         <label class="check" style="margin-top:14px"><input type="checkbox" id="setAutoSpeak" /> Read every reply aloud in text chats</label>
+
+        <h3>“Hey Athena”</h3>
+        <label class="check"><input type="checkbox" id="setWake" /> Listen for “Hey Athena” and start talking hands-free</label>
+        <p class="muted small" id="wakeStatus"></p>
 
         <h3>Listening</h3>
         <label>Speech recognition (Whisper) model
@@ -251,6 +352,22 @@
       <button type="button" class="primary" id="approvalAllow">Allow</button>
     </div>
   </div>
+</div>
+
+<div class="lock-screen" id="lockScreen" hidden>
+  <img src="logo.svg" alt="" class="lock-logo" />
+  <div class="lock-title">Athena is locked</div>
+  <form id="unlockForm" class="lock-form">
+    <input id="unlockPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Enter PIN" maxlength="12" />
+    <button class="round" title="Unlock"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+  </form>
+  <div class="lock-error" id="unlockError"></div>
+</div>
+
+<div class="export-menu" id="exportMenu" hidden>
+  <button type="button" data-export="md">Markdown (.md)</button>
+  <button type="button" data-export="docx">Word (.docx)</button>
+  <button type="button" data-export="pdf">PDF (print)</button>
 </div>
 
 <div class="toasts" id="toasts"></div>

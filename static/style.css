@@ -412,3 +412,43 @@ svg.fill { fill: currentColor; stroke: none; }
 .memories button:hover { color: var(--danger); }
 .memories button svg { width: 16px; height: 16px; }
 .settings label.check input { flex: none; }
+
+/* ---------------- Lock screen ---------------- */
+.lock-screen {
+  position: fixed; inset: 0; z-index: 95; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  background: radial-gradient(ellipse at center, #16254a 0%, #070b16 72%); color: #eceff5;
+}
+.lock-logo { width: 72px; height: 72px; filter: drop-shadow(0 0 18px rgba(245, 197, 66, .4)); }
+.lock-title { font-size: 20px; font-weight: 600; }
+.lock-form { display: flex; gap: 12px; align-items: center; }
+.lock-form input {
+  width: 200px; text-align: center; letter-spacing: .4em; font-size: 22px; padding: 10px 14px; border-radius: 14px;
+  background: rgba(255,255,255,.06); border: 2px solid rgba(245, 197, 66, .5); color: inherit; outline: 0;
+}
+.lock-form input:focus { border-color: var(--accent); }
+.lock-form .round { width: 50px; height: 50px; }
+.lock-error { color: #ff8a80; min-height: 1.4em; font-size: 14px; }
+
+/* ---------------- Export menu ---------------- */
+.export-menu {
+  position: fixed; z-index: 60; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: var(--shadow); padding: 5px; display: flex; flex-direction: column; min-width: 170px;
+}
+.export-menu button { text-align: left; padding: 8px 12px; border-radius: 8px; font-size: 14px; }
+.export-menu button:hover { background: var(--bg-hover); }
+
+/* ---------------- Settings extras ---------------- */
+.persona-editor { margin: -4px 0 14px; font-size: 14px; }
+.persona-editor summary { cursor: pointer; color: var(--accent); margin-bottom: 8px; }
+.persona-editor input, .persona-editor textarea, .persona-editor select { margin-bottom: 8px; }
+.settings a.ghost { text-decoration: none; color: inherit; }
+.settings code { font-family: var(--mono); font-size: 12px; background: var(--bg-input); padding: 1px 5px; border-radius: 5px; }
+.status-ok { color: var(--ok); }
+.status-bad { color: var(--danger); }
+
+/* ---------------- Code runner + generated images ---------------- */
+.code-head .code-actions { display: flex; gap: 12px; }
+.run-output { margin: 0; padding: 10px 16px; border-top: 1px dashed var(--border); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; max-height: 280px; overflow: auto; color: var(--text-2); }
+.run-output .err { color: #ff8a80; }
+.gen-images { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 12px; }
+.gen-images img { max-width: min(100%, 420px); border-radius: 14px; border: 1px solid var(--border); cursor: zoom-in; }

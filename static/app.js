@@ -17,6 +17,7 @@ const ICONS = {
   x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   tool: '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>',
   warn: '<svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+  download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   file: '<svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>',
 };
 
@@ -74,12 +75,17 @@ const state = {
 };
 
 const mic = new Mic();
-const speaker = new Speaker(() => ({ settings: state.settings, kokoro: !!state.status.kokoro }));
+function voiceSettings() {
+  const custom = (state.settings.personas || []).find((p) => p.id === state.settings.persona);
+  return custom?.voice ? { ...state.settings, kokoro_voice: custom.voice } : state.settings;
+}
+const speaker = new Speaker(() => ({ settings: voiceSettings(), kokoro: !!state.status.kokoro }));
 
 // ------------------------------------------------------------------- api
 async function api(path, opts = {}) {
   const init = { ...opts, headers: { ...(opts.body && typeof opts.body === 'string' ? { 'Content-Type': 'application/json' } : {}), ...opts.headers } };
   const res = await fetch(path, init);
+  if (res.status === 401) showLock();
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `${res.status} ${res.statusText}`);
@@ -217,7 +223,7 @@ function renderSidebar() {
     item.className = 'chat-item' + (state.chat?.id === c.id ? ' active' : '');
     item.dataset.id = c.id;
     item.innerHTML = `${c.mode === 'code' ? '<span class="mode-tag">&lt;/&gt;</span>' : ''}<span class="title">${escapeHtml(c.title || 'New chat')}</span>
-      <span class="actions"><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
+      <span class="actions"><button data-act="export" title="Export">${ICONS.download}</button><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
     list.append(item);
   }
   if (!list.children.length) list.innerHTML = `<div class="chat-group">${q ? 'No matches' : 'Your chats will appear here'}</div>`;
@@ -228,6 +234,10 @@ $('#chatList').onclick = async (e) => {
   if (!item) return;
   const act = e.target.closest('[data-act]')?.dataset.act;
   const id = item.dataset.id;
+  if (act === 'export') {
+    openExportMenu(id, e.target.closest('[data-act]'));
+    return;
+  }
   if (act === 'delete') {
     if (!confirm('Delete this chat?')) return;
     await api(`/api/conversations/${id}`, { method: 'DELETE' });
@@ -342,6 +352,9 @@ messagesEl.addEventListener('click', async (e) => {
   const sug = e.target.closest('.suggestion');
   if (sug) { $('#input').value = sug.dataset.prompt; autosize(); $('#input').focus(); return; }
 
+  const runBtn = e.target.closest('[data-run]');
+  if (runBtn) { runCodeBlock(runBtn); return; }
+
   const copy = e.target.closest('[data-copy]');
   if (copy) {
     const code = copy.closest('.code-block').querySelector('code').innerText;
@@ -440,6 +453,8 @@ function updateAssistantEl(el, m) {
   const openSteps = new Set($$('.step[open]', el).map((d) => d.dataset.id));
   const steps = (m.tools || []).map((t, i) => stepHtml(t, i, openSteps)).join('');
   let html = steps ? `<div class="activity">${steps}</div>` : '';
+  const pics = (m.tools || []).filter((t) => t.result?.image).map((t) => `<a href="${escapeHtml(t.result.image)}" target="_blank"><img src="${escapeHtml(t.result.image)}" alt="${escapeHtml(t.result.prompt || 'Generated image')}"></a>`);
+  if (pics.length) html += `<div class="gen-images">${pics.join('')}</div>`;
   if (thinking.trim()) {
     const open = el.querySelector('.thinking-box')?.open ?? false;
     const label = stillThinking ? 'Thinking…' : `Thought${m.thinkSecs ? ` for ${m.thinkSecs}s` : ''}`;
@@ -485,6 +500,23 @@ const STEP_TEXT = {
   open_on_screen: [(a) => `Opening ${a.target}`, (a, r) => `Opened ${r.opened}`],
   web_search: [(a) => `Searching the web for ${q(a.query)}`, (a, r) => `Searched the web for ${q(a.query)}`],
   read_webpage: [(a) => `Reading ${host(a.url)}`, (a, r) => `Read ${r.title || host(r.url)}`],
+  get_weather: [(a) => `Checking the weather${a.location ? ` in ${a.location}` : ''}`, (a, r) => `Weather in ${r.location}: ${r.now?.temperature}, ${r.now?.summary}`],
+  set_reminder: [(a) => `Setting a reminder: ${a.text}`, (a, r) => `Reminder set for ${r.reminder_set?.when}: ${r.reminder_set?.text}`],
+  list_reminders: [() => 'Checking your reminders', (a, r) => `Checked your reminders (${r.count})`],
+  cancel_reminder: [(a) => `Cancelling ${q(a.reminder)}`, (a, r) => `Cancelled: ${r.cancelled?.text}`],
+  open_app: [(a) => `Opening ${a.name}`, (a, r) => `Opened ${r.opened}`],
+  media_control: [(a) => `Media: ${a.action}`, (a, r) => `Media: ${String(r.media).replace('_', '/')}`],
+  set_volume: [() => 'Changing the volume', (a, r) => r.volume != null ? `Volume set to ${r.volume}%` : r.volume_changed ? `Volume ${r.volume_changed}` : 'Toggled mute'],
+  lock_computer: [() => 'Locking the PC', () => 'Locked the PC'],
+  power: [(a) => `${String(a.action).replace(/^./, (c) => c.toUpperCase())} the PC`, (a, r) => r.cancelled ? 'Cancelled the scheduled shutdown' : r.sleeping ? 'Put the PC to sleep' : `${r.scheduled} in ${r.in_minutes} min`],
+  get_clipboard: [() => 'Reading your clipboard', (a, r) => r.empty ? 'Your clipboard is empty' : `Read your clipboard (${r.clipboard.length} characters)`],
+  set_clipboard: [() => 'Copying to your clipboard', (a, r) => `Copied ${r.copied_characters} characters — ready to paste`],
+  look_at_screen: [() => 'Looking at your screen', (a, r) => `Looked at your screen (${r.seen_by})`],
+  run_python: [() => 'Running Python code', (a, r) => r.timed_out ? `Code stopped after ${r.seconds}s` : r.exit_code === 0 ? 'Ran the code' : 'The code hit an error'],
+  search_documents: [(a) => `Searching your documents for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} passages in your documents`],
+  generate_image: [() => 'Creating an image', () => 'Created an image'],
+  list_home_devices: [() => 'Checking your smart home', (a, r) => `Found ${r.count} devices`],
+  control_home_device: [(a) => `${a.action} ${a.device}`, (a, r) => `${r.device}: ${r.action}${r.value != null ? ` ${r.value}` : ''} ✓`],
 };
 
 function stepText(t) {
@@ -503,7 +535,7 @@ function stepHtml(t, i, openSteps) {
   let detail = '';
   if (r?.results?.length && t.name === 'web_search') {
     detail = `<ol>${r.results.map((x) => `<li><a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">${escapeHtml(x.title)}</a><div class="muted small">${escapeHtml(x.snippet)}</div></li>`).join('')}</ol>`;
-  } else if (r?.results?.length) {
+  } else if (r?.results?.length && t.name === 'find_files') {
     detail = `<ul>${r.results.map((x) => `<li>${escapeHtml(x.path)} <span class="muted small">${escapeHtml(x.size || '')}</span></li>`).join('')}</ul>`;
   } else if (r?.items?.length) {
     detail = `<ul>${r.items.map((x) => `<li>${x.type === 'folder' ? '📁' : '📄'} ${escapeHtml(x.name)}</li>`).join('')}</ul>`;
@@ -511,6 +543,19 @@ function stepHtml(t, i, openSteps) {
     detail = `<ul>${Object.entries(r.into_folders).map(([k, n]) => `<li>📁 ${escapeHtml(k)}: ${n} file${n === 1 ? '' : 's'}</li>`).join('')}</ul>`;
   } else if (r?.url && t.name === 'read_webpage') {
     detail = `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>`;
+  }
+  else if (t.name === 'run_python' && r) {
+    detail = `<pre class="run-output">${escapeHtml(r.stdout || '')}${r.stderr ? `<span class="err">${escapeHtml(r.stderr)}</span>` : ''}</pre>`;
+  } else if (t.name === 'search_documents' && r?.results) {
+    detail = `<ul>${r.results.map((x) => `<li><b>${escapeHtml(x.file)}</b><div class="muted small">${escapeHtml(x.text.slice(0, 220))}…</div></li>`).join('')}</ul>`;
+  } else if (t.name === 'look_at_screen' && r?.screen) {
+    detail = `<div class="muted small">${escapeHtml(r.screen)}</div>`;
+  } else if (t.name === 'get_weather' && r?.forecast) {
+    detail = `<ul>${r.forecast.map((d) => `<li>${escapeHtml(d.date)}: ${escapeHtml(d.summary)}, ${d.high} / ${d.low}, rain ${d.chance_of_rain}</li>`).join('')}</ul>`;
+  } else if (r?.devices) {
+    detail = `<ul>${r.devices.map((d) => `<li>${escapeHtml(d.name)} — ${escapeHtml(d.state)}</li>`).join('')}</ul>`;
+  } else if (r?.clipboard && t.name === 'get_clipboard') {
+    detail = `<div class="muted small">${escapeHtml(r.clipboard.slice(0, 600))}</div>`;
   }
   if (t.screen) detail += `<div class="muted small">Opened on your screen: ${escapeHtml(t.screen)}</div>`;
   const key = t.id || String(i);
@@ -563,8 +608,13 @@ function stopGenerating() {
 
 async function sendMessage(text, { voice = false } = {}) {
   if (!state.status.ollama) { await refreshStatus(); }
-  const model = voice ? pickDefaultModel('voice') : currentModel();
+  let model = voice ? pickDefaultModel('voice') : currentModel();
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); openSettings('models'); return; }
+  if (state.attachments.some((a) => a.kind === 'image') && !isVision(model)) {
+    const vision = pickVisionModel();
+    if (vision) { toast(`Using ${vision} to look at the image`); model = vision; }
+    else toast('To understand images, download a vision model like qwen2.5vl:7b or gemma3:12b (Settings → Models).', 'error');
+  }
 
   const msg = { role: 'user', content: text, display: text };
   if (state.attachments.length) {
@@ -767,20 +817,19 @@ $('#approvalDeny').onclick = () => answerApproval(false);
 // ------------------------------------------------------------ tools / timers
 function handleToolEvent(ev) {
   if (['add_task', 'complete_task', 'delete_task'].includes(ev.name)) loadTasks();
-  if (ev.name === 'set_timer' && ev.result?.timer_set) startTimer(ev.result.seconds, ev.result.label);
+  if (ev.name === 'set_timer' && ev.result?.timer_set) toast(`⏱ Timer started: ${fmtDuration(ev.result.seconds)}${ev.result.label && ev.result.label !== 'Timer' ? ` — ${ev.result.label}` : ''}`);
+  if (ev.name === 'set_reminder' && ev.result?.reminder_set) toast(`🔔 Reminder set for ${ev.result.reminder_set.when}`);
+  if (['set_timer', 'set_reminder'].includes(ev.name) && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
 }
 
-function startTimer(seconds, label) {
-  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
-  toast(`⏱ Timer started: ${fmtDuration(seconds)}${label ? ` — ${label}` : ''}`);
-  setTimeout(() => {
-    const text = `${label && label !== 'Timer' ? label : 'Your timer'} is done!`;
-    toast(`⏰ ${text}`, 'alarm');
-    chime();
-    if ('Notification' in window && Notification.permission === 'granted') new Notification('Athena AI', { body: text, icon: 'logo.svg' });
-    speaker.reset();
-    speaker.say(`${state.settings.user_name ? `${state.settings.user_name}, ` : ''}${text}`);
-  }, seconds * 1000);
+function fireReminder(r) {
+  const text = r.kind === 'timer' ? `${r.text && r.text !== 'Timer' ? r.text : 'Your timer'} is done!` : r.text;
+  toast(`${r.kind === 'timer' ? '⏰' : '🔔'} ${text}${r.late ? ` (was due ${r.when})` : ''}`, 'alarm');
+  chime();
+  if ('Notification' in window && Notification.permission === 'granted') new Notification('Athena AI', { body: text, icon: 'logo.svg' });
+  const name = state.settings.user_name ? `${state.settings.user_name}, ` : '';
+  speaker.reset();
+  speaker.say(r.kind === 'timer' ? `${name}${text}` : `${name}here's your reminder: ${text}`);
 }
 
 function chime() {
@@ -856,6 +905,7 @@ $('#micBtn').onclick = async () => {
     if (state.status.whisper) {
       await mic.open();
       dictating = { stop: () => mic.finish() };
+      pauseWake(true);
       const blob = await mic.record({ silenceMs: 2500, waitMs: 15000, signal: abort.signal });
       btn.classList.remove('recording');
       if (!blob) return;
@@ -874,6 +924,7 @@ $('#micBtn').onclick = async () => {
     toast(e.message, 'error');
   } finally {
     dictating = null;
+    if (!state.voice.active) pauseWake(false);
     btn.classList.remove('recording');
     btn.style.opacity = '';
     if (!state.voice.active) mic.close();
@@ -922,11 +973,13 @@ function hideAvatar() {
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.voice.active) endVoice(); });
 
-async function startVoice() {
+async function startVoice(firstCommand = '') {
+  if (state.voice.active) return;
   if (!state.status.ollama) { toast('Ollama is not running.', 'error'); return; }
   const model = pickDefaultModel('voice');
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); return; }
   state.voice.active = true;
+  pauseWake(true);
   mic.muted = false;
   $('#voiceMute').classList.remove('off');
   overlay.hidden = false;
@@ -944,7 +997,7 @@ async function startVoice() {
   }
   speaker.onStart = () => state.voice.active && setVoiceState('speaking');
   speaker.onEnd = () => state.voice.active && state.abort && setVoiceState('thinking');
-  if (state.settings.persona === 'companion' && !state.chat.messages.length) {
+  if (state.settings.persona === 'companion' && !state.chat.messages.length && !firstCommand) {
     const n = state.settings.user_name ? `, ${state.settings.user_name}` : '';
     const hi = [
       `Mmm, there you are${n}. I was hoping you'd come talk to me.`,
@@ -957,6 +1010,12 @@ async function startVoice() {
     await speaker.done();
   }
   if (!state.status.whisper) toast('Offline speech recognition is not installed — using the browser recognizer (may need internet). Run install-voice for fully offline voice.');
+  if (firstCommand) {
+    setVoiceCaption(firstCommand, 'you');
+    setVoiceState('thinking');
+    await sendMessage(firstCommand, { voice: true });
+    await speaker.done();
+  }
   voiceLoop();
 }
 
@@ -969,6 +1028,7 @@ function endVoice() {
   mic.close();
   hideAvatar();
   overlay.hidden = true;
+  pauseWake(false);
 }
 
 async function voiceLoop() {
@@ -1024,7 +1084,28 @@ function openSettings(tab = 'general') {
   api('/api/folders').then((f) => { $('#setFolders').placeholder = f.defaults.join('\n'); }).catch(() => {});
   loadMemories();
   $('#setDirect').checked = !!s.direct_mode;
-  $('#setPersona').value = s.persona || 'assistant';
+  fillPersonas();
+  $('#setPc').checked = !!s.pc_enabled;
+  $('#setScreen2').checked = !!s.screen_enabled;
+  $('#setCode').checked = !!s.code_enabled;
+  $('#setDocs').checked = !!s.docs_enabled;
+  $('#setKnowledge').value = (s.knowledge_folders || []).join('\n');
+  $('#setEmbed').value = s.embed_model || 'nomic-embed-text';
+  $('#setCity').value = s.home_location || '';
+  $('#setUnits').value = s.units || 'imperial';
+  $('#setBriefing').value = s.briefing_time || '';
+  $('#setImageApi').value = s.image_api || '';
+  $('#setHaUrl').value = s.ha_url || '';
+  $('#setHaToken').value = '';
+  $('#setHaToken').placeholder = s.ha_token_set ? 'Saved — type to replace' : 'Paste your long-lived access token';
+  $('#setHotkey').value = s.hotkey || '';
+  $('#setVoiceHotkey').value = s.voice_hotkey || '';
+  $('#setWake').checked = !!s.wake_enabled;
+  $('#setAutoLock').value = String(s.auto_lock_minutes || 0);
+  refreshKnowledge();
+  refreshWake();
+  refreshDesktop();
+  refreshPin();
   $('#setTtsEngine').value = s.tts_engine === 'system' ? 'system' : 'auto';
   $('#setPitch').value = s.voice_pitch || 1;
   $('#setKokoroVoice').innerHTML = Object.entries(state.status.kokoro_voices || { athena_silk: 'Athena Silk' })
@@ -1054,9 +1135,9 @@ function switchTab(tab) {
 $('.tabs', dlg).onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); };
 
 function fillModelSelects() {
-  for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice']]) {
+  for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelVision', 'vision']]) {
     const sel = $(id);
-    const auto = pickDefaultModel(mode);
+    const auto = mode === 'vision' ? pickVisionModel() : pickDefaultModel(mode);
     sel.innerHTML = `<option value="">Automatic${auto ? ` (${escapeHtml(auto)})` : ''}</option>` +
       state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
     sel.value = modelNames().includes(state.settings.models?.[mode]) ? state.settings.models[mode] : '';
@@ -1098,6 +1179,22 @@ bind('#setFiles', 'files_enabled', (el) => el.checked);
 bind('#setWeb', 'web_enabled', (el) => el.checked);
 bind('#setConfirm', 'confirm_changes', (el) => el.checked);
 bind('#setScreen', 'show_on_screen', (el) => el.checked);
+bind('#setPc', 'pc_enabled', (el) => el.checked);
+bind('#setScreen2', 'screen_enabled', (el) => el.checked);
+bind('#setCode', 'code_enabled', (el) => el.checked);
+bind('#setDocs', 'docs_enabled', (el) => el.checked);
+bind('#setKnowledge', 'knowledge_folders', (el) => el.value.split('\n').map((l) => l.trim()).filter(Boolean));
+bind('#setEmbed', 'embed_model');
+bind('#setCity', 'home_location');
+bind('#setUnits', 'units');
+bind('#setBriefing', 'briefing_time');
+bind('#setImageApi', 'image_api', (el) => el.value.trim());
+bind('#setHaUrl', 'ha_url', (el) => el.value.trim());
+bind('#setHaToken', 'ha_token', (el) => el.value.trim());
+bind('#setHotkey', 'hotkey', (el) => el.value.trim());
+bind('#setVoiceHotkey', 'voice_hotkey', (el) => el.value.trim());
+bind('#setAutoLock', 'auto_lock_minutes', (el) => Number(el.value));
+$('#setWake').addEventListener('change', async (e) => { await saveSettings({ wake_enabled: e.target.checked }); setTimeout(refreshWake, 1500); });
 bind('#setFolders', 'file_folders', (el) => el.value.split('\n').map((l) => l.trim()).filter(Boolean));
 
 async function loadMemories() {
@@ -1118,6 +1215,13 @@ bind('#setTtsEngine', 'tts_engine');
 bind('#setKokoroVoice', 'kokoro_voice');
 bind('#setPitch', 'voice_pitch', (el) => Number(el.value));
 
+for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelVision', 'vision']]) {
+  $(id).addEventListener('change', async (e) => {
+    await saveSettings({ models: { [mode]: e.target.value } });
+    if (state.chat && !state.chat.messages.length && state.mode === mode) { state.chat.model = ''; renderModelButton(); }
+    fillModelSelects();
+  });
+}
 $('#testVoice').onclick = () => {
   speaker.stop();
   speaker.reset();
@@ -1197,8 +1301,266 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && state.abort && !state.voice.active) stopGenerating();
 });
 
+// ------------------------------------------------------------ vision
+const VISION_HINTS = ['qwen2.5vl', 'qwen3-vl', 'qwen2.5-vl', 'llava', 'minicpm-v', 'llama3.2-vision', 'moondream', 'granite3.2-vision', 'mistral-small3', 'gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gemma3n', 'llama4'];
+const isVision = (name) => VISION_HINTS.some((h) => (name || '').includes(h));
+function pickVisionModel() {
+  const chosen = state.settings.models?.vision;
+  if (chosen && modelNames().includes(chosen)) return chosen;
+  return modelNames().find(isVision) || '';
+}
+
+// ------------------------------------------------------------ screenshot
+$('#shotBtn').onclick = async () => {
+  toast('📸 Taking a screenshot in 3 seconds — switch to what you want Athena to see');
+  await sleep(3000);
+  try {
+    const { image } = await api('/api/screenshot');
+    state.attachments.push({ kind: 'image', name: 'Screenshot.jpg', data: image });
+    renderAttachments();
+    if (!input.value.trim()) input.value = "What's on my screen?";
+    autosize();
+    input.focus();
+    toast('Screenshot attached');
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+// ------------------------------------------------------------ run code
+async function runCodeBlock(btn) {
+  const block = btn.closest('.code-block');
+  const code = block.querySelector('code').innerText;
+  let out = block.querySelector('.run-output');
+  if (!out) { out = document.createElement('pre'); out.className = 'run-output'; block.append(out); }
+  out.textContent = 'Running…';
+  try {
+    const r = await api('/api/run', json('POST', { code }));
+    out.innerHTML = r.timed_out
+      ? `<span class="err">Stopped after ${r.seconds}s (time limit)</span>\n${escapeHtml(r.stdout || '')}`
+      : `${escapeHtml(r.stdout || '')}${r.stderr ? `<span class="err">${escapeHtml(r.stderr)}</span>` : ''}` || '(no output)';
+    if (!out.textContent.trim()) out.textContent = '(finished, no output)';
+  } catch (e) { out.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`; }
+}
+
+// ------------------------------------------------------------ live events
+function connectEvents() {
+  const es = new EventSource('/api/events');
+  es.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch { return; }
+    if (ev.type === 'reminder') fireReminder(ev);
+    else if (ev.type === 'briefing') startBriefing();
+    else if (ev.type === 'wake') { if (state.voice.active) return; chime(); startVoice(ev.command || ''); }
+    else if (ev.type === 'start_voice') startVoice();
+  };
+}
+
+function pauseWake(paused) {
+  if (!state.settings.wake_enabled) return;
+  fetch('/api/wake/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paused }) }).catch(() => {});
+}
+
+// ------------------------------------------------------------ morning briefing
+async function startBriefing() {
+  if (state.abort || state.voice.active) return;
+  newChat();
+  setMode('assistant');
+  const prompt = "Give me my morning briefing: greet me, today's date, the weather (use get_weather), my open tasks and today's reminders, then one short motivating line. Keep it brief and friendly.";
+  const prev = state.settings.auto_speak;
+  state.settings.auto_speak = true; // read the briefing aloud
+  try {
+    state.chat.messages.push({ role: 'user', content: prompt, display: '☀ Morning briefing' });
+    renderMessages();
+    await generateReply();
+  } finally { state.settings.auto_speak = prev; }
+}
+$('#briefNow').onclick = () => { dlg.close(); startBriefing(); };
+
+// ------------------------------------------------------------ PIN lock
+const unlockWaiters = [];
+function showLock() {
+  $('#lockScreen').hidden = false;
+  $('#unlockError').textContent = '';
+  $('#unlockPin').value = '';
+  setTimeout(() => $('#unlockPin').focus(), 50);
+  if (state.voice.active) endVoice();
+}
+$('#unlockForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const res = await fetch('/api/unlock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: $('#unlockPin').value }) });
+  if (!res.ok) {
+    $('#unlockError').textContent = (await res.json().catch(() => ({}))).detail || 'Wrong PIN';
+    $('#unlockPin').value = '';
+    return;
+  }
+  $('#lockScreen').hidden = true;
+  unlockWaiters.splice(0).forEach((r) => r());
+};
+async function lockNow() {
+  await fetch('/api/lock', { method: 'POST' });
+  showLock();
+}
+$('#lockBtn').onclick = lockNow;
+
+function setupIdleLock() {
+  let last = Date.now();
+  for (const ev of ['mousemove', 'keydown', 'pointerdown', 'wheel']) window.addEventListener(ev, () => { last = Date.now(); }, { passive: true });
+  setInterval(() => {
+    const mins = Number(state.settings.auto_lock_minutes) || 0;
+    if (state.settings.pin_set && mins && $('#lockScreen').hidden && !state.voice.active && Date.now() - last > mins * 60000) lockNow();
+  }, 15000);
+}
+
+async function refreshPin() {
+  const set = !!state.settings.pin_set;
+  $('#pinStatus').textContent = set ? '🔒 A PIN is set.' : 'No PIN set — anyone at this PC can open Athena.';
+  $('#pinCurrentWrap').hidden = !set;
+  $('#lockBtn').hidden = !set;
+}
+$('#pinSave').onclick = async () => {
+  try {
+    await api('/api/pin', json('POST', { current: $('#pinCurrent').value, pin: $('#pinNew').value }));
+    state.settings = await api('/api/settings');
+    $('#pinCurrent').value = $('#pinNew').value = '';
+    refreshPin();
+    toast(state.settings.pin_set ? 'PIN saved' : 'PIN removed');
+  } catch (e) { toast(e.message, 'error'); }
+};
+
+// ------------------------------------------------------------ backup / restore
+$('#restoreFile').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file || !confirm('Restore this backup? It replaces your current chats, tasks, memories and settings.')) return;
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/restore', { method: 'POST', body: form });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) { toast(body.detail || 'Restore failed', 'error'); return; }
+  toast(`Restored ${body.files} files — reloading…`);
+  setTimeout(() => location.reload(), 1200);
+};
+
+// ------------------------------------------------------------ export
+let exportTarget = null;
+function openExportMenu(id, anchor) {
+  exportTarget = id;
+  const menu = $('#exportMenu');
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = `${Math.min(r.left, innerWidth - 190)}px`;
+  menu.style.top = `${r.bottom + 4}px`;
+  menu.hidden = false;
+}
+document.addEventListener('click', (e) => { if (!e.target.closest('#exportMenu') && !e.target.closest('[data-act="export"]')) $('#exportMenu').hidden = true; });
+$('#exportMenu').onclick = async (e) => {
+  const fmt = e.target.closest('[data-export]')?.dataset.export;
+  if (!fmt || !exportTarget) return;
+  $('#exportMenu').hidden = true;
+  if (fmt !== 'pdf') { location.href = `/api/conversations/${exportTarget}/export?format=${fmt}`; return; }
+  const chat = await api(`/api/conversations/${exportTarget}`);
+  const w = window.open('', '_blank');
+  if (!w) { toast('Allow pop-ups to export as PDF', 'error'); return; }
+  const body = (chat.messages || []).filter((m) => m.content?.trim()).map((m) =>
+    `<h3>${m.role === 'user' ? 'You' : 'Athena'}</h3><div>${m.role === 'user' ? escapeHtml(m.display ?? m.content).replace(/\n/g, '<br>') : renderMarkdown(m.content)}</div>`).join('');
+  w.document.write(`<!doctype html><title>${escapeHtml(chat.title)}</title><style>body{font:14px/1.6 system-ui,sans-serif;max-width:720px;margin:32px auto;color:#111}h1{margin:0}h3{margin:22px 0 4px;color:#a8740c}pre{background:#f4f4f4;padding:10px;border-radius:8px;white-space:pre-wrap}.code-head button{display:none}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:4px 8px}</style><h1>${escapeHtml(chat.title)}</h1><p style="color:#777">Exported from Athena AI</p>${body}<script>onload=()=>print()<\/script>`);
+  w.document.close();
+};
+
+// ------------------------------------------------------------ personalities
+const BUILTIN_PERSONAS = { assistant: 'Assistant — helpful and professional', companion: 'Companion — playful, warm friend', coach: 'Coach — fitness, habits and goals', study: 'Study Buddy — patient tutor', chef: 'Chef — recipes and cooking' };
+function fillPersonas() {
+  const custom = state.settings.personas || [];
+  $('#setPersona').innerHTML = Object.entries(BUILTIN_PERSONAS).map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join('') +
+    custom.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} — custom</option>`).join('');
+  $('#setPersona').value = state.settings.persona || 'assistant';
+  $('#personaList').innerHTML = custom.map((p) => `<li><span><b>${escapeHtml(p.name)}</b> <span class="muted small">${escapeHtml(p.instructions.slice(0, 90))}</span></span><button type="button" data-persona-del="${escapeHtml(p.id)}" title="Delete">${ICONS.trash}</button></li>`).join('');
+  $('#personaVoice').innerHTML = '<option value="">Voice: same as usual</option>' +
+    Object.entries(state.status.kokoro_voices || {}).map(([id, label]) => `<option value="${id}">Voice: ${escapeHtml(label)}</option>`).join('');
+}
+$('#personaSave').onclick = async () => {
+  const name = $('#personaName').value.trim(), instructions = $('#personaText').value.trim();
+  if (!name || !instructions) { toast('Give the personality a name and describe how she should act', 'error'); return; }
+  const persona = { id: `p_${Date.now().toString(36)}`, name, instructions, voice: $('#personaVoice').value };
+  await saveSettings({ personas: [...(state.settings.personas || []), persona], persona: persona.id });
+  $('#personaName').value = $('#personaText').value = '';
+  fillPersonas();
+  toast(`${name} is now active`);
+};
+$('#personaList').onclick = async (e) => {
+  const id = e.target.closest('[data-persona-del]')?.dataset.personaDel;
+  if (!id) return;
+  const personas = (state.settings.personas || []).filter((p) => p.id !== id);
+  await saveSettings({ personas, ...(state.settings.persona === id ? { persona: 'assistant' } : {}) });
+  fillPersonas();
+};
+
+// ------------------------------------------------------------ knowledge
+async function refreshKnowledge() {
+  const k = await api('/api/knowledge').catch(() => null);
+  if (!k) return;
+  const box = $('#indexProgress');
+  box.hidden = !k.running;
+  if (k.running) {
+    $('.bar', box).style.width = k.total ? `${(k.done / k.total) * 100}%` : '5%';
+    $('span', box).textContent = `${k.message} (${k.done}/${k.total})`;
+    setTimeout(refreshKnowledge, 800);
+  }
+  $('#indexStatus').innerHTML = k.error ? `<span class="status-bad">${escapeHtml(k.error)}</span>`
+    : escapeHtml(k.message || (k.documents ? `${k.documents} documents, ${k.passages} passages indexed` : 'Nothing indexed yet.'));
+}
+$('#indexBtn').onclick = async () => {
+  await saveSettings({ knowledge_folders: $('#setKnowledge').value.split('\n').map((l) => l.trim()).filter(Boolean) });
+  if (!state.settings.knowledge_folders?.length) { toast('Add at least one folder first', 'error'); return; }
+  await api('/api/knowledge/index', { method: 'POST' });
+  setTimeout(refreshKnowledge, 300);
+};
+$('#embedPull').onclick = () => pullModel($('#setEmbed').value);
+
+// ------------------------------------------------------------ integrations
+async function testIntegration(kind, out) {
+  $(out).textContent = 'Testing…';
+  try {
+    const r = await api('/api/integrations/test', json('POST', { kind }));
+    $(out).innerHTML = `<span class="${r.ok ? 'status-ok' : 'status-bad'}">${r.ok ? '✓' : '✗'} ${escapeHtml(r.message)}</span>`;
+  } catch (e) { $(out).textContent = e.message; }
+}
+$('#testWeather').onclick = () => testIntegration('weather', '#weatherStatus');
+$('#testImages').onclick = () => testIntegration('images', '#imagesStatus');
+$('#testHome').onclick = () => testIntegration('home', '#homeStatus');
+
+// ------------------------------------------------------------ wake word + desktop
+async function refreshWake() {
+  const w = await api('/api/wake').catch(() => null);
+  if (!w) return;
+  $('#wakeStatus').innerHTML = !w.available ? 'Needs the voice add-on — run install-voice.bat, then restart Athena.'
+    : w.error ? `<span class="status-bad">${escapeHtml(w.error)}</span>`
+    : w.running ? `<span class="status-ok">● Listening for “Hey Athena”</span>${w.last_heard ? ` · last heard: “${escapeHtml(w.last_heard)}”` : ''}`
+    : state.settings.wake_enabled ? 'Starting…' : 'Off';
+}
+async function refreshDesktop() {
+  const d = await api('/api/desktop').catch(() => null);
+  if (!d) return;
+  const win = d.platform.startsWith('win');
+  $('#desktopStatus').innerHTML = d.desktop_app ? '<span class="status-ok">● Running as a desktop app</span>'
+    : 'Running in the browser. Close this and double-click <b>start-desktop.bat</b> for the tray app &amp; hotkeys.';
+  $('#setAutostart').checked = d.autostart;
+  $('#setAutostart').disabled = !win;
+  $('#makeShortcuts').disabled = !win;
+}
+$('#setAutostart').onchange = async (e) => {
+  try { await api('/api/desktop', json('POST', { autostart: e.target.checked })); toast(e.target.checked ? 'Athena will start with Windows' : 'Athena won’t start with Windows'); }
+  catch (err) { toast(err.message, 'error'); e.target.checked = !e.target.checked; }
+};
+$('#makeShortcuts').onclick = async () => {
+  try {
+    const r = await api('/api/desktop', json('POST', { shortcuts: true }));
+    toast(r.shortcuts.length ? 'Shortcuts created on your Desktop and Start menu' : 'Couldn’t create shortcuts', r.shortcuts.length ? '' : 'error');
+  } catch (e) { toast(e.message, 'error'); }
+};
+
 // ------------------------------------------------------------ boot
 async function init() {
+  const lock = await fetch('/api/lock').then((r) => r.json()).catch(() => ({}));
+  if (lock.pin_set && !lock.unlocked) { showLock(); await new Promise((resolve) => unlockWaiters.push(resolve)); }
   state.settings = await api('/api/settings').catch(() => ({}));
   applyTheme();
   if (isNarrow()) toggleSidebar(false);
@@ -1208,6 +1570,13 @@ async function init() {
   loadChats();
   loadTasks();
   voicesReady();
+  connectEvents();
+  setupIdleLock();
+  $('#lockBtn').hidden = !state.settings.pin_set;
+  if (new URLSearchParams(location.search).get('voice') === '1') {
+    history.replaceState(null, '', location.pathname);
+    startVoice();
+  }
 
   // Reconnect automatically if Ollama starts later, and pick up newly pulled models.
   setInterval(async () => {

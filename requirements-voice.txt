@@ -2,3 +2,5 @@
 faster-whisper>=1.0
 # Natural offline voice for Athena (text-to-speech)
 kokoro-onnx>=0.4
+# "Hey Athena" wake word (microphone access from the background)
+sounddevice>=0.4

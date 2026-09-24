@@ -2,6 +2,7 @@
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+const RUN_ICON = '<svg viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></svg>';
 const COPY_ICON = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 
 // ------------------------------------------------------------- highlighting
@@ -63,7 +64,9 @@ function inline(text) {
 
 function codeBlock(code, lang) {
   const label = esc(lang || 'code');
-  return `<div class="code-block"><div class="code-head"><span>${label}</span><button type="button" data-copy>${COPY_ICON}Copy code</button></div>` +
+  const runnable = /^(python|py|python3)$/i.test(lang || '');
+  const run = runnable ? `<button type="button" data-run>${RUN_ICON}Run</button>` : '';
+  return `<div class="code-block"><div class="code-head"><span>${label}</span><div class="code-actions">${run}<button type="button" data-copy>${COPY_ICON}Copy code</button></div></div>` +
     `<pre><code data-lang="${label}">${highlight(code, lang)}</code></pre></div>`;
 }
 
