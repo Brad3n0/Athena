@@ -101,6 +101,9 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 - Everything is stored in the `data/` folder: chats, tasks and settings as plain JSON. Back it up or delete it anytime.
 - Use Athena from your phone on the same Wi-Fi: `start.bat --host 0.0.0.0`, then open `http://<your-pc-ip>:8765`. Browsers only allow the microphone on `localhost`, so voice works on the PC itself.
 - Other options: `--port 9000` changes the port, and `--no-browser` stops the browser opening. `OLLAMA_HOST` is respected if Ollama runs elsewhere.
+- **Quick commands:** type **/** in the message box for a menu: `/remind`, `/timer`, `/weather`, `/search`, `/image`, `/find`, `/organize`, `/docs`, `/screen`, `/open`, `/remember`, `/run`, `/brief`, `/voice` and `/new`.
+- **Drag & drop** files onto the chat, or paste screenshots with **Ctrl+V**.
+- Chats name themselves with short titles, which you can rename anytime. In voice chat, a soft chime tells you when she's listening and when she's heard you.
 - Shortcuts: **Enter** sends, **Shift+Enter** adds a new line, **Ctrl+Shift+O** starts a new chat and **Esc** stops a reply.
 
 ## Project layout

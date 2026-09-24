@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -622,6 +623,44 @@ async def update_task(task_id: str, request: Request):
 @app.delete("/api/tasks/{task_id}")
 async def delete_task(task_id: str):
     return {"ok": store.delete_task(task_id) is not None}
+
+
+# -------------------------------------------------------------- chat titles
+
+@app.post("/api/title")
+async def make_title(request: Request):
+    """Ask the model for a short title like "Python photo renamer" for a new chat."""
+    body = await request.json()
+    model = str(body.get("model") or "")
+    user, reply = str(body.get("user", ""))[:700], str(body.get("reply", ""))[:700]
+    if not model or not user:
+        raise HTTPException(400, "Nothing to title")
+    payload: dict[str, Any] = {
+        "model": model, "stream": False, "think": False,
+        "options": {"temperature": 0.3, "num_predict": 24},
+        "messages": [
+            {"role": "system", "content": "You name conversations. Reply with only a 2 to 5 word title in Title Case. No quotes, no emoji, no ending punctuation."},
+            {"role": "user", "content": f"Name this conversation:\n\nUser: {user}\n\nAssistant: {reply}"},
+        ],
+    }
+    for _ in range(2):
+        try:
+            resp = await client.post(f"{OLLAMA}/api/chat", json=payload, timeout=httpx.Timeout(10.0, read=60))
+        except httpx.HTTPError as exc:
+            raise HTTPException(502, "Ollama unavailable") from exc
+        if resp.status_code != 200 and "think" in payload and "think" in resp.text.lower():
+            payload.pop("think")  # model doesn't support turning thinking off
+            continue
+        break
+    data = resp.json() if resp.status_code == 200 else {}
+    text = (data.get("message") or {}).get("content", "")
+    text = re.sub(r"<think>.*?(</think>|$)", "", text, flags=re.S).strip()
+    title = next((line for line in text.splitlines() if line.strip()), "").strip()
+    title = re.sub(r"^\W*(title|conversation title)\s*:\s*", "", title, flags=re.I)
+    title = title.strip("\"'*#` ").rstrip(".!?:").strip("\"'*#` ")
+    if not title:
+        raise HTTPException(502, "No title")
+    return {"title": title[:60]}
 
 
 # ------------------------------------------------------------ live events

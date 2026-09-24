@@ -2,6 +2,7 @@
 import { renderMarkdown, toSpeech } from './markdown.js';
 import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices } from './voice.js';
 import { VoiceOrb } from './orb.js';
+import { startStars } from './stars.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -240,7 +241,8 @@ $('#chatList').onclick = async (e) => {
       const t = input.value.trim();
       if (save && t) {
         const chat = await api(`/api/conversations/${id}`);
-        await api(`/api/conversations/${id}`, json('PUT', { ...chat, title: t }));
+        await api(`/api/conversations/${id}`, json('PUT', { ...chat, title: t, autoTitle: false }));
+        if (state.chat?.id === id) state.chat.autoTitle = false;
         if (state.chat?.id === id) state.chat.title = t;
         await loadChats();
       } else renderSidebar();
@@ -566,8 +568,9 @@ function updateComposerButtons() {
   $('#sendBtn').hidden = busy || !hasText;
   $('#voiceBtn').hidden = busy || !!hasText;
 }
-input.addEventListener('input', autosize);
+input.addEventListener('input', () => { autosize(); updateSlashMenu(); });
 input.addEventListener('keydown', (e) => {
+  if (slash.open && handleSlashKey(e)) return;
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#composer').requestSubmit(); }
 });
 $('#composer').onsubmit = (e) => {
@@ -577,8 +580,87 @@ $('#composer').onsubmit = (e) => {
   if (!text && !state.attachments.length) return;
   input.value = '';
   autosize();
-  sendMessage(text);
+  closeSlashMenu();
+  input.placeholder = state.mode === 'code' ? 'Ask Athena to write, explain or fix code' : 'Message Athena';
+  const command = parseSlash(text);
+  if (command?.action) { command.action(); return; }
+  if (command) sendMessage(command.prompt, { display: text });
+  else sendMessage(text);
 };
+
+// ------------------------------------------------------------ slash commands
+const COMMANDS = [
+  { cmd: '/remind', desc: 'Set a reminder', hint: 'at 6pm to call mom', to: (r) => `Remind me ${r}` },
+  { cmd: '/timer', desc: 'Start a timer', hint: '10 minutes for the pasta', to: (r) => `Set a timer for ${r}` },
+  { cmd: '/weather', desc: 'Check the weather', hint: 'Chicago', to: (r) => (r ? `What's the weather in ${r}?` : "What's the weather like today?") },
+  { cmd: '/search', desc: 'Search the web', hint: 'best budget graphics card', to: (r) => `Search the web for: ${r}` },
+  { cmd: '/image', desc: 'Create an image', hint: 'a gold owl on a night sky', to: (r) => `Generate an image: ${r}` },
+  { cmd: '/find', desc: 'Find a file on your PC', hint: 'my resume', to: (r) => `Find ${r} on my PC` },
+  { cmd: '/organize', desc: 'Tidy up a folder', hint: 'Downloads', to: (r) => `Organize my ${r || 'Downloads'} folder` },
+  { cmd: '/docs', desc: 'Ask your documents', hint: 'what does my lease say about pets?', to: (r) => `Search my documents: ${r}` },
+  { cmd: '/screen', desc: 'Look at your screen', hint: 'what does this error mean?', to: (r) => `Look at my screen. ${r || "What's on it?"}` },
+  { cmd: '/open', desc: 'Open an app', hint: 'Spotify', to: (r) => `Open ${r}` },
+  { cmd: '/remember', desc: 'Save something to memory', hint: "my sister's birthday is June 3", to: (r) => `Remember this: ${r}` },
+  { cmd: '/run', desc: 'Write and run Python', hint: 'count the words in a sentence', to: (r) => `Write Python code to ${r}, run it, and show me the result` },
+  { cmd: '/brief', desc: 'Morning briefing', action: () => startBriefing() },
+  { cmd: '/voice', desc: 'Start talking', action: () => startVoice() },
+  { cmd: '/new', desc: 'New chat', action: () => newChat() },
+];
+const slash = { open: false, items: [], index: 0 };
+
+function parseSlash(text) {
+  const m = text.match(/^(\/[a-z]+)\s*([\s\S]*)$/i);
+  const c = m && COMMANDS.find((x) => x.cmd === m[1].toLowerCase());
+  if (!c) return null;
+  return c.action ? { action: c.action } : { prompt: c.to(m[2].trim()) };
+}
+
+function updateSlashMenu() {
+  const v = input.value;
+  if (!/^\/[a-z]*$/i.test(v)) { closeSlashMenu(); return; }
+  slash.items = COMMANDS.filter((c) => c.cmd.startsWith(v.toLowerCase()));
+  if (!slash.items.length) { closeSlashMenu(); return; }
+  slash.index = Math.min(slash.index, slash.items.length - 1);
+  slash.open = true;
+  renderSlashMenu();
+}
+
+function renderSlashMenu() {
+  const menu = $('#slashMenu');
+  menu.innerHTML = slash.items.map((c, i) => `<button type="button" class="slash-item${i === slash.index ? ' active' : ''}" data-i="${i}">
+    <span class="cmd">${c.cmd}</span><span class="desc">${escapeHtml(c.desc)}</span>${c.hint ? `<span class="hint">${escapeHtml(c.hint)}</span>` : ''}</button>`).join('');
+  menu.hidden = false;
+  menu.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
+}
+
+function closeSlashMenu() { slash.open = false; slash.index = 0; $('#slashMenu').hidden = true; }
+
+function chooseSlash(i) {
+  const c = slash.items[i];
+  closeSlashMenu();
+  if (c.action) { input.value = ''; autosize(); c.action(); return; }
+  input.value = `${c.cmd} `;
+  autosize();
+  input.placeholder = c.hint ? `${c.cmd} ${c.hint}` : 'Message Athena';
+  input.focus();
+}
+
+function handleSlashKey(e) {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    slash.index = (slash.index + (e.key === 'ArrowDown' ? 1 : -1) + slash.items.length) % slash.items.length;
+    renderSlashMenu();
+    return true;
+  }
+  if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); chooseSlash(slash.index); return true; }
+  if (e.key === 'Escape') { e.preventDefault(); closeSlashMenu(); return true; }
+  return false;
+}
+$('#slashMenu').addEventListener('mousedown', (e) => {
+  const item = e.target.closest('[data-i]');
+  if (item) { e.preventDefault(); chooseSlash(Number(item.dataset.i)); }
+});
+input.addEventListener('blur', () => setTimeout(closeSlashMenu, 150));
 $('#stopBtn').onclick = stopGenerating;
 
 function stopGenerating() {
@@ -587,7 +669,7 @@ function stopGenerating() {
   updateComposerButtons();
 }
 
-async function sendMessage(text, { voice = false } = {}) {
+async function sendMessage(text, { voice = false, display = null } = {}) {
   if (!state.status.ollama) { await refreshStatus(); }
   let model = voice ? pickDefaultModel('voice') : currentModel();
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); openSettings('models'); return; }
@@ -597,7 +679,7 @@ async function sendMessage(text, { voice = false } = {}) {
     else toast('To understand images, download a vision model like qwen2.5vl:7b or gemma3:12b (Settings → Models).', 'error');
   }
 
-  const msg = { role: 'user', content: text, display: text };
+  const msg = { role: 'user', content: text, display: display ?? text };
   if (state.attachments.length) {
     const textFiles = state.attachments.filter((a) => a.kind === 'text');
     const images = state.attachments.filter((a) => a.kind === 'image');
@@ -722,8 +804,23 @@ async function generateReply({ voice = false, model = null } = {}) {
       if (!chat.model) chat.model = model;
       await saveChat();
     }
+    if (!reply.error && chat.autoTitle !== false && chat.messages.filter((m) => m.role === 'assistant').length === 1) smartTitle(chat, reply);
   }
   return reply;
+}
+
+// ------------------------------------------------------------ smart titles
+async function smartTitle(chat, reply) {
+  const user = chat.messages.find((m) => m.role === 'user');
+  const model = pickDefaultModel('voice') || reply.model; // a small, fast model is plenty for a title
+  try {
+    const { title } = await api('/api/title', json('POST', { model, user: user?.display ?? user?.content ?? '', reply: splitThinking(reply).content }));
+    if (!title || chat.autoTitle === false) return;
+    chat.title = title;
+    chat.autoTitle = false;
+    await api(`/api/conversations/${chat.id}`, json('PUT', { title, autoTitle: false }));
+    await loadChats();
+  } catch { /* keep the first-message title */ }
 }
 
 // ------------------------------------------------------------ attachments
@@ -731,9 +828,14 @@ const TEXT_EXT = /\.(txt|md|markdown|py|js|mjs|cjs|ts|tsx|jsx|json|html?|css|scs
 const LANG = { py: 'python', js: 'javascript', mjs: 'javascript', ts: 'typescript', tsx: 'tsx', jsx: 'jsx', rs: 'rust', rb: 'ruby', cs: 'csharp', kt: 'kotlin', sh: 'bash', ps1: 'powershell', yml: 'yaml', md: 'markdown', htm: 'html' };
 
 $('#fileInput').onchange = async (e) => {
-  for (const file of e.target.files) {
+  await addFiles(e.target.files);
+  e.target.value = '';
+};
+
+async function addFiles(fileList) {
+  for (const file of fileList) {
     if (file.type.startsWith('image/')) {
-      const url = await readFile(file, 'dataURL');
+      const url = await readFile(file, 'DataURL');
       state.attachments.push({ kind: 'image', name: file.name, data: url.split(',')[1] });
     } else if (file.type.startsWith('text/') || TEXT_EXT.test(file.name) || file.type === 'application/json') {
       if (file.size > 400_000) { toast(`${file.name} is too large (max ~400 KB)`, 'error'); continue; }
@@ -743,9 +845,29 @@ $('#fileInput').onchange = async (e) => {
       toast(`Can't read ${file.name} — attach text/code files or images.`, 'error');
     }
   }
-  e.target.value = '';
   renderAttachments();
-};
+  input.focus();
+}
+
+// Drag files anywhere onto the chat, or paste images with Ctrl+V.
+let dragDepth = 0;
+const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $('#dropZone').hidden = false; });
+window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener('dragleave', (e) => { if (!hasFiles(e)) return; if (--dragDepth <= 0) { dragDepth = 0; $('#dropZone').hidden = true; } });
+window.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  $('#dropZone').hidden = true;
+  addFiles(e.dataTransfer.files);
+});
+input.addEventListener('paste', (e) => {
+  const cd = e.clipboardData;
+  let files = [...(cd?.files || [])];
+  if (!files.length) files = [...(cd?.items || [])].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter(Boolean);
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
 
 function readFile(file, as) {
   return new Promise((resolve, reject) => {
@@ -811,6 +933,29 @@ function fireReminder(r) {
   const name = state.settings.user_name ? `${state.settings.user_name}, ` : '';
   speaker.reset();
   speaker.say(r.kind === 'timer' ? `${name}${text}` : `${name}here's your reminder: ${text}`);
+}
+
+// Soft two-note chimes: rising = "I'm listening", falling = "got it".
+let chimeCtx = null;
+function listenChime(kind) {
+  try {
+    chimeCtx = chimeCtx || new AudioContext();
+    const ctx = chimeCtx;
+    if (ctx.state === 'suspended') ctx.resume();
+    const notes = kind === 'start' ? [660, 990] : [880, 587];
+    notes.forEach((f, i) => {
+      const t = ctx.currentTime + i * 0.09;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.07, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.connect(g).connect(ctx.destination);
+      o.start(t);
+      o.stop(t + 0.2);
+    });
+  } catch { /* no audio */ }
 }
 
 function chime() {
@@ -960,6 +1105,7 @@ async function startVoice(firstCommand = '') {
   const model = pickDefaultModel('voice');
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); return; }
   state.voice.active = true;
+  state.voice.chimeNext = true;
   pauseWake(true);
   mic.muted = false;
   $('#voiceMute').classList.remove('off');
@@ -1021,8 +1167,11 @@ async function voiceLoop() {
     let text = '';
     try {
       if (state.status.whisper) {
+        if (state.voice.chimeNext !== false) listenChime('start');
         const blob = await mic.record({ signal: abort.signal });
+        state.voice.chimeNext = !!blob; // no chime again after a silent timeout
         if (!blob || !state.voice.active) continue;
+        listenChime('end');
         setVoiceState('transcribing');
         text = await transcribe(blob);
       } else {
@@ -1553,6 +1702,8 @@ async function init() {
   voicesReady();
   connectEvents();
   setupIdleLock();
+  const stars = startStars($('#stars'));
+  new MutationObserver(() => stars.redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   $('#lockBtn').hidden = !state.settings.pin_set;
   if (new URLSearchParams(location.search).get('voice') === '1') {
     history.replaceState(null, '', location.pathname);
