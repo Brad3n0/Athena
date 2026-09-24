@@ -28,7 +28,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "user_name": "",
     "custom_instructions": "",
     # Default model per mode. Empty = let the UI pick the best installed one.
-    "models": {"assistant": "", "code": "", "voice": "", "vision": ""},
+    "models": {"assistant": "", "code": "", "voice": "", "vision": "", "study": ""},
     "tools_enabled": True,
     # Abilities
     "memory_enabled": True,

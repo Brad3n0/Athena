@@ -12,9 +12,9 @@ echo  How much VRAM does your graphics card have?
 echo  (Task Manager ^> Performance ^> GPU ^> "Dedicated GPU memory")
 echo.
 echo   1^) No GPU / under 6 GB    qwen3:4b, qwen2.5-coder:3b
-echo   2^) 8 GB                   qwen3:8b, qwen2.5-coder:7b, qwen3:4b
-echo   3^) 12 - 16 GB             gpt-oss:20b, qwen3:14b, qwen2.5-coder:14b, qwen3:4b
-echo   4^) 24 GB or more          gpt-oss:20b, qwen3-coder:30b, qwen3:14b, qwen3:4b
+echo   2^) 8 GB                   qwen3:8b (chat + study), qwen2.5-coder:7b, qwen3:4b
+echo   3^) 12 - 16 GB             gpt-oss:20b, qwen3:14b (best for study), qwen2.5-coder:14b, qwen3:4b
+echo   4^) 24 GB or more          gpt-oss:20b, qwen3-coder:30b, qwen3:14b (best for study), qwen3:4b
 echo.
 set /p tier="Choose 1-4: "
 if "%tier%"=="1" set MODELS=qwen3:4b qwen2.5-coder:3b
@@ -31,6 +31,9 @@ for %%m in (%MODELS%) do (
   echo === Downloading %%m ===
   ollama pull %%m
 )
+echo.
+set /p vis="Also download qwen2.5vl:7b so Athena can read photos of worksheets and notes (6 GB)? (y/n): "
+if /i "%vis%"=="y" ollama pull qwen2.5vl:7b
 echo.
 echo All done. Start Athena with start.bat
 pause

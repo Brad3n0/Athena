@@ -36,12 +36,14 @@ Double-click **`start.bat`**. Athena opens in your browser at **http://localhost
 
 These are the best Ollama models I'd pick right now for each job. Sizes are for the default 4-bit downloads. New models come out all the time, so check [ollama.com/library](https://ollama.com/library) and paste any model name into **Settings → Models → Download**.
 
-| Your GPU (VRAM) | Assistant / chat | Code | Voice (needs to be fast) |
-|---|---|---|---|
-| No GPU / < 6 GB | `qwen3:4b` | `qwen2.5-coder:3b` | `qwen3:4b` |
-| 8 GB | `qwen3:8b` | `qwen2.5-coder:7b` | `qwen3:4b` |
-| 12–16 GB | `gpt-oss:20b` (16 GB) or `qwen3:14b` | `qwen2.5-coder:14b` | `qwen3:4b` |
-| 24 GB+ | `gpt-oss:20b` | **`qwen3-coder:30b`** | `qwen3:4b` or `qwen3:8b` |
+| Your GPU (VRAM) | Assistant / chat | Code | Study / homework | Voice (needs to be fast) |
+|---|---|---|---|---|
+| No GPU / < 6 GB | `qwen3:4b` | `qwen2.5-coder:3b` | `qwen3:4b` | `qwen3:4b` |
+| 8 GB | `qwen3:8b` | `qwen2.5-coder:7b` | `qwen3:8b` | `qwen3:4b` |
+| 12–16 GB | `gpt-oss:20b` (16 GB) or `qwen3:14b` | `qwen2.5-coder:14b` | **`qwen3:14b`** | `qwen3:4b` |
+| 24 GB+ | `gpt-oss:20b` | **`qwen3-coder:30b`** | **`qwen3:14b`** or `gpt-oss:20b` | `qwen3:4b` or `qwen3:8b` |
+
+**For schoolwork**, `qwen3:14b` is the best pick. It's excellent at math and science and works problems out step by step; you can open "Thought for …" to see its reasoning. To use photos of worksheets or handwritten notes, also get `qwen2.5vl:7b`: Athena switches to it automatically when you attach a photo. Set these under **Settings → Models → Study model / Vision model**, or leave them on Automatic.
 
 - **gpt-oss:20b**: OpenAI's open-weight reasoning model. A great all-rounder, and very good at using Athena's task tools.
 - **qwen3**: smart, multilingual, great at tools. It "thinks" before answering, and you can expand the thinking in the chat. Athena turns thinking off in voice mode so replies come back quickly.

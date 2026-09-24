@@ -31,14 +31,15 @@ const ICONS = {
 // Curated picks from the Ollama library. VRAM guidance is approximate (default 4-bit quantization).
 const RECOMMENDED = [
   { name: 'gpt-oss:20b', role: 'Assistant', desc: "OpenAI's open-weight reasoning model. Excellent all-rounder with tool use. ~14 GB · 16 GB VRAM" },
-  { name: 'qwen3:14b', role: 'Assistant', desc: 'Very smart, great tool use, thinks before answering. ~9 GB · 12 GB VRAM' },
-  { name: 'qwen3:8b', role: 'Assistant', desc: 'Best pick for 8 GB graphics cards. ~5 GB' },
+  { name: 'qwen3:14b', role: 'Study · Assistant', desc: 'Best for schoolwork: top at math & science, shows its reasoning step by step. ~9 GB · 12 GB VRAM' },
+  { name: 'qwen3:8b', role: 'Study · Assistant', desc: 'Great homework helper for 8 GB graphics cards. ~5 GB' },
   { name: 'qwen3-coder:30b', role: 'Code', desc: 'Top local coding model (fast MoE). ~19 GB · 24 GB VRAM, or 32 GB system RAM' },
   { name: 'qwen2.5-coder:14b', role: 'Code', desc: 'Strong coder for 12–16 GB cards. ~9 GB' },
   { name: 'qwen2.5-coder:7b', role: 'Code', desc: 'Good coder for 8 GB cards. ~4.7 GB' },
   { name: 'qwen3:4b', role: 'Voice', desc: 'Quick, snappy replies for voice chat, supports tasks. ~2.5 GB' },
   { name: 'llama3.2:3b', role: 'Voice', desc: 'Very fast and light. ~2 GB' },
   { name: 'gemma3:12b', role: 'Vision', desc: 'Understands images you attach. ~8 GB · 12 GB VRAM' },
+  { name: 'qwen2.5vl:7b', role: 'Study · Vision', desc: 'Reads photos of worksheets, handwriting, charts and diagrams. ~6 GB · 8 GB VRAM' },
   // Community versions with the refusal behaviour removed. Slightly less polished than the originals.
   { name: 'huihui_ai/qwen3-abliterated:14b', role: 'Fewer refusals', desc: 'Community Qwen3 14B with refusals removed. ~9 GB · 12 GB VRAM' },
   { name: 'huihui_ai/qwen3-abliterated:8b', role: 'Fewer refusals', desc: 'Community Qwen3 8B with refusals removed. ~5 GB · 8 GB VRAM' },
@@ -49,7 +50,8 @@ const RECOMMENDED = [
 const PREFERENCE = {
   assistant: ['gpt-oss', 'qwen3:', 'qwen3', 'gemma3', 'llama3.1', 'mistral', 'llama3'],
   code: ['qwen3-coder', 'devstral', 'qwen2.5-coder', 'deepseek-coder', 'codestral', 'codellama', 'gpt-oss', 'qwen3'],
-  study: ['gpt-oss', 'qwen3:', 'qwen3', 'gemma3', 'llama3.1', 'mistral', 'llama3'],
+  // Best for schoolwork: strong at math/science and step-by-step explanations.
+  study: ['qwen3:14b', 'qwen3:32b', 'qwen3:30b', 'gpt-oss:20b', 'qwen3:8b', 'phi4', 'qwen3', 'gpt-oss', 'deepseek-r1', 'gemma3', 'llama3.1', 'mistral', 'llama3'],
   voice: ['qwen3:4b', 'llama3.2', 'gemma3:4b', 'qwen3:1.7b', 'phi4-mini', 'qwen3:8b', 'gemma3', 'llama3.1', 'qwen3'],
 };
 
@@ -1579,7 +1581,7 @@ function switchTab(tab) {
 $('.tabs', dlg).onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); };
 
 function fillModelSelects() {
-  for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelVision', 'vision']]) {
+  for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelStudy', 'study'], ['#setModelVision', 'vision']]) {
     const sel = $(id);
     const auto = mode === 'vision' ? pickVisionModel() : pickDefaultModel(mode);
     sel.innerHTML = `<option value="">Automatic${auto ? ` (${escapeHtml(auto)})` : ''}</option>` +
@@ -1665,7 +1667,7 @@ bind('#setTtsEngine', 'tts_engine');
 bind('#setKokoroVoice', 'kokoro_voice');
 bind('#setPitch', 'voice_pitch', (el) => Number(el.value));
 
-for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelVision', 'vision']]) {
+for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelStudy', 'study'], ['#setModelVision', 'vision']]) {
   $(id).addEventListener('change', async (e) => {
     await saveSettings({ models: { [mode]: e.target.value } });
     if (state.chat && !state.chat.messages.length && state.mode === mode) { state.chat.model = ''; renderModelButton(); }
