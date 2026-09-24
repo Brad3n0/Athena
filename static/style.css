@@ -835,3 +835,17 @@ pre.diff .d-hunk { color: #79c0ff; }
 pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 .approval.wide .approval-card { width: min(860px, 100%); }
 .approval.wide pre.diff { max-height: 50vh; }
+
+/* ---------------- Compare models ---------------- */
+.msg.compare { max-width: 100%; }
+.cmp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
+.cmp-col { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.02); padding: 10px 14px 12px; }
+.cmp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+.cmp-head b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-body { flex: 1; min-height: 60px; overflow-x: auto; font-size: 14.5px; }
+.cmp-body .err { color: #ff8a80; }
+.cmp-keep { margin-top: 10px; align-self: stretch; border-radius: 10px; }
+.cmp-keep.ready:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
+.cmp-btn { margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 7px; color: var(--text-3); font-size: 14px; }
+.cmp-btn:hover { background: var(--bg-hover); color: var(--accent); }
+@media (max-width: 760px) { .cmp-grid { grid-template-columns: 1fr; } }

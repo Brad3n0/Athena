@@ -24,6 +24,7 @@ const ICONS = {
   warn: '<svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
   star: '<svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>',
+  branch: '<svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="8" r="2"/><path d="M6 7v10M18 10c0 4-6 3-12 7"/></svg>',
   canvas: '<svg viewBox="0 0 24 24"><path d="M4 4h10l6 6v10H4z"/><path d="M14 4v6h6M8 14h8M8 17h5"/></svg>',
   folder: '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
   gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
@@ -176,14 +177,23 @@ function openModelMenu() {
     ? state.models.map((m) => `
       <button class="opt" data-model="${escapeHtml(m.name)}">
         <div><div>${escapeHtml(m.name)}</div><div class="meta">${escapeHtml([m.parameters, m.family, fmtSize(m.size)].filter(Boolean).join(' · '))}</div></div>
-        ${m.name === cur ? `<span class="check">${ICONS.check}</span>` : ''}
-      </button>`).join('') + '<div class="hint">Download more in Settings → Models</div>'
+        ${m.name === cur ? `<span class="check">${ICONS.check}</span>` : `<span class="cmp-btn" data-compare="${escapeHtml(m.name)}" title="Compare side by side with ${escapeHtml(cur)}">⚖</span>`}
+      </button>`).join('') + '<div class="hint">⚖ answers your next messages with two models side by side · download more in Settings → Models</div>'
     : '<div class="hint">No models yet. Open Settings → Models to download one.</div>';
   menu.hidden = false;
 }
 
 $('#modelBtn').onclick = (e) => { e.stopPropagation(); $('#modelMenu').hidden ? openModelMenu() : ($('#modelMenu').hidden = true); };
 $('#modelMenu').onclick = (e) => {
+  const cmp = e.target.closest('[data-compare]');
+  if (cmp) {
+    state.compare = [currentModel(), cmp.dataset.compare];
+    $('#modelMenu').hidden = true;
+    renderCompareChip();
+    toast('⚖ Your next messages get two answers side by side. Keep the one you like.');
+    $('#input').focus();
+    return;
+  }
   const opt = e.target.closest('[data-model]');
   if (!opt) return;
   state.chat.model = opt.dataset.model;
@@ -565,6 +575,24 @@ messagesEl.addEventListener('click', async (e) => {
       act.innerHTML = ICONS.check;
       setTimeout(() => (act.innerHTML = ICONS.copy), 1500);
       break;
+    case 'branch': {
+      if (state.abort) return;
+      const src = state.chat;
+      if (!src.id) await saveChat();
+      state.chat = {
+        id: null, title: `↳ ${src.title || 'Chat'}`.slice(0, 60), icon: src.icon, mode: src.mode, model: src.model, project_id: src.project_id || null,
+        workspace: src.workspace, branchedFrom: src.id, autoTitle: false,
+        messages: structuredClone(src.messages.slice(0, idx + 1)).map(({ savedId, ...m }) => m),
+      };
+      await saveChat();
+      await loadChats();
+      renderMessages();
+      syncCanvas();
+      renderWorkspaceChip();
+      toast('↳ Branched into a new chat. The original is unchanged.');
+      $('#input').focus();
+      break;
+    }
     case 'canvas': {
       const block = /```canvas[^\n]*\n([\s\S]*?)(?:\n```|$)/.exec(msg.content);
       const text = block ? block[1] : splitThinking(msg).content.replace(/\n*```(graph|plot|flashcards|quiz)[\s\S]*?```/g, '').trim();
@@ -716,6 +744,7 @@ function updateAssistantEl(el, m) {
     <button data-msg-act="star" title="${m.savedId ? 'Saved — click to remove' : 'Save this reply'}" class="${m.savedId ? 'starred' : ''}">${ICONS.star}</button>
     <button data-msg-act="speak" title="Read aloud">${ICONS.speak}</button>
     <button data-msg-act="canvas" title="Edit in canvas">${ICONS.canvas}</button>
+    <button data-msg-act="branch" title="Branch: start a new chat from here">${ICONS.branch}</button>
     <button data-msg-act="retry" title="Regenerate">${ICONS.retry}</button>
     <span class="stats">${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
   const idx = Number(el.dataset.idx);
@@ -980,6 +1009,7 @@ async function sendMessage(text, { voice = false, display = null } = {}) {
     else toast('To understand images, download a vision model like qwen2.5vl:7b or gemma3:12b (Settings → Models).', 'error');
   }
 
+  state.pendingKeep?.(0); // sent again without picking a side: keep the left answer
   const msg = { role: 'user', content: text, display: display ?? text, time: Date.now() };
   if (!voice) sfx('send');
   if (state.attachments.length) {
@@ -995,7 +1025,99 @@ async function sendMessage(text, { voice = false, display = null } = {}) {
   }
   state.chat.messages.push(msg);
   renderMessages();
-  await generateReply({ voice, model });
+  if (state.compare && !voice) await compareReplies(state.compare);
+  else await generateReply({ voice, model });
+}
+
+// ------------------------------------------------------------ compare two models
+function renderCompareChip() {
+  const chip = $('#compareChip');
+  chip.hidden = !state.compare;
+  if (state.compare) chip.innerHTML = `<span>⚖ Comparing <b>${escapeHtml(state.compare[0])}</b> vs <b>${escapeHtml(state.compare[1])}</b></span><button type="button" title="Stop comparing">${ICONS.x}</button>`;
+}
+$('#compareChip').onclick = (e) => { if (e.target.closest('button')) { state.compare = null; renderCompareChip(); } };
+
+async function compareReplies(models) {
+  const chat = state.chat;
+  const history = chat.messages.map(({ role, content, images }) => ({ role, content, images }));
+  const el = document.createElement('div');
+  el.className = 'msg assistant compare';
+  el.innerHTML = `<div class="cmp-grid">${models.map((m, i) => `
+    <div class="cmp-col" data-col="${i}">
+      <div class="cmp-head"><b>${escapeHtml(m)}</b><span class="muted small cmp-stat"></span></div>
+      <div class="cmp-body"><div class="typing"><span></span><span></span><span></span></div></div>
+      <button type="button" class="ghost cmp-keep" data-keep="${i}" disabled>Keep this one</button>
+    </div>`).join('')}</div>`;
+  $('.thread', messagesEl).append(el);
+  scrollBottom(true);
+  const abort = new AbortController();
+  state.abort = abort;
+  updateComposerButtons();
+  const results = models.map((model) => ({ role: 'assistant', content: '', thinking: '', model, time: Date.now() }));
+
+  const run = async (model, i) => {
+    const r = results[i];
+    const body = el.querySelector(`[data-col="${i}"] .cmp-body`);
+    const t0 = performance.now();
+    let raf = 0;
+    const paint = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; body.innerHTML = `<div class="md">${renderMarkdown(splitThinking(r).content) || '…'}</div>`; }); };
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: abort.signal,
+        body: JSON.stringify({ model, mode: state.mode, no_tools: true, project_id: chat.project_id || null, canvas: canvasForChat(), messages: history }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          const ev = JSON.parse(line);
+          if (ev.type === 'token') r.content += ev.content;
+          else if (ev.type === 'thinking') r.thinking += ev.content;
+          else if (ev.type === 'error') r.error = ev.message;
+          else if (ev.type === 'done') r.stats = ev.stats;
+        }
+        paint();
+      }
+    } catch (e) { if (e.name !== 'AbortError') r.error = e.message; }
+    cancelAnimationFrame(raf);
+    if (!r.thinking) delete r.thinking;
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    body.innerHTML = r.error ? `<div class="err">${escapeHtml(r.error)}</div>` : `<div class="md">${renderMarkdown(splitThinking(r).content) || '<i>(no answer)</i>'}</div>`;
+    hydrateGraphs(body, false);
+    hydrateStudy(body, false);
+    const words = (splitThinking(r).content.match(/\S+/g) || []).length;
+    el.querySelector(`[data-col="${i}"] .cmp-stat`).textContent = `${secs}s · ${words} words`;
+    el.querySelector(`[data-keep="${i}"]`).disabled = !!r.error || !r.content;
+  };
+  await Promise.all(models.map(run));
+  if (state.abort === abort) state.abort = null;
+  updateComposerButtons();
+  sfx('done');
+
+  const keep = (i) => {
+    state.pendingKeep = null;
+    if (chat !== state.chat) return;
+    const pick = results[i];
+    const reply = { ...pick, versions: results.filter((r) => r.content).map(snapshot), compared: models };
+    reply.v = reply.versions.findIndex((v) => v.model === pick.model);
+    el.remove();
+    chat.messages.push(reply);
+    if (chat === state.chat) renderMessages();
+    saveChat();
+    if (chat.autoTitle !== false && chat.messages.filter((m) => m.role === 'assistant').length === 1) smartTitle(chat, reply);
+  };
+  if (abort.signal.aborted && !results.some((r) => r.content)) { el.remove(); return; }
+  state.pendingKeep = keep;
+  el.querySelector('.cmp-grid').onclick = (e) => { const b = e.target.closest('[data-keep]'); if (b && !b.disabled) keep(Number(b.dataset.keep)); };
+  el.querySelectorAll('.cmp-keep').forEach((b) => { b.classList.add('ready'); });
 }
 
 async function generateReply({ voice = false, model = null } = {}) {

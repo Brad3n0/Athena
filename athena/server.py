@@ -266,12 +266,13 @@ async def chat(request: Request):
         raise HTTPException(400, "No model selected")
 
     settings = store.get_settings()
-    use_tools = model not in _no_tool_models and bool(enabled_tools(settings))
+    no_tools = bool(body.get("no_tools"))  # side-by-side model comparisons answer without tools
+    use_tools = model not in _no_tool_models and bool(enabled_tools(settings)) and not no_tools
     auto_approve = bool(body.get("auto_approve"))
     history = _clean_messages(body.get("messages") or [])
     project = store.get_project(body.get("project_id"))
     try:
-        code_root = workspace.open_root(body.get("workspace")) if mode != "voice" else None
+        code_root = workspace.open_root(body.get("workspace")) if mode != "voice" and not no_tools else None
     except workspace.WorkspaceError:
         code_root = None
     if code_root and model not in _no_tool_models:
