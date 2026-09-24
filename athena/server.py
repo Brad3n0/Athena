@@ -141,7 +141,10 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
         parts.append(
             "You are in Code mode: act as an expert senior software engineer. Give correct, complete, "
             "runnable code in fenced code blocks with the language tag. Explain briefly and precisely, "
-            "point out bugs and edge cases, and prefer simple, idiomatic solutions."
+            "point out bugs and edge cases, and prefer simple, idiomatic solutions. "
+            "The chat can show a live preview of ```html and ```svg blocks, so for a web page, widget or game give ONE "
+            "self-contained ```html block with the CSS in <style> and the JavaScript in <script>. "
+            "Python, JavaScript, TypeScript, PowerShell and Bash blocks get a Run button."
         )
     elif mode == "study":
         parts.append(STUDY_PROMPT)
@@ -183,7 +186,8 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
         if "screen" in groups:
             abilities.append("- Screen: look_at_screen takes a screenshot and describes it, so you can help with whatever the user is looking at.")
         if "code" in groups:
-            abilities.append("- Code: run_python runs Python on the PC (the user approves first). Use it to check calculations or test code.")
+            abilities.append("- Code: run_python runs Python on the PC (the user approves first). Use it to check calculations or test code. "
+                             "Charts made with matplotlib (plt.show()) are shown to the user as images.")
         if "docs" in groups:
             abilities.append("- Documents: search_documents searches the user's own files by meaning. Use it for questions about their documents and cite file names.")
         if "images" in groups:
@@ -368,7 +372,10 @@ async def chat(request: Request):
                 else:
                     result = await run_in_threadpool(run_tool, name, args)
                 yield _event("tool", id=step, name=name, args=args, result=result)
-                text = json.dumps(result, ensure_ascii=False)
+                for_model = result
+                if isinstance(result, dict) and result.get("images"):  # charts are for the user's eyes; the model just hears about them
+                    for_model = {**result, "images": f"{len(result['images'])} image(s) shown to the user"}
+                text = json.dumps(for_model, ensure_ascii=False)
                 messages.append({"role": "tool", "content": text[:16000], "tool_name": name})
 
         yield _event("done", stats={})
@@ -1070,12 +1077,13 @@ async def take_screenshot():
 
 @app.post("/api/run")
 async def run_code(request: Request):
-    """Run a Python code block from the chat (the user pressed ▶ Run)."""
+    """Run a code block from the chat (the user pressed ▶ Run): Python, JavaScript, TypeScript, PowerShell, Bash…"""
     from . import pc
 
-    code = str((await request.json()).get("code", ""))
+    body = await request.json()
+    code, language = str(body.get("code", "")), str(body.get("language") or "python")
     try:
-        return await run_in_threadpool(pc.run_python, code)
+        return await run_in_threadpool(pc.run_code, code, language)
     except pc.PCError as exc:
         raise HTTPException(400, str(exc)) from exc
 
@@ -1179,6 +1187,46 @@ async def change_pin(request: Request):
 
 
 OPEN_PATHS = {"/api/lock", "/api/unlock", "/api/status"}
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+LOCAL_SUFFIXES = (".localhost", ".local", ".lan", ".home", ".internal", ".ts.net")
+
+
+def _host_ok(host: str) -> bool:
+    """Only answer to names that point at this PC. Stops "DNS rebinding", where a website
+    points its own domain at 127.0.0.1 to talk to Athena."""
+    import ipaddress
+    import socket
+
+    name = host.rsplit(":", 1)[0].strip("[]").lower() if host.count(":") <= 1 or host.startswith("[") else host.lower()
+    if not name or name == "localhost" or name.endswith(LOCAL_SUFFIXES) or name == socket.gethostname().lower():
+        return True
+    try:
+        ipaddress.ip_address(name)
+        return True
+    except ValueError:
+        pass
+    extra = [h.strip().lower() for h in os.environ.get("ATHENA_ALLOWED_HOSTS", "").split(",") if h.strip()]
+    return name in extra
+
+
+def _cross_site(request: Request) -> bool:
+    """True for a request sent by some other website (or a sandboxed preview) instead of Athena's own page."""
+    if request.method in SAFE_METHODS:
+        return False
+    origin = request.headers.get("origin")
+    if origin is not None:
+        return origin == "null" or origin.split("://", 1)[-1].rstrip("/").lower() != request.headers.get("host", "").lower()
+    return request.headers.get("sec-fetch-site", "same-origin") not in ("same-origin", "none")
+
+
+@app.middleware("http")
+async def same_site_only(request: Request, call_next):
+    if request.url.path.startswith("/api/"):
+        if not _host_ok(request.headers.get("host", "")):
+            return JSONResponse({"detail": "Unknown host. Add it to ATHENA_ALLOWED_HOSTS to allow it."}, status_code=403)
+        if _cross_site(request):
+            return JSONResponse({"detail": "Blocked a request from another website"}, status_code=403)
+    return await call_next(request)
 
 
 @app.middleware("http")

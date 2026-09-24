@@ -90,7 +90,8 @@ While a project is open, new chats go into it, and the sidebar only shows that p
 - **"What's on my screen?":** ask her, or click the 🖥 button next to the paperclip to attach a screenshot. This needs a vision model like `qwen2.5vl:7b` or `gemma3:12b`.
 - **Your documents:** in **Settings → Knowledge**, add folders of notes, PDFs and Word files, then click **Index now**. Ask things like *"what does my lease say about pets?"*
 - **PC control:** *"open Spotify"*, *"volume to 30"*, *"pause the music"*, *"lock my PC"*, *"shut down in an hour"*, and *"rewrite what I copied to sound professional"* (clipboard).
-- **Run code:** Python code blocks get a **▶ Run** button, and in chat she can run code to check her own work (she asks first).
+- **Run code:** Python, JavaScript, TypeScript, PowerShell and Bash code blocks get a **▶ Run** button, and in chat she can run code to check her own work (she asks first). Charts made with matplotlib show up right in the chat. JavaScript and TypeScript need [Node.js](https://nodejs.org).
+- **Live preview:** HTML and SVG code blocks get a **👁 Preview** button that shows the page working inside the chat (⛶ for full screen). Ask for *"a pomodoro timer web page"* or *"a snake game"*. Previews run in a locked-down sandbox and can't touch your files or chats.
 - **Images:** connect Stable Diffusion WebUI Forge in **Settings → Integrations**, then say *"draw a gold owl on a night sky"*.
 - **Smart home:** connect Home Assistant in **Settings → Integrations**: *"turn off the kitchen lights"*, *"set the thermostat to 70"*.
 - **Personalities:** Assistant, Companion, Coach, Study Buddy and Chef, or create your own with its own voice (**Settings → General**).
@@ -123,7 +124,7 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 ## Good to know
 
 - Everything is stored in the `data/` folder: chats, tasks and settings as plain JSON. Back it up or delete it anytime.
-- Use Athena from your phone on the same Wi-Fi: `start.bat --host 0.0.0.0`, then open `http://<your-pc-ip>:8765`. Browsers only allow the microphone on `localhost`, so voice works on the PC itself.
+- Use Athena from your phone on the same Wi-Fi: `start.bat --host 0.0.0.0`, then open `http://<your-pc-ip>:8765`. If you reach it by a custom name (like a domain), add that name to the `ATHENA_ALLOWED_HOSTS` environment variable. Athena refuses unknown names and requests sent from other websites, so a web page can't secretly control her. Browsers only allow the microphone on `localhost`, so voice works on the PC itself.
 - Other options: `--port 9000` changes the port, and `--no-browser` stops the browser opening. `OLLAMA_HOST` is respected if Ollama runs elsewhere.
 - **Quick commands:** type **/** in the message box for a menu: `/remind`, `/timer`, `/weather`, `/search`, `/image`, `/find`, `/organize`, `/docs`, `/screen`, `/open`, `/remember`, `/run`, `/brief`, `/voice` and `/new`.
 - **Drag & drop** files onto the chat, or paste screenshots with **Ctrl+V**.

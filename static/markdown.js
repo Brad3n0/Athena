@@ -4,6 +4,9 @@ import katex from './vendor/katex/katex.mjs';
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const RUN_ICON = '<svg viewBox="0 0 24 24"><path d="M7 5v14l11-7z"/></svg>';
+const EYE_ICON = '<svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+/** Languages the Run button handles (Node, PowerShell and Bash only if installed on the PC). */
+export const RUNNABLE = /^(python|py|python3|javascript|js|node|mjs|typescript|ts|powershell|ps1|pwsh|bat|batch|cmd|bash|sh|shell|zsh)$/i;
 const SAVE_ICON = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
 const COPY_ICON = '<svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 
@@ -95,8 +98,10 @@ function codeBlock(code, lang) {
     return `<div class="study-widget" data-kind="${lang.toLowerCase()}" data-src="${esc(code)}"></div>`;
   }
   const label = esc(lang || 'code');
-  const runnable = /^(python|py|python3)$/i.test(lang || '');
-  const run = runnable ? `<button type="button" data-run>${RUN_ICON}Run</button>` : '';
+  const runnable = RUNNABLE.test(lang || '');
+  const previewable = /^(html|htm|svg)$/i.test(lang || '');
+  const run = previewable ? `<button type="button" data-preview>${EYE_ICON}Preview</button>`
+    : runnable ? `<button type="button" data-run>${RUN_ICON}Run</button>` : '';
   return `<div class="code-block"><div class="code-head"><span>${label}</span><div class="code-actions">${run}<button type="button" data-save-code title="Save as a file">${SAVE_ICON}Save</button><button type="button" data-copy>${COPY_ICON}Copy code</button></div></div>` +
     `<pre><code data-lang="${label}">${highlight(code, lang)}</code></pre></div>`;
 }

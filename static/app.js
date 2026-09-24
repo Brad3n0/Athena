@@ -487,6 +487,9 @@ messagesEl.addEventListener('click', async (e) => {
   const saveBtn = e.target.closest('[data-save-code]');
   if (saveBtn) { saveCodeBlock(saveBtn); return; }
 
+  const previewBtn = e.target.closest('[data-preview]');
+  if (previewBtn) { togglePreview(previewBtn); return; }
+
   const runBtn = e.target.closest('[data-run]');
   if (runBtn) { runCodeBlock(runBtn); return; }
 
@@ -741,7 +744,7 @@ function stepHtml(t, i, openSteps) {
     detail = `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>`;
   }
   else if (t.name === 'run_python' && r) {
-    detail = `<pre class="run-output">${escapeHtml(r.stdout || '')}${r.stderr ? `<span class="err">${escapeHtml(r.stderr)}</span>` : ''}</pre>`;
+    detail = `<pre class="run-output">${runOutputHtml(r)}</pre>${r.images?.length ? runImagesHtml(r.images) : ''}`;
   } else if (t.name === 'search_documents' && r?.results) {
     detail = `<ul>${r.results.map((x) => `<li><b>${escapeHtml(x.file)}</b><div class="muted small">${escapeHtml(x.text.slice(0, 220))}…</div></li>`).join('')}</ul>`;
   } else if (t.name === 'look_at_screen' && r?.screen) {
@@ -1806,17 +1809,56 @@ $('#shotBtn').onclick = async () => {
 // ------------------------------------------------------------ run code
 async function runCodeBlock(btn) {
   const block = btn.closest('.code-block');
-  const code = block.querySelector('code').innerText;
+  const codeEl = block.querySelector('code');
+  const code = codeEl.innerText;
+  const language = codeEl.dataset.lang || 'python';
   let out = block.querySelector('.run-output');
   if (!out) { out = document.createElement('pre'); out.className = 'run-output'; block.append(out); }
+  block.querySelector('.run-images')?.remove();
   out.textContent = 'Running…';
+  btn.disabled = true;
   try {
-    const r = await api('/api/run', json('POST', { code }));
-    out.innerHTML = r.timed_out
-      ? `<span class="err">Stopped after ${r.seconds}s (time limit)</span>\n${escapeHtml(r.stdout || '')}`
-      : `${escapeHtml(r.stdout || '')}${r.stderr ? `<span class="err">${escapeHtml(r.stderr)}</span>` : ''}` || '(no output)';
-    if (!out.textContent.trim()) out.textContent = '(finished, no output)';
+    const r = await api('/api/run', json('POST', { code, language }));
+    out.innerHTML = runOutputHtml(r);
+    if (r.images?.length) block.insertAdjacentHTML('beforeend', runImagesHtml(r.images));
   } catch (e) { out.innerHTML = `<span class="err">${escapeHtml(e.message)}</span>`; }
+  btn.disabled = false;
+}
+
+function runOutputHtml(r) {
+  const body = r.timed_out
+    ? `<span class="err">Stopped after ${r.seconds}s (time limit)</span>\n${escapeHtml(r.stdout || '')}`
+    : `${escapeHtml(r.stdout || '')}${r.stderr ? `<span class="err">${escapeHtml(r.stderr)}</span>` : ''}`;
+  const tip = r.tip ? `\n<span class="tip">💡 ${escapeHtml(r.tip)}</span>` : '';
+  return (body.trim() ? body : r.images?.length ? '' : '(finished, no output)') + tip || '(finished, chart below)';
+}
+
+const runImagesHtml = (images) => `<div class="run-images">${images.map((src) => /^data:image\//.test(src) ? `<img src="${src}" alt="Output" />` : '').join('')}</div>`;
+
+// ------------------------------------------------------------ live HTML preview
+// Runs in a sandboxed frame with no access to Athena (a unique, empty origin), so page code can't touch your chats or PC.
+function togglePreview(btn) {
+  const block = btn.closest('.code-block');
+  const open = block.querySelector('.html-preview');
+  if (open) { open.remove(); btn.classList.remove('on'); return; }
+  const codeEl = block.querySelector('code');
+  let src = codeEl.innerText;
+  if (/^svg$/i.test(codeEl.dataset.lang)) src = `<body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#fff">${src}</body>`;
+  const wrap = document.createElement('div');
+  wrap.className = 'html-preview';
+  wrap.innerHTML = `<div class="hp-bar"><span>Live preview</span><button type="button" data-hp="reload" title="Reload">↻</button><button type="button" data-hp="full" title="Full screen">⛶</button></div>`;
+  const frame = document.createElement('iframe');
+  frame.setAttribute('sandbox', 'allow-scripts allow-modals allow-forms allow-pointer-lock');
+  frame.setAttribute('referrerpolicy', 'no-referrer');
+  frame.srcdoc = src;
+  wrap.append(frame);
+  block.append(wrap);
+  btn.classList.add('on');
+  wrap.querySelector('.hp-bar').onclick = (e) => {
+    const act = e.target.closest('[data-hp]')?.dataset.hp;
+    if (act === 'reload') { frame.srcdoc = ''; frame.srcdoc = src; }
+    if (act === 'full') wrap.requestFullscreen?.();
+  };
 }
 
 // ------------------------------------------------------------ live events

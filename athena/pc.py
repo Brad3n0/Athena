@@ -10,6 +10,7 @@ import ctypes
 import difflib
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -200,18 +201,130 @@ def screenshot(max_width: int = 1600) -> str:
 
 # --------------------------------------------------------------- run code
 
-def run_python(code: str, timeout: int = 30) -> dict[str, Any]:
+# Loaded before the user's script when it uses matplotlib: plt.show() (and any figure left open at the end)
+# is saved as a PNG so the chat can show the chart instead of trying to open a window.
+_PLOT_HOOK = """
+import atexit, runpy, sys
+_n = [0]
+def _save_all(*_a, **_k):
+    try:
+        import matplotlib.pyplot as plt
+    except Exception:
+        return
+    for num in plt.get_fignums():
+        _n[0] += 1
+        plt.figure(num).savefig(f"_athena_plot_{_n[0]}.png", dpi=110, bbox_inches="tight")
+    plt.close("all")
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    plt.show = _save_all
+    atexit.register(_save_all)
+except Exception:
+    pass
+sys.argv = ["main.py"]
+runpy.run_path("main.py", run_name="__main__")
+"""
+
+MAX_IMAGES = 6
+
+
+def _collect_images(folder: Path) -> list[str]:
+    """PNG/JPG/SVG files the code wrote (charts, drawings), as data URLs for the chat."""
+    out = []
+    for f in sorted(folder.iterdir(), key=lambda f: f.stat().st_mtime):
+        ext = f.suffix.lower()
+        if ext in (".png", ".jpg", ".jpeg", ".svg", ".gif") and f.stat().st_size < 3_000_000 and len(out) < MAX_IMAGES:
+            mime = {"svg": "image/svg+xml", "jpg": "image/jpeg"}.get(ext[1:], f"image/{ext[1:]}")
+            out.append(f"data:{mime};base64," + base64.b64encode(f.read_bytes()).decode())
+    return out
+
+
+# language -> (file name, command). Node, PowerShell and Bash are used only if they're installed.
+def _runner(lang: str) -> tuple[str, list[str]] | None:
+    import shutil
+
+    lang = (lang or "python").lower()
+    if lang in ("python", "py", "python3", ""):
+        return "main.py", [sys.executable, "main.py"]
+    if lang in ("javascript", "js", "node", "mjs"):
+        node = shutil.which("node")
+        return ("main.mjs", [node, "main.mjs"]) if node else None
+    if lang in ("typescript", "ts"):
+        node = shutil.which("node")
+        # Node 22.6+ can run TypeScript directly by stripping the types.
+        return ("main.ts", [node, "--experimental-strip-types", "--no-warnings", "main.ts"]) if node else None
+    if lang in ("powershell", "ps1", "pwsh"):
+        ps = shutil.which("pwsh") or shutil.which("powershell")
+        return ("main.ps1", [ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "main.ps1"]) if ps else None
+    if lang in ("bat", "batch", "cmd"):
+        return ("main.bat", ["cmd", "/c", "main.bat"]) if os.name == "nt" else None
+    if lang in ("bash", "sh", "shell", "zsh"):
+        sh = shutil.which("bash") or shutil.which("sh")
+        return ("main.sh", [sh, "main.sh"]) if sh else None
+    return None
+
+
+RUNNABLE = ("python", "javascript", "typescript", "powershell", "batch", "bash")
+_NEEDS = {"javascript": "Node.js (nodejs.org)", "typescript": "Node.js 22 or newer (nodejs.org)",
+          "powershell": "PowerShell", "batch": "Windows", "bash": "Bash (Git Bash or WSL on Windows)"}
+
+
+def run_code(code: str, language: str = "python", timeout: int = 30) -> dict[str, Any]:
     code = code or ""
     if not code.strip():
         raise PCError("No code to run")
+    runner = _runner(language)
+    if not runner:
+        norm = {"js": "javascript", "node": "javascript", "ts": "typescript", "ps1": "powershell", "pwsh": "powershell",
+                "bat": "batch", "cmd": "batch", "sh": "bash", "shell": "bash", "zsh": "bash"}.get(language.lower(), language.lower())
+        need = _NEEDS.get(norm)
+        raise PCError(f"Running {language} needs {need}, which isn't installed." if need else f"Can't run {language} code yet.")
+    name, cmd = runner
     with tempfile.TemporaryDirectory(prefix="athena-run-") as tmp:
-        script = Path(tmp) / "main.py"
-        script.write_text(code, encoding="utf-8")
-        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "MPLBACKEND": "Agg"}
+        folder = Path(tmp)
+        (folder / name).write_text(code, encoding="utf-8", newline="\r\n" if name.endswith(".bat") else None)
+        if name == "main.py" and ("matplotlib" in code or "plt." in code):
+            (folder / "_athena_run.py").write_text(_PLOT_HOOK, encoding="utf-8")
+            cmd = [sys.executable, "_athena_run.py"]
+        env = {**os.environ, "PYTHONIOENCODING": "utf-8", "MPLBACKEND": "Agg", "NO_COLOR": "1"}
         try:
-            r = subprocess.run([sys.executable, "-I", str(script)], cwd=tmp, capture_output=True, text=True,
-                               timeout=timeout, env=env, encoding="utf-8", errors="replace")
+            r = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True, timeout=timeout, env=env,
+                               encoding="utf-8", errors="replace", creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         except subprocess.TimeoutExpired as exc:
             out = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-            return {"timed_out": True, "seconds": timeout, "stdout": out[-6000:]}
-    return {"exit_code": r.returncode, "stdout": r.stdout[-8000:], "stderr": r.stderr[-6000:]}
+            return {"timed_out": True, "seconds": timeout, "stdout": out[-6000:], "images": _collect_images(folder)}
+        images = _collect_images(folder)
+        r.stderr = r.stderr.replace(str(folder) + os.sep, "")
+    result: dict[str, Any] = {"exit_code": r.returncode, "stdout": r.stdout[-8000:], "stderr": _clean_trace(r.stderr)[-6000:]}
+    if images:
+        result["images"] = images
+    missing = re.search(r"No module named '([\w.]+)'", result["stderr"])
+    if missing:
+        pkg = PIP_NAMES.get(missing.group(1).split(".")[0], missing.group(1).split(".")[0])
+        result["tip"] = f'This needs the {pkg} package. Install it with:  "{sys.executable}" -m pip install {pkg}'
+    return result
+
+
+# Python import name -> pip package name, when they differ.
+PIP_NAMES = {"cv2": "opencv-python", "PIL": "pillow", "sklearn": "scikit-learn", "bs4": "beautifulsoup4", "yaml": "pyyaml"}
+
+
+def _clean_trace(err: str) -> str:
+    """Hide the plotting helper's own frames from Python tracebacks."""
+    lines = err.splitlines(keepends=True)
+    out, skip = [], False
+    for line in lines:
+        if line.startswith('  File "') and ("_athena_run.py" in line or "runpy" in line):
+            skip = True
+            continue
+        if skip and line.startswith("    "):
+            continue
+        skip = False
+        out.append(line)
+    return "".join(out)
+
+
+def run_python(code: str, timeout: int = 30) -> dict[str, Any]:
+    return run_code(code, "python", timeout)
