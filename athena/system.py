@@ -80,9 +80,12 @@ def gpus() -> list[dict[str, Any]]:
 def recommend(vram: float, ram: float) -> dict[str, Any]:
     """The best models for this PC, by job."""
     if vram >= 20:
-        tier, picks = "24 GB+", {"assistant": "gpt-oss:20b", "study": "qwen3:14b", "code": "qwen3-coder:30b", "voice": "qwen3:4b", "vision": "qwen2.5vl:7b"}
+        tier, picks = "24 GB+", {"assistant": "gpt-oss:20b", "study": "qwen3:14b", "code": "qwen3-coder:30b", "voice": "qwen3:14b", "vision": "qwen2.5vl:7b"}
     elif vram >= 15:
-        tier, picks = "16 GB", {"assistant": "gpt-oss:20b", "study": "qwen3:14b", "code": "qwen2.5-coder:14b", "voice": "qwen3:4b", "vision": "qwen2.5vl:7b"}
+        # qwen3-coder:30b is a mixture-of-experts model: it spills a little past 16 GB but stays fast with 32 GB of RAM.
+        # Voice shares qwen3:14b with Study, so switching between them doesn't reload a model.
+        tier, picks = "16 GB", {"assistant": "gpt-oss:20b", "study": "qwen3:14b", "code": "qwen3-coder:30b" if ram >= 30 else "qwen2.5-coder:14b",
+                                "voice": "qwen3:14b", "vision": "qwen2.5vl:7b"}
     elif vram >= 11:
         tier, picks = "12 GB", {"assistant": "qwen3:14b", "study": "qwen3:14b", "code": "qwen2.5-coder:14b", "voice": "qwen3:4b", "vision": "qwen2.5vl:7b"}
     elif vram >= 7:

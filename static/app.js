@@ -1914,6 +1914,27 @@ function switchTab(tab) {
 }
 $('.tabs', dlg).onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); };
 
+// One click: pick the best installed model for each job, based on this PC's graphics card and memory.
+$('#bestModels').onclick = async () => {
+  const note = $('#bestModelsNote');
+  note.textContent = 'Checking your PC…';
+  try {
+    const hw = await api('/api/system');
+    const installed = new Set(modelNames().flatMap((n) => [n, n.replace(/:latest$/, '')]));
+    const models = { ...(state.settings.models || {}) };
+    const missing = [];
+    for (const [role, name] of Object.entries(hw.picks || {})) {
+      if (installed.has(name)) models[role] = name; else missing.push(name);
+    }
+    await saveSettings({ models });
+    fillModelSelects();
+    const gpu = hw.gpus?.[0];
+    note.innerHTML = `${gpu ? `${escapeHtml(gpu.name)} (${gpu.vram_gb} GB) + ${hw.ram_gb} GB RAM` : `${hw.ram_gb} GB RAM`}: set the best models you have.` +
+      ([...new Set(missing)].length ? ` Not downloaded yet: ${[...new Set(missing)].map((m) => `<code>${escapeHtml(m)}</code>`).join(', ')}. Download them below, then press this again.` : ' ✓');
+    if (state.chat && !state.chat.messages.length) { state.chat.model = ''; renderModelButton(); }
+  } catch (e) { note.textContent = e.message; }
+};
+
 function fillModelSelects() {
   for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelStudy', 'study'], ['#setModelVision', 'vision']]) {
     const sel = $(id);
