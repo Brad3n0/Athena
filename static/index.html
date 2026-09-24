@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Athena AI</title>
+  <link rel="icon" href="logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app" id="app">
+  <!-- ============ Sidebar ============ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">
+        <img src="logo.svg" alt="" class="brand-logo" />
+        <span>Athena AI</span>
+      </div>
+      <button class="icon-btn" id="closeSidebar" title="Close sidebar">
+        <svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+      </button>
+    </div>
+
+    <button class="new-chat" id="newChat">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      New chat
+    </button>
+
+    <div class="search">
+      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="searchChats" placeholder="Search chats" />
+    </div>
+
+    <nav class="chat-list" id="chatList"></nav>
+
+    <div class="sidebar-bottom">
+      <button class="side-link" id="openTasks">
+        <svg viewBox="0 0 24 24"><path d="M9 11l2 2 4-4"/><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+        Tasks <span class="badge" id="taskBadge" hidden>0</span>
+      </button>
+      <button class="side-link" id="openSettings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        Settings
+      </button>
+      <div class="status" id="status"><span class="dot"></span><span id="statusText">Connecting…</span></div>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <!-- ============ Main ============ -->
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn" id="openSidebar" title="Open sidebar">
+        <svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+      </button>
+      <div class="model-picker">
+        <button class="model-btn" id="modelBtn">
+          <span id="modelName">Select a model</span>
+          <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="model-menu" id="modelMenu" hidden></div>
+      </div>
+      <div class="mode-switch" id="modeSwitch" role="tablist">
+        <button data-mode="assistant" class="active" role="tab">
+          <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>Assistant
+        </button>
+        <button data-mode="code" role="tab">
+          <svg viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5"/></svg>Code
+        </button>
+      </div>
+      <div class="spacer"></div>
+      <button class="icon-btn" id="newChatTop" title="New chat">
+        <svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      </button>
+    </header>
+
+    <div class="banner" id="banner" hidden></div>
+
+    <section class="messages" id="messages"></section>
+
+    <div class="composer-wrap">
+      <form class="composer" id="composer">
+        <div class="attachments" id="attachments"></div>
+        <textarea id="input" rows="1" placeholder="Message Athena" autocomplete="off"></textarea>
+        <div class="composer-row">
+          <label class="icon-btn" title="Attach files (code, text, images)">
+            <input type="file" id="fileInput" multiple hidden />
+            <svg viewBox="0 0 24 24"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 8"/></svg>
+          </label>
+          <div class="spacer"></div>
+          <button type="button" class="icon-btn" id="micBtn" title="Dictate">
+            <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button type="button" class="voice-btn" id="voiceBtn" title="Talk to Athena (voice mode)">
+            <svg viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg>
+          </button>
+          <button type="submit" class="send-btn" id="sendBtn" title="Send" hidden>
+            <svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          </button>
+          <button type="button" class="send-btn" id="stopBtn" title="Stop" hidden>
+            <svg viewBox="0 0 24 24" class="fill"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+          </button>
+        </div>
+      </form>
+      <p class="footnote">Athena runs 100% offline on your PC. AI can make mistakes — check important info.</p>
+    </div>
+  </main>
+
+  <!-- ============ Tasks drawer ============ -->
+  <aside class="drawer" id="tasksDrawer" hidden>
+    <header>
+      <h2>Tasks</h2>
+      <button class="icon-btn" id="closeTasks" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </header>
+    <form id="taskForm" class="task-form">
+      <input id="taskTitle" placeholder="Add a task…" autocomplete="off" />
+      <button class="primary">Add</button>
+    </form>
+    <p class="muted small">Tip: just tell Athena “remind me to call mom Friday” or “what’s on my list?”</p>
+    <ul class="task-list" id="taskList"></ul>
+    <details class="done-tasks"><summary id="doneSummary">Completed</summary><ul class="task-list" id="doneList"></ul></details>
+  </aside>
+</div>
+
+<!-- ============ Voice overlay ============ -->
+<div class="voice-overlay" id="voiceOverlay" hidden>
+  <div class="voice-top">
+    <span class="voice-model" id="voiceModel"></span>
+  </div>
+  <button class="orb" id="orb" title="Tap to interrupt / talk"><span class="orb-core"></span></button>
+  <div class="voice-state" id="voiceState">Starting…</div>
+  <div class="voice-caption" id="voiceCaption"></div>
+  <div class="voice-controls">
+    <button class="round" id="voiceMute" title="Mute microphone">
+      <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <button class="round danger" id="voiceEnd" title="End voice chat">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ============ Settings ============ -->
+<dialog class="settings" id="settings">
+  <form method="dialog" class="settings-inner">
+    <header>
+      <h2>Settings</h2>
+      <button class="icon-btn" value="close" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </header>
+    <div class="settings-body">
+      <nav class="tabs">
+        <button type="button" data-tab="general" class="active">General</button>
+        <button type="button" data-tab="models">Models</button>
+        <button type="button" data-tab="voice">Voice</button>
+      </nav>
+
+      <section data-panel="general">
+        <label>Your name <input id="setName" placeholder="What should Athena call you?" /></label>
+        <label>Custom instructions
+          <textarea id="setInstructions" rows="4" placeholder="e.g. I'm learning Python. Keep explanations beginner friendly."></textarea>
+        </label>
+        <label>Theme
+          <select id="setTheme"><option value="dark">Dark</option><option value="light">Light</option><option value="system">System</option></select>
+        </label>
+        <label class="check"><input type="checkbox" id="setTools" /> Let Athena manage tasks &amp; timers (needs a tool-capable model)</label>
+      </section>
+
+      <section data-panel="models" hidden>
+        <label>Assistant model <select id="setModelAssistant"></select></label>
+        <label>Code model <select id="setModelCode"></select></label>
+        <label>Voice model <span class="muted small">(pick a fast one)</span> <select id="setModelVoice"></select></label>
+
+        <h3>Download a model</h3>
+        <p class="muted small">Needs internet once. Pick based on your graphics card memory (VRAM). Bigger = smarter but slower.</p>
+        <div class="recommend" id="recommend"></div>
+        <div class="pull-row">
+          <input id="pullName" placeholder="any model from ollama.com/library, e.g. qwen3:8b" />
+          <button type="button" class="primary" id="pullBtn">Download</button>
+        </div>
+        <div class="progress" id="pullProgress" hidden><div class="bar"></div><span></span></div>
+
+        <h3>Installed</h3>
+        <ul class="installed" id="installed"></ul>
+      </section>
+
+      <section data-panel="voice" hidden>
+        <label>Athena's voice <select id="setVoice"></select></label>
+        <p class="muted small">Only voices marked “offline” work without internet. On Windows you can add natural voices in Settings → Time &amp; language → Speech.</p>
+        <label>Speaking speed <input type="range" id="setRate" min="0.6" max="1.6" step="0.05" /></label>
+        <button type="button" class="ghost" id="testVoice">▶ Test voice</button>
+        <label class="check"><input type="checkbox" id="setAutoSpeak" /> Read every reply aloud in text chats</label>
+        <label>Speech recognition (Whisper) model
+          <select id="setWhisper">
+            <option value="tiny.en">tiny.en — fastest</option>
+            <option value="base.en">base.en — fast (recommended)</option>
+            <option value="small.en">small.en — more accurate</option>
+            <option value="medium.en">medium.en — very accurate, slow on CPU</option>
+            <option value="large-v3-turbo">large-v3-turbo — best, multilingual, use with GPU</option>
+          </select>
+        </label>
+        <label>Run Whisper on
+          <select id="setWhisperDevice"><option value="cpu">CPU (works everywhere)</option><option value="cuda">NVIDIA GPU (CUDA)</option></select>
+        </label>
+        <p class="muted small" id="whisperStatus"></p>
+      </section>
+    </div>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

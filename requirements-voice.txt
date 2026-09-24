@@ -1,0 +1,2 @@
+# Offline speech-to-text for voice chat (optional, ~200 MB)
+faster-whisper>=1.0
