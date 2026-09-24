@@ -1,7 +1,6 @@
 """Know the PC: graphics card memory, system RAM, and which models fit — plus a self-test of every feature."""
 from __future__ import annotations
 
-import os
 import re
 import shutil
 import subprocess
