@@ -130,6 +130,22 @@ def persona_intro(settings: dict[str, Any]) -> str:
     return PERSONAS["assistant"]
 
 
+LANGUAGES = {"en": "English", "es": "Spanish", "fr": "French", "de": "German", "it": "Italian", "pt": "Portuguese",
+             "nl": "Dutch", "pl": "Polish", "ru": "Russian", "uk": "Ukrainian", "tr": "Turkish", "ar": "Arabic",
+             "hi": "Hindi", "ja": "Japanese", "ko": "Korean", "zh": "Chinese", "vi": "Vietnamese", "tl": "Filipino"}
+
+
+def language_line(settings: dict[str, Any], spoken: str | None = None) -> str:
+    lang = settings.get("language") or "en"
+    if lang == "auto":
+        if spoken and spoken in LANGUAGES and spoken != "en":
+            return f"The user is speaking {LANGUAGES[spoken]}: reply in {LANGUAGES[spoken]}."
+        return "Reply in the same language the user writes or speaks in."
+    if lang != "en" and lang in LANGUAGES:
+        return f"Always reply in {LANGUAGES[lang]} (keep code, commands and file names as they are)."
+    return ""
+
+
 def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> str:
     now = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p")
     name = (settings.get("user_name") or "").strip()
@@ -278,6 +294,8 @@ async def chat(request: Request):
     if code_root and model not in _no_tool_models:
         use_tools = True
     extra_prompt = project_context(project) + canvas_context(body.get("canvas"))
+    if lang_line := language_line(settings, body.get("spoken_language")):
+        extra_prompt += "\n\n" + lang_line
     if code_root:
         extra_prompt += await run_in_threadpool(workspace.prompt, code_root)
     shown: set[str] = set()
@@ -592,8 +610,9 @@ async def transcribe(audio: UploadFile = File(...)):
         tmp.write(await audio.read())
         path = tmp.name
     try:
-        text = await run_in_threadpool(
-            speech.transcribe, path, settings.get("whisper_model", "base.en"), settings.get("whisper_device", "cpu")
+        result = await run_in_threadpool(
+            speech.transcribe_full, path, settings.get("whisper_model", "base.en"), settings.get("whisper_device", "cpu"),
+            settings.get("language") or "en",
         )
     except Exception as exc:
         raise HTTPException(500, f"Transcription failed: {exc}") from exc
@@ -602,7 +621,22 @@ async def transcribe(audio: UploadFile = File(...)):
             os.unlink(path)
         except OSError:
             pass
-    return {"text": text}
+    return result
+
+
+@app.post("/api/speech/prepare")
+async def prepare_speech(request: Request):
+    """Download the speech model needed for the chosen language now (needs internet once), so voice chat is ready."""
+    if not speech.available():
+        return {"ok": False, "reason": "not installed"}
+    settings = store.get_settings()
+    language = str((await request.json()).get("language") or settings.get("language") or "en")
+    name = speech.model_for(settings.get("whisper_model", "base.en"), language)
+    try:
+        await run_in_threadpool(speech.preload, name, settings.get("whisper_device", "cpu"))
+    except Exception as exc:
+        raise HTTPException(502, f"Couldn't download the speech model '{name}' ({exc}). Connect to the internet once and try again.") from exc
+    return {"ok": True, "model": name}
 
 
 @app.post("/api/tts")
@@ -616,7 +650,9 @@ async def text_to_speech(request: Request):
     settings = store.get_settings()
     voice = str(body.get("voice") or settings.get("kokoro_voice") or "athena_silk")
     try:
-        wav = await run_in_threadpool(tts.synthesize, text, voice, float(body.get("speed") or 1.0))
+        wav = await run_in_threadpool(tts.synthesize, text, voice, float(body.get("speed") or 1.0), str(body.get("lang") or "en"))
+    except tts.UnsupportedLanguage as exc:
+        raise HTTPException(422, f"The natural voice doesn't speak '{exc}'; using a system voice") from exc
     except Exception as exc:
         raise HTTPException(500, f"Speech failed: {exc}") from exc
     return Response(wav, media_type="audio/wav")

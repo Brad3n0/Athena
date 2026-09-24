@@ -11,6 +11,8 @@ echo Installing offline speech recognition (Whisper) and natural voice (Kokoro).
 echo Downloading the Whisper speech model so voice works offline...
 ".venv\Scripts\python.exe" -m athena --preload-whisper base.en || goto :fail
 ".venv\Scripts\python.exe" -m athena --preload-whisper tiny.en || goto :fail
+rem Multilingual model for speaking other languages, optional so a hiccup here does not stop the install
+".venv\Scripts\python.exe" -m athena --preload-whisper base
 echo Downloading Athena's natural voice (Kokoro, about 350 MB)...
 ".venv\Scripts\python.exe" -m athena --download-voice || goto :fail
 echo.

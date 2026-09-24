@@ -1,6 +1,6 @@
 // Athena AI — front-end app
 import { renderMarkdown, toSpeech } from './markdown.js';
-import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices } from './voice.js';
+import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices, lastLanguage } from './voice.js';
 import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
@@ -80,7 +80,13 @@ function voiceSettings() {
   const custom = (state.settings.personas || []).find((p) => p.id === state.settings.persona);
   return custom?.voice ? { ...state.settings, kokoro_voice: custom.voice } : state.settings;
 }
-const speaker = new Speaker(() => ({ settings: voiceSettings(), kokoro: !!state.status.kokoro }));
+const speaker = new Speaker(() => ({ settings: voiceSettings(), kokoro: !!state.status.kokoro, lang: speakingLanguage() }));
+
+/** The language she should speak: the one you chose, or (on auto) the one you last spoke. */
+function speakingLanguage() {
+  const lang = state.settings?.language || 'en';
+  return lang === 'auto' ? (state.status?.whisper ? lastLanguage : 'en') : lang;
+}
 
 // ------------------------------------------------------------------- api
 async function api(path, opts = {}) {
@@ -1157,6 +1163,7 @@ async function generateReply({ voice = false, model = null } = {}) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        spoken_language: voice && state.status.whisper ? lastLanguage : null,
         model, mode, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, workspace: chat.workspace?.path || null, canvas: voice ? null : canvasForChat(),
         messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })),
       }),
@@ -1665,7 +1672,7 @@ async function voiceLoop() {
         setVoiceState('transcribing');
         text = await transcribe(blob);
       } else {
-        text = await browserRecognize({ signal: abort.signal });
+        text = await browserRecognize({ signal: abort.signal, lang: state.settings.language });
       }
     } catch (e) {
       toast(e.message, 'error');
@@ -1676,6 +1683,9 @@ async function voiceLoop() {
     text = text.trim();
     if (!text || /^[\s.,!?]*$/.test(text)) continue;
     if (/^(stop|goodbye|bye|end (the )?(voice )?chat)[.!]?$/i.test(text)) { speaker.reset(); speaker.say('Talk soon!'); await speaker.done(); endVoice(); break; }
+    const handled = await voiceCommand(text);
+    if (handled === 'end') break;
+    if (handled) { await speaker.done(); await sleep(250); continue; }
 
     setVoiceCaption(text, 'you');
     setVoiceState('thinking');
@@ -1685,6 +1695,61 @@ async function voiceLoop() {
   }
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Things you can say in voice chat that happen instantly, without asking the model.
+const LANG_NAMES = { english: 'en', spanish: 'es', french: 'fr', german: 'de', italian: 'it', portuguese: 'pt', dutch: 'nl', polish: 'pl',
+  russian: 'ru', ukrainian: 'uk', turkish: 'tr', arabic: 'ar', hindi: 'hi', japanese: 'ja', korean: 'ko', chinese: 'zh', mandarin: 'zh', vietnamese: 'vi', filipino: 'tl', tagalog: 'tl' };
+const VOICE_COMMANDS = [
+  [/^(repeat( that)?|say (that|it) again|what did you (just )?say)$/, () => {
+    const last = [...state.chat.messages].reverse().find((m) => m.role === 'assistant' && m.content);
+    speaker.reset(); speaker.say(last ? splitThinking(last).content : "I haven't said anything yet.");
+  }],
+  [/^(talk|speak|go) (a (little |bit )?)?(slower|more slowly)$|^slow down$/, () => nudgeRate(-0.15, 'Okay, I\'ll slow down.')],
+  [/^(talk|speak|go) (a (little |bit )?)?faster$|^speed up$/, () => nudgeRate(0.15, 'Okay, a bit faster.')],
+  [/^(new chat|start over|fresh start|clear (the )?chat)$/, () => { newChat(); speaker.reset(); speaker.say('Fresh start. What\'s up?'); }],
+  [/^(switch to |go to )?(code|study|assistant) mode$/, (m) => { const mode = m[2]; setMode(mode); speaker.reset(); speaker.say(`${mode[0].toUpperCase() + mode.slice(1)} mode.`); }],
+  [/^(go to sleep|take a (break|nap)|pause|sleep)$/, async () => { speaker.reset(); speaker.say('Okay. Tap me when you need me.'); await speaker.done(); await voiceDoze(); }],
+  [/^(never ?mind|cancel( that)?|forget it)$/, () => { speaker.reset(); speaker.say('No problem.'); }],
+  [/^(save|star) (that|this|it)$/, () => {
+    const btn = $$('.msg.assistant [data-msg-act="star"]').at(-1);
+    if (btn && !btn.classList.contains('starred')) btn.click();
+    speaker.reset(); speaker.say(btn ? 'Saved.' : 'There\'s nothing to save yet.');
+  }],
+  [/^copy (that|this|it)$/, async () => {
+    const last = [...state.chat.messages].reverse().find((m) => m.role === 'assistant' && m.content);
+    if (last) await copyText(splitThinking(last).content).catch(() => {});
+    speaker.reset(); speaker.say(last ? 'Copied.' : 'Nothing to copy yet.');
+  }],
+  [/^(open|show) (the )?canvas$/, () => { openCanvas(); speaker.reset(); speaker.say('Canvas is open.'); }],
+  [/^(speak|talk( to me)?|reply|answer|switch)( in| to)? ([a-z]+)$/, async (m) => {
+    const code = LANG_NAMES[m[4]];
+    if (!code) return false;
+    await saveSettings({ language: code });
+    speaker.badLangs?.delete(code);
+    speaker.reset();
+    speaker.say({ en: 'Okay, English it is.', es: 'Claro, hablemos en español.', fr: 'D\'accord, parlons français.', de: 'Alles klar, sprechen wir Deutsch.',
+      it: 'Certo, parliamo italiano.', pt: 'Claro, vamos falar português.', ja: 'はい、日本語で話しましょう。', zh: '好的，我们说中文吧。', hi: 'ठीक है, हिंदी में बात करते हैं।' }[code] || 'Okay.');
+  }],
+];
+
+async function voiceCommand(text) {
+  const t = text.toLowerCase().replace(/^(hey |ok(ay)? )?athena[,!.]?\s*/, '').replace(/^(please|can you|could you)\s+/, '').replace(/[\s.!?,]+$/g, '').replace(/\s+please$/, '').trim();
+  for (const [re, fn] of VOICE_COMMANDS) {
+    const m = t.match(re);
+    if (m && (await fn(m)) !== false) {
+      setVoiceCaption(text, 'you');
+      return true;
+    }
+  }
+  return false;
+}
+
+function nudgeRate(delta, reply) {
+  const rate = Math.round(Math.min(1.6, Math.max(0.6, (Number(state.settings.tts_rate) || 1) + delta)) * 100) / 100;
+  saveSettings({ tts_rate: rate });
+  speaker.reset();
+  speaker.say(reply);
+}
 
 // After a minute of silence the orb dims and waits; tap it or say "Hey Athena" to continue.
 async function voiceDoze() {
@@ -1757,6 +1822,7 @@ function openSettings(tab = 'general') {
   $('#setRate').value = s.tts_rate || 1;
   $('#setAutoSpeak').checked = !!s.auto_speak;
   $('#setWhisper').value = s.whisper_model || 'base.en';
+  $('#setLanguage').value = s.language || 'en';
   $('#setWhisperDevice').value = s.whisper_device || 'cpu';
   $('#whisperStatus').textContent = state.status.whisper
     ? '✓ Offline speech recognition (faster-whisper) is installed.'
@@ -1857,6 +1923,20 @@ bind('#setSounds', 'sound_effects', (el) => el.checked);
 bind('#setBirthday', 'birthday', (el) => el.value.slice(5));
 bind('#setBargeIn', 'voice_barge_in', (el) => el.checked);
 bind('#setVoiceSleep', 'voice_sleep', (el) => el.checked);
+$('#setLanguage').addEventListener('change', async (e) => {
+  const lang = e.target.value;
+  await saveSettings({ language: lang });
+  const status = $('#languageStatus');
+  const kokoroLangs = ['en', 'auto', 'es', 'fr', 'it', 'pt', 'hi', 'ja', 'zh'];
+  status.textContent = kokoroLangs.includes(lang) ? '' : 'Her natural voice doesn\'t speak this language, so a Windows voice is used. Add more under Windows Settings → Time & language → Speech.';
+  if (lang !== 'en' && state.status.whisper) {
+    status.textContent = `Getting speech recognition ready for this language (one-time download)… ${status.textContent}`;
+    try {
+      await api('/api/speech/prepare', json('POST', { language: lang }));
+      status.textContent = status.textContent.replace(/^Getting[^…]*…\s*/, '✓ Ready. ');
+    } catch (err) { status.textContent = err.message; }
+  }
+});
 bind('#setScreen2', 'screen_enabled', (el) => el.checked);
 bind('#setCode', 'code_enabled', (el) => el.checked);
 bind('#setDocs', 'docs_enabled', (el) => el.checked);

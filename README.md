@@ -140,6 +140,8 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 - **Speech-to-text** runs locally with Whisper (`base.en` by default). If you have an NVIDIA GPU, switch to `small.en` or `large-v3-turbo` and "NVIDIA GPU" in **Settings → Voice** for better accuracy. After changing the model, run `.venv\Scripts\python.exe -m athena --preload-whisper small.en` once while online.
 - **Athena's voice** uses the natural Kokoro voice once `install-voice` has run. Otherwise it uses the voices built into your PC, which also work offline. On Windows 11 you can add more natural voices under *Settings → Time & language → Speech → Manage voices*, then pick one in **Settings → Voice**. Voices marked "online" need internet.
 - If you skip `install-voice`, voice mode falls back to the browser's recognizer, and in Chrome/Edge that needs internet.
+- **Voice commands** work instantly, without waiting for the model: *"repeat that"*, *"slow down"* / *"talk faster"*, *"start over"* (new chat), *"switch to study mode"*, *"save that"*, *"copy that"*, *"open the canvas"*, *"never mind"*, *"take a break"* (she dozes until you tap the orb) and *"goodbye"*.
+- **Other languages:** pick one in **Settings → Voice → Language**, or choose **auto-detect** and just speak. She hears it, replies in it and speaks it. Her natural voice speaks Spanish, French, Italian, Portuguese, Hindi, Japanese and Chinese. Other languages (German, Korean, Arabic…) use a Windows voice, and you can add more under *Windows Settings → Time & language → Speech*. In voice chat you can also say *"talk to me in Spanish"*.
 
 ## Good to know
 

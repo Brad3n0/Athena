@@ -46,6 +46,17 @@ VOICES = {
     "bf_alice": "Alice — crisp (UK)",
 }
 
+# Other languages Kokoro can speak: language -> (voice, phonemizer language)
+LANG_VOICES = {
+    "es": ("ef_dora", "es"), "fr": ("ff_siwis", "fr-fr"), "it": ("if_sara", "it"), "pt": ("pf_dora", "pt-br"),
+    "hi": ("hf_alpha", "hi"), "ja": ("jf_alpha", "ja"), "zh": ("zf_xiaoxiao", "cmn"),
+}
+
+
+class UnsupportedLanguage(Exception):
+    pass
+
+
 _lock = threading.Lock()
 _engine = None
 
@@ -88,13 +99,19 @@ def warm_up() -> None:
         pass
 
 
-def synthesize(text: str, voice: str = "athena_silk", speed: float = 1.0) -> bytes:
-    """Return a 16-bit mono WAV file of ``text`` spoken by ``voice``."""
+def synthesize(text: str, voice: str = "athena_silk", speed: float = 1.0, language: str = "en") -> bytes:
+    """Return a 16-bit mono WAV file of ``text`` spoken by ``voice`` (or by the voice for ``language``)."""
     import numpy as np
 
-    if voice not in VOICES:
-        voice = "athena_silk"
-    lang = "en-gb" if voice.startswith("b") else "en-us"
+    language = (language or "en").lower()[:2]
+    if language != "en":
+        if language not in LANG_VOICES:
+            raise UnsupportedLanguage(language)
+        voice, lang = LANG_VOICES[language]
+    else:
+        if voice not in VOICES:
+            voice = "athena_silk"
+        lang = "en-gb" if voice.startswith("b") else "en-us"
     speed = min(max(float(speed), 0.5), 2.0)
     with _lock:
         engine = _get_engine()

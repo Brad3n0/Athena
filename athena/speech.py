@@ -28,12 +28,26 @@ def _get_model(name: str, device: str):
     return _model
 
 
-def transcribe(path: str, model_name: str = "base.en", device: str = "cpu") -> str:
+def model_for(model_name: str, language: str) -> str:
+    """English-only models (*.en) can't hear other languages, so switch to the multilingual one of the same size."""
+    if language and language != "en" and model_name.endswith(".en"):
+        return model_name[:-3]
+    return model_name
+
+
+def transcribe_full(path: str, model_name: str = "base.en", device: str = "cpu", language: str = "en") -> dict:
+    """Returns {"text", "language"}. language: "en", "auto" (detect) or a code like "es"."""
+    name = model_for(model_name, language)
     with _lock:  # one transcription at a time keeps memory predictable
-        model = _get_model(model_name, device)
-        language = "en" if model_name.endswith(".en") else None
-        segments, _info = model.transcribe(path, language=language, beam_size=1, vad_filter=True)
-        return " ".join(seg.text.strip() for seg in segments).strip()
+        model = _get_model(name, device)
+        hint = "en" if name.endswith(".en") else (None if language in ("", "auto") else language)
+        segments, info = model.transcribe(path, language=hint, beam_size=1, vad_filter=True)
+        text = " ".join(seg.text.strip() for seg in segments).strip()
+        return {"text": text, "language": hint or getattr(info, "language", None) or "en"}
+
+
+def transcribe(path: str, model_name: str = "base.en", device: str = "cpu") -> str:
+    return transcribe_full(path, model_name, device)["text"]
 
 
 def preload(model_name: str = "base.en", device: str = "cpu") -> None:

@@ -76,6 +76,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "voice_sleep": True,  # dim after a minute of silence in voice chat
     # Speech-to-text (runs locally with faster-whisper)
     "whisper_model": "base.en",
+    "language": "en",
     "whisper_device": "cpu",
     # Text-to-speech (browser / Windows voices, work offline)
     "tts_voice": "",

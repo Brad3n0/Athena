@@ -76,22 +76,27 @@ export class Mic {
   finish() { this._stop?.(); }
 }
 
+/** Language Whisper heard in the last transcription ("en", "es"…). */
+export let lastLanguage = 'en';
+
 export async function transcribe(blob) {
   const form = new FormData();
   const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'mp4' : 'webm';
   form.append('audio', blob, `speech.${ext}`);
   const res = await fetch('/api/transcribe', { method: 'POST', body: form });
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Transcription failed');
-  return (await res.json()).text || '';
+  const out = await res.json();
+  if (out.language) lastLanguage = out.language;
+  return out.text || '';
 }
 
 /** Fallback when Whisper isn't installed: the browser's recognizer (Chrome/Edge need internet for this). */
-export function browserRecognize({ signal } = {}) {
+export function browserRecognize({ signal, lang } = {}) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return Promise.reject(new Error('No speech recognition available. Run install-voice to enable offline Whisper.'));
   return new Promise((resolve, reject) => {
     const r = new SR();
-    r.lang = navigator.language || 'en-US';
+    r.lang = (lang && lang !== 'auto' ? lang : '') || navigator.language || 'en-US';
     r.interimResults = false;
     r.maxAlternatives = 1;
     let text = '';
@@ -117,8 +122,12 @@ export function voicesReady() {
   });
 }
 
-function pickVoice(name) {
+function pickVoice(name, speakLang) {
   const voices = listVoices();
+  if (speakLang && speakLang !== 'en') { // another language: the chosen (English) voice would mangle it
+    const match = voices.filter((v) => v.lang.toLowerCase().startsWith(speakLang));
+    if (match.length) return match.find((v) => v.localService) || match[0];
+  }
   if (name) {
     const v = voices.find((x) => x.name === name);
     if (v) return v;
@@ -172,8 +181,8 @@ export class Speaker {
   say(text) { this.feed(text, true); }
 
   _useKokoro() {
-    const { settings, kokoro } = this.getConfig();
-    return kokoro && settings.tts_engine !== 'system';
+    const { settings, kokoro, lang } = this.getConfig();
+    return kokoro && settings.tts_engine !== 'system' && !this.badLangs?.has(lang);
   }
 
   _say(chunk) {
@@ -198,7 +207,7 @@ export class Speaker {
   }
 
   _queueKokoro(text) {
-    const { settings } = this.getConfig();
+    const { settings, lang } = this.getConfig();
     const pitch = Number(settings.voice_pitch) || 1;
     const rate = Number(settings.tts_rate) || 1;
     const gen = this.gen;
@@ -206,8 +215,11 @@ export class Speaker {
     const audio = fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: settings.kokoro_voice, speed: rate / pitch }),
-    }).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('tts failed'))))
+      body: JSON.stringify({ text, voice: settings.kokoro_voice, speed: rate / pitch, lang }),
+    }).then((r) => {
+      if (r.status === 422) (this.badLangs ||= new Set()).add(lang); // natural voice can't speak it: system voices from now on
+      return r.ok ? r.arrayBuffer() : Promise.reject(new Error('tts failed'));
+    })
       .then((b) => this._ctx().decodeAudioData(b));
     this.queue.push({ text, audio, pitch, gen });
     if (!this.playing) this._playNext();
@@ -245,9 +257,9 @@ export class Speaker {
   // ---- system voices (Windows / browser, offline voices only if chosen) ----
   _speakSystem(text) {
     if (!window.speechSynthesis) { this._finishOne(); return; }
-    const { settings } = this.getConfig();
+    const { settings, lang } = this.getConfig();
     const u = new SpeechSynthesisUtterance(text);
-    const v = pickVoice(settings.tts_voice);
+    const v = pickVoice(settings.tts_voice, lang);
     if (v) { u.voice = v; u.lang = v.lang; }
     u.rate = Number(settings.tts_rate) || 1;
     u.pitch = Math.min(2, Number(settings.voice_pitch) || 1);
