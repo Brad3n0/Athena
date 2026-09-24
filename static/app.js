@@ -45,21 +45,6 @@ const PREFERENCE = {
   voice: ['qwen3:4b', 'llama3.2', 'gemma3:4b', 'qwen3:1.7b', 'phi4-mini', 'qwen3:8b', 'gemma3', 'llama3.1', 'qwen3'],
 };
 
-const SUGGESTIONS = {
-  assistant: [
-    ['Plan my day', 'Help me plan a productive day and add the tasks to my list'],
-    ["What's on my list?", 'What tasks do I still have to do?'],
-    ['Explain like I’m 12', 'Explain how a CPU works like I’m 12 years old'],
-    ['Write an email', 'Write a polite email asking my landlord to fix the heating'],
-  ],
-  code: [
-    ['Build a website', 'Create a responsive landing page with HTML, CSS and a little JavaScript'],
-    ['Write a Python script', 'Write a Python script that renames all photos in a folder by the date they were taken'],
-    ['Explain this error', 'Explain what "TypeError: Cannot read properties of undefined" means and how to fix it'],
-    ['Review my code', 'I will paste some code — review it for bugs, performance and readability'],
-  ],
-};
-
 // ------------------------------------------------------------------ state
 const state = {
   settings: {},
@@ -341,17 +326,13 @@ function renderWelcome() {
       <p>Ollama is running but no AI models are installed yet. Open <b>Settings → Models</b> and download one — try <code>qwen3:8b</code> for chat and <code>qwen2.5-coder:7b</code> for code on an 8 GB graphics card.</p>
       <p><button class="primary" id="goModels">Open model downloads</button></p></div>`;
   } else {
-    body = `<div class="suggestions">${SUGGESTIONS[state.mode === 'code' ? 'code' : 'assistant']
-      .map(([t, p]) => `<button class="suggestion" data-prompt="${escapeHtml(p)}"><b>${escapeHtml(t)}</b>${escapeHtml(p)}</button>`).join('')}</div>`;
+    body = '';
   }
   messagesEl.innerHTML = `<div class="welcome"><img src="logo.svg" alt=""><h1>${state.mode === 'code' ? `What are we building today${name}?` : `${greet}${name}`}</h1>${body}</div>`;
   $('#goModels')?.addEventListener('click', () => openSettings('models'));
 }
 
 messagesEl.addEventListener('click', async (e) => {
-  const sug = e.target.closest('.suggestion');
-  if (sug) { $('#input').value = sug.dataset.prompt; autosize(); $('#input').focus(); return; }
-
   const runBtn = e.target.closest('[data-run]');
   if (runBtn) { runCodeBlock(runBtn); return; }
 
