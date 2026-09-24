@@ -67,6 +67,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "direct_mode": False,
     "reply_length": "normal",
     "theme": "dark",
+    "shooting_stars": True,
+    "seasonal_effects": True,
     "setup_done": False,  # first-run wizard finished
     "text_size": "normal",  # small | normal | large
     "compact": False,

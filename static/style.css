@@ -870,3 +870,45 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 .streak.cold { background: rgba(255, 255, 255, .03); border-color: var(--border); color: var(--text-2); font-weight: 500; }
 .welcome .streak { display: inline-block; margin-top: 14px; }
 @media (max-width: 520px) { #canvasWords { display: none; } .canvas header .icon-btn { width: 32px; } }
+
+/* ================= Aesthetic touches ================= */
+/* Greek serif (Cinzel, bundled for offline use) for the name and headings */
+@font-face { font-family: 'Cinzel'; font-style: normal; font-weight: 500; font-display: swap; src: url('vendor/cinzel/cinzel-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Cinzel'; font-style: normal; font-weight: 700; font-display: swap; src: url('vendor/cinzel/cinzel-latin-700-normal.woff2') format('woff2'); }
+.brand > span:last-child, .welcome h1, .drawer h2, .settings header h2, .lock-title, .wizard h2 {
+  font-family: 'Cinzel', Georgia, serif; letter-spacing: .03em;
+}
+.brand > span:last-child { font-weight: 700; font-size: 17px; }
+.welcome h1 { font-weight: 500; font-size: 30px; }
+
+/* The starry sky fills the whole window, so it shows through the frosted sidebar */
+.stars { position: fixed; }
+@media (min-width: 861px) { .sidebar, .drawer { position: relative; z-index: 2; } }
+
+/* Frosted glass (dark theme) */
+:root:not([data-theme="light"]) .sidebar {
+  background: rgba(14, 19, 29, .72); backdrop-filter: blur(16px) saturate(1.25); -webkit-backdrop-filter: blur(16px) saturate(1.25);
+  border-right: 1px solid rgba(255, 255, 255, .05);
+}
+:root:not([data-theme="light"]) .composer {
+  background: rgba(37, 44, 59, .72); backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+:root:not([data-theme="light"]) .drawer {
+  background: rgba(14, 19, 29, .8); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+}
+
+/* Soft gold glow around the message box while you type */
+.composer { transition: border-color .25s, box-shadow .25s; }
+.composer:focus-within {
+  border-color: rgba(var(--accent-rgb), .45);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), .18), 0 0 26px rgba(var(--accent-rgb), .16);
+}
+
+/* Glowing gold cursor at the end of her words while she writes */
+.msg.streaming .md > :is(p, h1, h2, h3, h4):last-child::after,
+.msg.streaming .md > :is(ul, ol):last-child > li:last-child::after {
+  content: ''; display: inline-block; width: .55em; height: 1.05em; margin-left: 3px; vertical-align: -.15em; border-radius: 2px;
+  background: var(--accent); box-shadow: 0 0 10px rgba(var(--accent-rgb), .8); animation: goldCaret 1s steps(1) infinite;
+}
+@keyframes goldCaret { 50% { opacity: .15; } }
+@media (prefers-reduced-motion: reduce) { .msg.streaming .md > *::after { animation: none !important; } }

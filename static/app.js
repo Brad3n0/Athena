@@ -1941,6 +1941,8 @@ function openSettings(tab = 'general') {
   loadMemories();
   $('#setDirect').checked = !!s.direct_mode;
   $('#setReplyLength').value = s.reply_length || 'normal';
+  $('#setShooting').checked = s.shooting_stars !== false;
+  $('#setSeasonal').checked = s.seasonal_effects !== false;
   fillPersonas();
   renderAccents();
   $('#setTextSize').value = s.text_size || 'normal';
@@ -2092,6 +2094,8 @@ bind('#setTheme', 'theme');
 bind('#setTools', 'tools_enabled', (el) => el.checked);
 bind('#setDirect', 'direct_mode', (el) => el.checked);
 bind('#setReplyLength', 'reply_length');
+bind('#setShooting', 'shooting_stars', (el) => el.checked);
+bind('#setSeasonal', 'seasonal_effects', (el) => el.checked);
 bind('#setMemory', 'memory_enabled', (el) => el.checked);
 bind('#setFiles', 'files_enabled', (el) => el.checked);
 bind('#setWeb', 'web_enabled', (el) => el.checked);
@@ -3253,7 +3257,7 @@ async function init() {
   refreshDeckBadge();
   setInterval(refreshDeckBadge, 10 * 60000);
   if (!state.settings.setup_done) openWizard();
-  const stars = startStars($('#stars'));
+  const stars = startStars($('#stars'), () => ({ shooting: state.settings.shooting_stars !== false, seasonal: state.settings.seasonal_effects !== false }));
   new MutationObserver(() => stars.redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   $('#lockBtn').hidden = !state.settings.pin_set;
   if (new URLSearchParams(location.search).get('voice') === '1') {
