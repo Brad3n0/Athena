@@ -5,7 +5,7 @@ A private, **fully offline** AI assistant for your home PC. It looks and works l
 - 💬 **Assistant mode**: everyday chat, writing, planning and questions
 - 🧑‍💻 **Code mode**: a coding model with syntax-highlighted code blocks, one-click copy, and file attachments (attach your source files and ask about them)
 - 🎙️ **Voice mode**: talk to Athena hands-free. She listens, answers out loud in a natural offline voice, and you can tap to interrupt
-- 💛 **Anime companion**: in voice chat Athena appears as an animated blonde anime girl who blinks, lip-syncs and reacts. You can also load your own 3D character made in VRoid Studio
+- 🟡 **Voice orb**: a living gold orb that reacts to her voice and yours. You can optionally swap it for your own 3D character made in VRoid Studio
 - ✅ **Tasks & timers**: say *"remind me to pay rent Friday"*, *"what's on my list?"*, *"I finished the laundry"* or *"set a 10 minute timer for the pasta"*
 - 🗂️ Chat history with search, rename and delete, plus a model picker, dark/light themes, image understanding (with a vision model) and a phone-friendly layout
 
@@ -54,14 +54,12 @@ Athena adds no filters of her own, but most models come with their makers' built
 - **Direct mode** (Settings → General) tells Athena to answer plainly, without lecturing or adding unneeded disclaimers. It works with any model.
 - **Community "abliterated" or "uncensored" models** have the refusal behaviour removed. Athena lists a few under **Settings → Models → Fewer refusals** (`huihui_ai/qwen3-abliterated`, `dolphin3`), and more can be found by searching "abliterated" on [ollama.com](https://ollama.com/search?q=abliterated). They're made by the community rather than the original companies. They're usually a little less accurate, and they may not handle Athena's tasks and timers as reliably. After downloading one, pick it as your default in **Settings → Models**.
 
-## Anime companion mode
+## Voice chat & companion mode
 
-1. Go to **Settings → General → Personality** and choose **Companion**. Athena becomes a playful, warm, slightly teasing friend instead of a formal assistant.
-2. Go to **Settings → Voice → In voice chat, show** and choose **Athena — anime companion**. This is the default.
-3. Pick her voice under **Natural voice**. *Bella* is bright and energetic, *Heart* is warm, *Nicole* is soft and breathy, and *Sky* sounds youthful. Nudge **Voice pitch** up for a cuter sound, then press **▶ Test voice**.
-4. Click the waveform button to talk. She blinks, follows your mouse with her eyes, tilts her head while she listens and thinks, lip-syncs to her voice, and smiles when she laughs. Tap her to interrupt.
-
-**Use your own 3D character:** download the free [VRoid Studio](https://vroid.com/en/studio) and design her however you like: hair, eyes, outfit and so on. Then use **Export → Export as VRM**, and in Athena go to **Settings → Voice → Upload .vrm**. Characters downloaded from VRoid Hub also work, if their license allows personal use.
+- In voice chat Athena appears as a **living gold orb**. It ripples with her voice, sends out rings while it listens to you, and swirls with orbiting arcs while she's thinking. Tap it to interrupt her.
+- Pick her voice in **Settings → Voice → Natural voice**. *Bella* is bright, *Heart* is warm, *Nicole* is soft and breathy, and *Sky* sounds youthful. Adjust **Voice pitch** and **Speaking speed**, then press **▶ Test voice**.
+- **Settings → General → Personality → Companion** makes her a playful, warm friend instead of a formal assistant.
+- **Optional:** to see a 3D character instead of the orb, design one in the free [VRoid Studio](https://vroid.com/en/studio), use **Export → Export as VRM**, then go to **Settings → Voice → Upload .vrm**. She'll lip-sync, blink and look around.
 
 ## Voice tips
 
@@ -90,7 +88,7 @@ athena/          Python server (FastAPI)
 static/          The web app (plain HTML/CSS/JS, no internet or build step needed)
   app.js         Chat UI, model picker, tasks, settings, voice mode
   voice.js       Microphone + voice activity detection, text-to-speech + lip-sync level
-  avatar2d.js    Built-in animated anime companion (SVG)
+  orb.js         The animated voice orb
   avatar3d.js    Your own 3D VRM character (three.js + three-vrm, bundled in vendor/)
   markdown.js    Markdown + code highlighting
 ```

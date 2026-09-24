@@ -41,10 +41,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "tts_engine": "auto",
     "kokoro_voice": "af_bella",
     "voice_pitch": 1.08,
-    # "assistant" = helpful and professional, "companion" = playful anime-girl friend
+    # "assistant" = helpful and professional, "companion" = playful, warm friend
     "persona": "assistant",
-    # What appears in voice chat: "anime" (built-in 2D girl), "vrm" (your 3D model) or "orb"
-    "avatar": "anime",
+    # What appears in voice chat: "orb" or "vrm" (your own 3D character)
+    "avatar": "orb",
     "auto_speak": False,
 }
 

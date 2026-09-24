@@ -1,7 +1,7 @@
 // Athena AI — front-end app
 import { renderMarkdown, toSpeech } from './markdown.js';
 import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices } from './voice.js';
-import { AnimeAvatar } from './avatar2d.js';
+import { VoiceOrb } from './orb.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -790,7 +790,6 @@ $('#micBtn').onclick = async () => {
 
 // ------------------------------------------------------------ voice mode
 const overlay = $('#voiceOverlay');
-const orb = $('#orb');
 
 function setVoiceState(s, label) {
   overlay.dataset.state = s;
@@ -811,7 +810,7 @@ $('#voiceMute').onclick = () => {
   if (mic.muted) { state.voice.listenAbort?.abort(); setVoiceState('muted'); }
   else if (!speaker.speaking && !state.abort) setVoiceState('listening');
 };
-orb.onclick = $('#avatarStage').onclick = () => {
+$('#avatarStage').onclick = () => {
   // Interrupt Athena and go straight back to listening.
   if (speaker.speaking || state.abort) { speaker.stop(); stopGenerating(); }
 };
@@ -819,8 +818,8 @@ orb.onclick = $('#avatarStage').onclick = () => {
 async function showAvatar() {
   hideAvatar();
   const stage = $('#avatarStage');
-  let kind = state.settings.avatar || 'anime';
-  if (kind === 'vrm' && !state.status.vrm) kind = 'anime';
+  let kind = state.settings.avatar === 'vrm' && state.status.vrm ? 'vrm' : 'orb';
+  stage.dataset.kind = kind;
   let avatar = null;
   if (kind === 'vrm') {
     try {
@@ -828,13 +827,15 @@ async function showAvatar() {
       avatar = await VrmAvatar.create(stage, '/api/avatar');
     } catch (e) {
       toast(`Couldn't load your 3D character: ${e.message}`, 'error');
-      kind = 'anime';
+      kind = stage.dataset.kind = 'orb';
     }
   }
-  if (kind === 'anime') avatar = new AnimeAvatar(stage);
-  if (avatar) avatar.getLevel = () => speaker.level();
+  if (kind === 'orb') {
+    avatar = new VoiceOrb(stage);
+    avatar.getMicLevel = () => (mic.muted ? 0 : Math.min(1, mic.level() * 12));
+  }
+  avatar.getLevel = () => speaker.level();
   state.voice.avatar = avatar;
-  overlay.classList.toggle('has-avatar', !!avatar);
   // Glow behind her follows her voice.
   const glow = () => {
     if (state.voice.avatar !== avatar || !avatar) return;
@@ -847,7 +848,6 @@ async function showAvatar() {
 function hideAvatar() {
   state.voice.avatar?.destroy();
   state.voice.avatar = null;
-  overlay.classList.remove('has-avatar');
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && state.voice.active) endVoice(); });
 
@@ -893,7 +893,6 @@ function endVoice() {
   mic.close();
   hideAvatar();
   overlay.hidden = true;
-  orb.style.setProperty('--level', 0);
 }
 
 async function voiceLoop() {
@@ -905,7 +904,7 @@ async function voiceLoop() {
     let text = '';
     try {
       if (state.status.whisper) {
-        const blob = await mic.record({ signal: abort.signal, onLevel: (l) => orb.style.setProperty('--level', l) });
+        const blob = await mic.record({ signal: abort.signal });
         if (!blob || !state.voice.active) continue;
         setVoiceState('transcribing');
         text = await transcribe(blob);
@@ -942,7 +941,7 @@ function openSettings(tab = 'general') {
   $('#setTools').checked = !!s.tools_enabled;
   $('#setDirect').checked = !!s.direct_mode;
   $('#setPersona').value = s.persona || 'assistant';
-  $('#setAvatar').value = s.avatar || 'anime';
+  $('#setAvatar').value = s.avatar === 'vrm' ? 'vrm' : 'orb';
   $('#setTtsEngine').value = s.tts_engine === 'system' ? 'system' : 'auto';
   $('#setPitch').value = s.voice_pitch || 1;
   $('#setKokoroVoice').innerHTML = Object.entries(state.status.kokoro_voices || { af_bella: 'Bella' })
@@ -1044,7 +1043,7 @@ $('#vrmRemove').onclick = async () => {
   if (!confirm('Remove your 3D character?')) return;
   await api('/api/avatar', { method: 'DELETE' });
   await refreshStatus();
-  if (state.settings.avatar === 'vrm') { await saveSettings({ avatar: 'anime' }); $('#setAvatar').value = 'anime'; }
+  if (state.settings.avatar === 'vrm') { await saveSettings({ avatar: 'orb' }); $('#setAvatar').value = 'orb'; }
   updateVrmStatus();
 };
 bind('#setRate', 'tts_rate', (el) => Number(el.value));
