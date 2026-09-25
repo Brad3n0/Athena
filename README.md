@@ -151,7 +151,7 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 - **Files:** Athena can only see and change files in the folders listed there. By default that's your Desktop, Documents, Downloads, Pictures, Music and Videos. Before she **moves, writes or deletes** anything, a pop-up shows exactly what she's about to do, with **Allow** / **Deny** buttons. Deleted files go to the **Recycle Bin**, and *"undo that"* reverses her last change, such as putting organized files back where they were.
 - **Watching:** each step appears live in the chat (*"Searching your files for 'resume'…"*, *"Organized 42 files in ~/Downloads"*). Click a step to see the details. With **Show her work on my screen** turned on, she opens the folder in File Explorer before moving files, so you can watch them move, and opens the pages she reads in your browser.
 - **Web:** uses DuckDuckGo, so no account or API key is needed. It only works while you're online; everything else keeps working offline.
-- **Memory:** everything she remembers is listed in **Settings → Abilities → Memories**, where you can delete it.
+- **Memory:** everything she remembers is listed in **Settings → About you**, where you can edit or delete it.
 - **PDFs:** to let her read PDFs, run `.venv\Scripts\pip install pypdf` once.
 
 ## Voice chat & companion mode
@@ -176,6 +176,8 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 - Use Athena from your phone on the same Wi-Fi: `start.bat --host 0.0.0.0`, then open `http://<your-pc-ip>:8765`. If you reach it by a custom name (like a domain), add that name to the `ATHENA_ALLOWED_HOSTS` environment variable. Athena refuses unknown names and requests sent from other websites, so a web page can't secretly control her. Browsers only allow the microphone on `localhost`, so voice works on the PC itself.
 - Other options: `--port 9000` changes the port, and `--no-browser` stops the browser opening. `OLLAMA_HOST` is respected if Ollama runs elsewhere.
 - **Ready dot:** the dot next to the model name turns gold when that model is loaded and will answer right away. A hollow dot means the first reply takes a few seconds; click it to load the model now.
+- **🧠 Think harder:** the **Think** button next to the paperclip switches between **⚡ Quick** (fastest), **Normal** and **🧠 Deep** (thinks longer and double-checks: best for hard math, tricky code and big decisions, but slower). The 🧠 button under any answer redoes just that one answer with Deep thinking. Voice chat always stays quick.
+- **Athena learns:** she picks up lasting things you mention about yourself (your grade, hobbies, projects, what you like) and shows a small *🧠 Remembered* note when she does. Rate answers with 👍 / 👎 (and optionally say what to do better), or just correct her (*"no, I meant…"*), and she turns it into a lesson she follows in every chat. See, edit or delete everything in **Settings → About you**, or turn it off there. It's all stored on your PC; nothing is retrained, so it works with every model.
 - **✨ Auto (one Athena, the best brain for each message):** in the Assistant tab she picks the model herself. Code goes to your Code model, math and school to your Study model, pictures to your Vision model, and everything else to your Assistant model. Follow-ups like "why?" or "make it shorter" stay with the same one, and each reply shows a small tag (💻 code, 🧮 math & study, 👁 vision, ✨ general). Pick a model from the menu to turn Auto off for that chat, or switch it off in **Settings → Models**.
 - **Fast first replies:** Athena loads your model in the background as soon as she opens (and when you switch tabs), and keeps it loaded for 30 minutes after you use it, so replies start right away. Change this in **Settings → Models**. Pick a shorter time if you play games, since a loaded model uses graphics memory.
 - **Reply length:** **Settings → General → Reply length** switches between Short, Normal and Detailed answers.
@@ -197,6 +199,7 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 athena/          Python server (FastAPI)
   server.py      API: streams chat from Ollama, runs tools, model downloads, speech-to-text
   tools.py       Tools the AI can call (tasks, timers, memory, files, web) + approval rules
+  learning.py    Athena learns: facts about you, lessons from 👍/👎 and corrections, Think harder levels
   files.py       Safe file operations limited to allowed folders, with undo journal
   web.py         Web search (DuckDuckGo) and page reading
   scheduler.py   Reminders, timers and the morning briefing

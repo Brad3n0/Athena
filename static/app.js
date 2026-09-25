@@ -32,6 +32,9 @@ const ICONS = {
   sun: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   moon: '<svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
   file: '<svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>',
+  up: '<svg class="thumb" viewBox="0 0 24 24"><path d="M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM7 10l4-8a2.5 2.5 0 0 1 3 3l-1 4h6a2 2 0 0 1 2 2.3l-1.4 8A2 2 0 0 1 17.6 21H7"/></svg>',
+  down: '<svg class="thumb" viewBox="0 0 24 24"><path d="M17 14V3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1zM17 14l-4 8a2.5 2.5 0 0 1-3-3l1-4H5a2 2 0 0 1-2-2.3l1.4-8A2 2 0 0 1 6.4 3H17"/></svg>',
+  brain: '<svg viewBox="0 0 24 24"><path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V5a2 2 0 0 0-3-1zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1"/></svg>',
 };
 
 // Curated picks from the Ollama library. VRAM guidance is approximate (default 4-bit quantization).
@@ -832,12 +835,17 @@ messagesEl.addEventListener('click', async (e) => {
       if (speaker.speaking) speaker.stop();
       else { speaker.reset(); speaker.say(msg.content); }
       break;
+    case 'up':
+    case 'down':
+      rateReply(msg, idx, act.dataset.msgAct);
+      break;
+    case 'deeper':
     case 'retry': {
       if (state.abort) return;
       const versions = msg.versions ? [...msg.versions] : [snapshot(msg)];
       state.chat.messages.splice(idx);
       renderMessages();
-      const fresh = await generateReply({ model: msg.route ? msg.model : null, route: msg.route || null });
+      const fresh = await generateReply({ model: msg.route ? msg.model : null, route: msg.route || null, think: act.dataset.msgAct === 'deeper' ? 'deep' : null });
       if (fresh && !fresh.error) {
         fresh.versions = [...versions, snapshot(fresh)];
         fresh.v = fresh.versions.length - 1;
@@ -906,8 +914,8 @@ messagesEl.addEventListener('click', async (e) => {
 });
 
 function snapshot(m) {
-  const { content, thinking, tools, model, stats, time, savedId } = m;
-  return { content, thinking, tools, model, stats, time, savedId };
+  const { content, thinking, tools, model, stats, time, savedId, think } = m;
+  return { content, thinking, tools, model, stats, time, savedId, think };
 }
 
 function rerenderMessage(idx) {
@@ -1009,7 +1017,10 @@ function updateAssistantEl(el, m) {
     <button data-msg-act="canvas" title="Edit in canvas">${ICONS.canvas}</button>
     <button data-msg-act="branch" title="Branch: start a new chat from here">${ICONS.branch}</button>
     <button data-msg-act="retry" title="Regenerate">${ICONS.retry}</button>
-    <span class="stats">${m.route ? `<span class="route-tag" title="Auto picked ${escapeHtml(m.model || '')} for this">${ROUTE_LABEL[m.route] || ''}</span>` : ''}${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
+    <button data-msg-act="deeper" title="Think harder: redo this answer, thinking longer and double-checking">${ICONS.brain}</button>
+    <button data-msg-act="up" title="Good answer" class="${m.rating === 'up' ? 'rated' : ''}">${ICONS.up}</button>
+    <button data-msg-act="down" title="Bad answer — tell Athena what to do better" class="${m.rating === 'down' ? 'rated' : ''}">${ICONS.down}</button>
+    <span class="stats">${m.think === 'deep' ? '<span class="think-tag" title="Thought harder about this one">🧠 Deep</span>' : ''}${m.route ? `<span class="route-tag" title="Auto picked ${escapeHtml(m.model || '')} for this">${ROUTE_LABEL[m.route] || ''}</span>` : ''}${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
   const idx = Number(el.dataset.idx);
   const isLast = state.chat && idx === state.chat.messages.length - 1;
   if (isLast && content && !m.error && !m.voice) {
@@ -1411,12 +1422,14 @@ async function compareReplies(models) {
   el.querySelectorAll('.cmp-keep').forEach((b) => { b.classList.add('ready'); });
 }
 
-async function generateReply({ voice = false, model = null, route = null } = {}) {
+async function generateReply({ voice = false, model = null, route = null, think = null } = {}) {
   const chat = state.chat;
   // With Auto, a routed message uses that specialist's instructions too (code, study); pictures and chat stay general.
   const mode = voice ? 'voice' : route === 'code' || route === 'study' ? route : state.mode;
   model = model || currentModel();
-  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), ...(voice ? { voice: true } : {}), ...(route ? { route } : {}) };
+  // Think harder: Quick / Normal / Deep. Voice keeps it quick so she answers straight away.
+  const thinkLevel = voice ? 'normal' : think || state.settings.think_level || 'normal';
+  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), ...(voice ? { voice: true } : {}), ...(route ? { route } : {}), ...(thinkLevel === 'deep' ? { think: 'deep' } : {}) };
   chat.messages.push(reply);
 
   const thread = $('.thread', messagesEl);
@@ -1449,7 +1462,7 @@ async function generateReply({ voice = false, model = null, route = null } = {})
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         spoken_language: voice && state.status.whisper ? lastLanguage : null,
-        model, mode, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, workspace: chat.workspace?.path || null, canvas: voice ? null : canvasForChat(),
+        model, mode, think_level: thinkLevel, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, workspace: chat.workspace?.path || null, canvas: voice ? null : canvasForChat(),
         messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })),
       }),
       signal: abort.signal,
@@ -1535,9 +1548,79 @@ async function generateReply({ voice = false, model = null, route = null } = {})
     refreshLoaded();
     if (mode === 'study' && !state.streak?.today) refreshDeckBadge(); // first study of the day extends the streak
     if (!reply.error && chat.autoTitle !== false && chat.messages.filter((m) => m.role === 'assistant').length === 1) smartTitle(chat, reply);
+    if (!reply.error && !abort.signal.aborted && reply.content) learnFrom(chat, reply);
   }
   return reply;
 }
+
+// ------------------------------------------------------------ Athena learns
+const userText = (m) => (m?.display ?? m?.content ?? '').toString();
+const FIRST_PERSON = /\b(i|i'm|im|i've|i'd|my|me|mine|we|our)\b/i;
+const CORRECTION = /^\s*(no[,.! ]|nope|not quite|that'?s (wrong|not)|wrong|incorrect|actually[, ]|i meant|i said|not what i|you misunderstood|try again|stop )/i;
+
+// After a reply, quietly pick up lasting facts about you and learn from corrections ("no, I meant…").
+async function learnFrom(chat, reply) {
+  if (state.settings.auto_learn === false) return;
+  const i = chat.messages.indexOf(reply);
+  const user = chat.messages[i - 1];
+  const text = userText(user);
+  const correction = CORRECTION.test(text) && chat.messages[i - 2]?.role === 'assistant';
+  if (!text || (!correction && !(state.settings.memory_enabled && text.length >= 12 && FIRST_PERSON.test(text)))) return;
+  const prev = correction ? chat.messages[i - 2] : null;
+  try {
+    const out = await api('/api/learn', json('POST', {
+      model: reply.model, user: text, reply: splitThinking(reply).content,
+      previous_reply: prev ? splitThinking(prev).content : '', previous_user: prev ? userText(chat.messages[i - 3]) : '',
+    }));
+    if (out.facts?.length) toast(`🧠 Remembered: ${out.facts.join(' · ')}`, '', { action: { label: 'See all', fn: () => openSettings('about') }, ms: 6000 });
+    if (out.lesson) toast(`📝 Got it for next time: ${out.lesson}`, '', { action: { label: 'See all', fn: () => openSettings('about') }, ms: 6000 });
+  } catch { /* learning is a bonus */ }
+}
+
+// 👍 / 👎 on a reply becomes a lesson for next time. 👎 asks (optionally) what to do better.
+async function rateReply(msg, idx, rating) {
+  if (msg.rating === rating) { delete msg.rating; rerenderMessage(idx); await saveChat(); return; }
+  msg.rating = rating;
+  rerenderMessage(idx);
+  const el = $(`.msg[data-idx="${idx}"]`, messagesEl);
+  saveChat();
+  const send = async (note = '') => {
+    if (state.settings.auto_learn === false) { toast('Thanks! (Athena learns is off in Settings → About you)'); return; }
+    try {
+      const { lesson } = await api('/api/feedback', json('POST', {
+        rating, note, model: msg.model || currentModel(), user: userText(state.chat.messages[idx - 1]), reply: splitThinking(msg).content,
+      }));
+      toast(lesson ? `📝 Got it for next time: ${lesson}` : 'Thanks for the feedback!', '', lesson ? { action: { label: 'See all', fn: () => openSettings('about') }, ms: 6000 } : {});
+    } catch { toast('Thanks for the feedback!'); }
+  };
+  if (rating === 'up') { send(); return; }
+  const box = document.createElement('form');
+  box.className = 'feedback-note';
+  box.innerHTML = '<input placeholder="What should she do differently? (optional)" maxlength="500" /><button type="submit" class="ghost">Send</button><button type="button" class="ghost" data-skip>Skip</button>';
+  el?.querySelector('.body').append(box);
+  const input = box.querySelector('input');
+  input.focus();
+  box.onsubmit = (e) => { e.preventDefault(); box.remove(); send(input.value.trim()); };
+  box.querySelector('[data-skip]').onclick = () => { box.remove(); send(); };
+  input.onkeydown = (e) => { if (e.key === 'Escape') { box.remove(); send(); } };
+}
+
+// Composer button: ⚡ Quick → Normal → 🧠 Deep
+const THINK_LEVELS = { quick: ['⚡ Quick', 'Quick answers: fastest, thinks less'], normal: ['Think', 'Normal thinking. Click for 🧠 Deep (thinks longer, double-checks)'], deep: ['🧠 Deep', 'Deep: thinks longer and double-checks. Slower, but best for hard problems'] };
+function renderThinkBtn() {
+  const level = THINK_LEVELS[state.settings.think_level] ? state.settings.think_level : 'normal';
+  const b = $('#thinkBtn');
+  b.textContent = THINK_LEVELS[level][0];
+  b.title = `${THINK_LEVELS[level][1]}. Click to change.`;
+  b.className = `think-btn ${level}`;
+}
+$('#thinkBtn').onclick = async () => {
+  const order = ['normal', 'deep', 'quick'];
+  const next = order[(order.indexOf(state.settings.think_level || 'normal') + 1) % order.length];
+  await saveSettings({ think_level: next });
+  renderThinkBtn();
+  if ($('#setThinkLevel')) $('#setThinkLevel').value = next;
+};
 
 // ------------------------------------------------------------ smart titles
 async function smartTitle(chat, reply) {
@@ -2081,6 +2164,8 @@ function openSettings(tab = 'general') {
   $('#setFolders').value = (s.file_folders || []).join('\n');
   api('/api/folders').then((f) => { $('#setFolders').placeholder = f.defaults.join('\n'); }).catch(() => {});
   loadMemories();
+  $('#setAutoLearn').checked = s.auto_learn !== false;
+  $('#setThinkLevel').value = s.think_level || 'normal';
   $('#setDirect').checked = !!s.direct_mode;
   $('#setReplyLength').value = s.reply_length || 'normal';
   $('#setShooting').checked = s.shooting_stars !== false;
@@ -2177,6 +2262,7 @@ async function loadStats() {
 function switchTab(tab) {
   if (tab === 'stats') loadStats();
   if (tab === 'jarvis') loadJarvis();
+  if (tab === 'about') loadMemories();
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('[data-panel]', dlg).forEach((p) => (p.hidden = p.dataset.panel !== tab));
 }
@@ -2244,6 +2330,9 @@ bind('#setTheme', 'theme');
 bind('#setTools', 'tools_enabled', (el) => el.checked);
 bind('#setDirect', 'direct_mode', (el) => el.checked);
 bind('#setReplyLength', 'reply_length');
+bind('#setAutoLearn', 'auto_learn', (el) => el.checked);
+bind('#setThinkLevel', 'think_level');
+$('#setThinkLevel').addEventListener('change', () => setTimeout(renderThinkBtn, 300));
 bind('#setShooting', 'shooting_stars', (el) => el.checked);
 bind('#setAutoPreview', 'auto_preview', (el) => el.checked);
 bind('#setKeepAlive', 'keep_alive');
@@ -2293,18 +2382,58 @@ bind('#setAutoLock', 'auto_lock_minutes', (el) => Number(el.value));
 $('#setWake').addEventListener('change', async (e) => { await saveSettings({ wake_enabled: e.target.checked }); setTimeout(refreshWake, 1500); });
 bind('#setFolders', 'file_folders', (el) => el.value.split('\n').map((l) => l.trim()).filter(Boolean));
 
+const SOURCE_LABEL = { '👍': '👍', '👎': '👎', correction: 'from a correction', you: 'added by you' };
 async function loadMemories() {
-  const list = await api('/api/memories').catch(() => []);
-  $('#memoryList').innerHTML = list.length
-    ? list.slice().reverse().map((m) => `<li><span>${escapeHtml(m.text)}</span><button type="button" data-forget="${m.id}" title="Forget">${ICONS.trash}</button></li>`).join('')
-    : '<li class="muted small">Nothing yet. Tell her “remember that…” and it shows up here.</li>';
+  const [mems, lessons] = await Promise.all([api('/api/memories').catch(() => []), api('/api/lessons').catch(() => [])]);
+  const row = (kind, item, extra = '') => `<li data-kind="${kind}" data-id="${item.id}"><span contenteditable="plaintext-only" spellcheck="false">${escapeHtml(item.text)}</span>${extra}<button type="button" data-forget title="Forget">${ICONS.trash}</button></li>`;
+  $('#memoryList').innerHTML = mems.length
+    ? mems.slice().reverse().map((m) => row('memories', m)).join('')
+    : '<li class="muted small">Nothing yet. Chat about yourself (school, hobbies, projects…) or say “remember that…” and it shows up here.</li>';
+  $('#lessonList').innerHTML = lessons.length
+    ? lessons.slice().reverse().map((l) => row('lessons', l, `<span class="src">${escapeHtml(SOURCE_LABEL[l.source] || '')}</span>`)).join('')
+    : '<li class="muted small">Nothing yet. Rate replies with 👍 / 👎 under each answer and she learns how you like them.</li>';
+  $('#memoryCount').textContent = mems.length ? `(${mems.length})` : '';
+  $('#lessonCount').textContent = lessons.length ? `(${lessons.length})` : '';
 }
-$('#memoryList').onclick = async (e) => {
-  const b = e.target.closest('[data-forget]');
-  if (!b) return;
-  await api(`/api/memories/${b.dataset.forget}`, { method: 'DELETE' });
+for (const id of ['#memoryList', '#lessonList']) {
+  const list = $(id);
+  list.onclick = async (e) => {
+    const b = e.target.closest('[data-forget]');
+    if (!b) return;
+    const li = b.closest('li');
+    await api(`/api/${li.dataset.kind}/${li.dataset.id}`, { method: 'DELETE' });
+    loadMemories();
+  };
+  list.addEventListener('keydown', (e) => {
+    if (e.target.isContentEditable && e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+  });
+  list.addEventListener('focusout', async (e) => {
+    if (!e.target.isContentEditable) return;
+    const li = e.target.closest('li');
+    const text = e.target.textContent.trim();
+    if (!text) { await api(`/api/${li.dataset.kind}/${li.dataset.id}`, { method: 'DELETE' }); loadMemories(); return; }
+    await api(`/api/${li.dataset.kind}/${li.dataset.id}`, json('PUT', { text })).catch(() => {});
+  });
+}
+for (const [form, input, path] of [['#memoryAdd', '#memoryNew', 'memories'], ['#lessonAdd', '#lessonNew', 'lessons']]) {
+  const add = async () => {
+    const text = $(input).value.trim();
+    if (!text) return;
+    try { await api(`/api/${path}`, json('POST', { text })); $(input).value = ''; loadMemories(); } catch (err) { toast(err.message, 'error'); }
+  };
+  $(`${form} button`).onclick = add;
+  $(input).onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
+}
+$('#forgetAll').onclick = async () => {
+  if (!confirm('Forget everything Athena has learned about you (memories and lessons)? This can\'t be undone.')) return;
+  await api('/api/learning/forget-all', { method: 'POST' });
   loadMemories();
+  toast('Done. She starts fresh.');
 };
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-goto-tab]');
+  if (a) { e.preventDefault(); switchTab(a.dataset.gotoTab); }
+});
 bind('#setVoice', 'tts_voice');
 bind('#setPersona', 'persona');
 bind('#setTtsEngine', 'tts_engine');
@@ -3582,6 +3711,7 @@ async function init() {
   if (lock.pin_set && !lock.unlocked) { showLock(); await new Promise((resolve) => unlockWaiters.push(resolve)); }
   state.settings = await api('/api/settings').catch(() => ({}));
   applyTheme();
+  renderThinkBtn();
   if (isNarrow()) toggleSidebar(false);
   await refreshStatus();
   await refreshModels();

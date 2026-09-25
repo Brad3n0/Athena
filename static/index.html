@@ -133,6 +133,7 @@
           <button type="button" class="icon-btn" id="shotBtn" title="Show Athena your screen (screenshot in 3 seconds)">
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           </button>
+          <button type="button" class="think-btn" id="thinkBtn" title="How hard Athena thinks (click to change)"></button>
           <div class="spacer"></div>
           <button type="button" class="icon-btn" id="micBtn" title="Dictate">
             <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
@@ -242,6 +243,7 @@
         <button type="button" data-tab="models">Models</button>
         <button type="button" data-tab="voice">Voice</button>
         <button type="button" data-tab="abilities">Abilities</button>
+        <button type="button" data-tab="about">About you</button>
         <button type="button" data-tab="knowledge">Knowledge</button>
         <button type="button" data-tab="integrations">Integrations</button>
         <button type="button" data-tab="jarvis">Jarvis</button>
@@ -286,7 +288,7 @@
       </section>
 
       <section data-panel="models" hidden>
-        <label class="check"><input type="checkbox" id="setAutoRoute" /> <b>✨ Auto</b>: in the Assistant tab, pick the best model for each message (code → Code model, math &amp; school → Study model, pictures → Vision model, everything else → Assistant model)</label>
+        <label class="check"><input type="checkbox" id="setAutoRoute" /> <span><b>✨ Auto</b>: in the Assistant tab, pick the best model for each message (code → Code model, math &amp; school → Study model, pictures → Vision model, everything else → Assistant model)</span></label>
         <label class="check"><input type="checkbox" id="setPreload" /> Load my model in the background when Athena opens (so the first reply is fast)</label>
         <label>Keep models loaded after use
           <select id="setKeepAlive">
@@ -334,8 +336,23 @@
           <textarea id="setFolders" rows="5" spellcheck="false"></textarea>
         </label>
         <p class="muted small" style="margin-top:-8px">Leave empty to use your Desktop, Documents, Downloads, Pictures, Music and Videos. She can't see anything outside these.</p>
-        <h3>Memories</h3>
+        <p class="muted small">What Athena remembers about you is in <a href="#" data-goto-tab="about">About you</a>.</p>
+      </section>
+
+      <section data-panel="about" hidden>
+        <p class="muted small">Everything Athena has learned about you. It stays on this PC, and every model uses it. Edit anything by clicking it.</p>
+        <label class="check"><input type="checkbox" id="setAutoLearn" /> <span><b>Athena learns</b>: remember things you mention about yourself, and learn from 👍 / 👎 and your corrections</span></label>
+        <label>Thinking
+          <select id="setThinkLevel"><option value="quick">⚡ Quick — fastest answers</option><option value="normal">Normal</option><option value="deep">🧠 Deep — thinks longer and double-checks (slower)</option></select>
+        </label>
+        <h3>What I know about you <span class="muted small" id="memoryCount"></span></h3>
+        <div class="about-add" id="memoryAdd"><input id="memoryNew" placeholder="Add something, e.g. “I'm in 11th grade”" maxlength="500" /><button type="button" class="ghost">Add</button></div>
         <ul class="memories" id="memoryList"></ul>
+        <h3>How you like answers <span class="muted small" id="lessonCount"></span></h3>
+        <p class="muted small" style="margin-top:-6px">Lessons from your 👍 / 👎 and corrections. She follows these in every chat.</p>
+        <div class="about-add" id="lessonAdd"><input id="lessonNew" placeholder="Add a rule, e.g. “Always show the final answer in bold”" maxlength="240" /><button type="button" class="ghost">Add</button></div>
+        <ul class="memories" id="lessonList"></ul>
+        <button type="button" class="ghost danger" id="forgetAll">Forget everything she's learned</button>
       </section>
 
       <section data-panel="knowledge" hidden>

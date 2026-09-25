@@ -66,6 +66,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "reply_length": "normal",
+    "think_level": "normal",  # quick | normal | deep ("Think harder")
+    "auto_learn": True,  # pick up facts about you from chats, and lessons from 👍/👎 and corrections
     "theme": "dark",
     "shooting_stars": True,
     "auto_preview": True,
@@ -322,6 +324,18 @@ def add_memory(text: str) -> dict[str, Any]:
         memories.append(memory)
         _write(MEMORY_FILE, memories[-200:])
     return memory
+
+
+def update_memory(memory_id: str, text: str) -> bool:
+    text = text.strip()[:500]
+    with _lock:
+        memories = list_memories()
+        for m in memories:
+            if m["id"] == memory_id and text:
+                m["text"] = text
+                _write(MEMORY_FILE, memories)
+                return True
+    return False
 
 
 def forget_memory(query: str) -> dict[str, Any] | None:

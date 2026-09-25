@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import decks, events, files, knowledge, scheduler, security, speech, store, tts, workspace
+from . import decks, events, files, knowledge, learning, scheduler, security, speech, store, tts, workspace
 from .tools import BY_NAME, approval_summary, arun_tool, enabled_tools, parse_args, run_tool
 
 STATIC_DIR = store.ROOT / "static"
@@ -245,6 +245,8 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
         memories = store.list_memories()
         if memories:
             parts.append("Things you remember about the user:\n" + "\n".join(f"- {m['text']}" for m in memories[-60:]))
+    if settings.get("auto_learn", True) and (lessons := learning.prompt_section()):
+        parts.append(lessons)
     if settings.get("direct_mode"):
         parts.append(
             "Be direct and candid. Answer the question fully and plainly. Don't lecture, moralize, or add "
@@ -349,6 +351,16 @@ async def chat(request: Request):
     if builder:
         use_tools = True
     extra_prompt = project_context(project) + canvas_context(body.get("canvas"))
+    level = body.get("think_level") if body.get("think_level") in ("quick", "normal", "deep") else "normal"
+    if mode == "voice" and level == "normal":
+        level = "quick"  # reasoning models answer much faster aloud without long thinking
+    if level == "deep":
+        extra_prompt += ("\n\nThe user asked you to think harder about this. Take your time: work through it step by step, "
+                         "consider other approaches, check your facts, maths and code for mistakes, and only then give your "
+                         "best, complete answer. If something is uncertain, say so.")
+    elif level == "quick" and mode != "voice":
+        extra_prompt += "\n\nThe user wants a quick answer: be brief and get straight to the point."
+    think = learning.think_value(model, level)
     if lang_line := language_line(settings, body.get("spoken_language")):
         extra_prompt += "\n\n" + lang_line
     if code_root:
@@ -373,7 +385,7 @@ async def chat(request: Request):
             async for chunk in _routine_stream(routine, settings):
                 yield chunk
             return
-        think_off = True
+        send_think = think is not None
         system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
 
@@ -383,15 +395,15 @@ async def chat(request: Request):
                 payload["tools"] = [t.spec() for t in enabled_tools(settings)] + (workspace.specs() if code_root else [])
                 if builder and not code_root:
                     payload["tools"].append(workspace.NEW_PROJECT_SPEC)
-            if mode == "voice" and think_off:
-                payload["think"] = False  # reasoning models answer much faster aloud without it
+            if send_think:
+                payload["think"] = think  # Quick / Deep ("Think harder")
             content, calls, stats = "", [], {}
             try:
                 async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload) as resp:
                     if resp.status_code != 200:
                         text = (await resp.aread()).decode(errors="replace")
                         if "think" in payload and "think" in text.lower():
-                            think_off = False
+                            send_think = False  # this model can't change how much it thinks
                             continue
                         if _is_image_error(text) and any(m.get("images") for m in messages):
                             if messages[-1].get("images"):
@@ -720,6 +732,89 @@ async def list_memories():
 @app.delete("/api/memories/{memory_id}")
 async def delete_memory(memory_id: str):
     return {"ok": store.forget_memory(memory_id) is not None}
+
+
+@app.post("/api/memories")
+async def add_memory(request: Request):
+    text = str((await request.json()).get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "Write something to remember")
+    return store.add_memory(text)
+
+
+@app.put("/api/memories/{memory_id}")
+async def edit_memory(memory_id: str, request: Request):
+    return {"ok": store.update_memory(memory_id, str((await request.json()).get("text") or ""))}
+
+
+# ------------------------------------------------------------ Athena learns
+
+@app.get("/api/lessons")
+async def list_lessons():
+    return learning.list_lessons()
+
+
+@app.post("/api/lessons")
+async def add_lesson(request: Request):
+    item = learning.add_lesson(str((await request.json()).get("text") or ""), "you")
+    if not item:
+        raise HTTPException(400, "That's too short, or Athena already has that lesson")
+    return item
+
+
+@app.put("/api/lessons/{lesson_id}")
+async def edit_lesson(lesson_id: str, request: Request):
+    return {"ok": learning.update_lesson(lesson_id, str((await request.json()).get("text") or ""))}
+
+
+@app.delete("/api/lessons/{lesson_id}")
+async def delete_lesson(lesson_id: str):
+    return {"ok": learning.delete_lesson(lesson_id)}
+
+
+@app.post("/api/learning/forget-all")
+async def forget_all():
+    learning.forget_everything()
+    return {"ok": True}
+
+
+@app.post("/api/learn")
+async def learn(request: Request):
+    """After each reply: remember lasting facts about the user, and learn from corrections."""
+    body = await request.json()
+    settings = store.get_settings()
+    model, user, reply = str(body.get("model") or ""), str(body.get("user") or ""), str(body.get("reply") or "")
+    out: dict[str, Any] = {"facts": [], "lesson": None}
+    if not settings.get("auto_learn", True) or not model or not user:
+        return out
+    ka = keep_alive(settings)
+    try:
+        previous = str(body.get("previous_reply") or "")
+        if previous and learning.is_correction(user):
+            out["lesson"] = await learning.learn_lesson(client, OLLAMA, model, str(body.get("previous_user") or ""),
+                                                        previous, "correction", user, ka)
+        if settings.get("memory_enabled") and learning.worth_checking_for_facts(user):
+            out["facts"] = await learning.learn_facts(client, OLLAMA, model, user, reply, ka)
+    except (httpx.HTTPError, ValueError):
+        pass  # learning is a bonus; never bother the user about it
+    return out
+
+
+@app.post("/api/feedback")
+async def feedback(request: Request):
+    """👍 / 👎 on a reply: turn it into a lesson for next time."""
+    body = await request.json()
+    settings = store.get_settings()
+    rating = "up" if body.get("rating") == "up" else "down"
+    model = str(body.get("model") or "")
+    if not settings.get("auto_learn", True) or not model:
+        return {"lesson": None}
+    try:
+        lesson = await learning.learn_lesson(client, OLLAMA, model, str(body.get("user") or ""), str(body.get("reply") or ""),
+                                             rating, str(body.get("note") or ""), keep_alive(settings))
+    except (httpx.HTTPError, ValueError):
+        lesson = None
+    return {"lesson": lesson}
 
 
 @app.get("/api/folders")
