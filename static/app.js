@@ -185,7 +185,11 @@ function routeMessage(text, chat) {
   if (code >= 2 || study >= 2) return code >= study ? 'code' : 'study';
   // No clear signal: a short follow-up ("why?", "make it shorter") stays with whoever answered last.
   const last = [...chat.messages].reverse().find((m) => m.role === 'assistant' && m.route)?.route;
-  if (last && last !== 'vision' && t.split(/\s+/).length <= 12) return last;
+  const words = t.replace(/[^\w\s']/g, ' ').trim().split(/\s+/).filter(Boolean);
+  const followUp = words.length <= 5 ||
+    /^(and|also|but|so|then|now|ok|okay|wait|why|how come|what about|what if|can you (also|make|add|fix|change|explain)|could you|make it|make them|explain|show me|do it|try|again|another|one more|more|less|shorter|longer|simpler|harder|easier|fix|change|add|remove|redo|continue|keep going|next)\b/.test(t) ||
+    /^\S+(\s+\S+){0,3}\s+(it|this|that|them|those|these)\b/.test(t);
+  if (last && last !== 'vision' && followUp) return last;
   return 'assistant';
 }
 
