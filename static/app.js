@@ -194,16 +194,21 @@ async function refreshLoaded() {
   renderReadyDot();
 }
 setInterval(() => { if (!document.hidden) refreshLoaded(); }, 15000);
-$('#readyDot').addEventListener('click', async (e) => {
-  e.stopPropagation();
-  const model = currentModel();
-  if (!model || state.loaded.includes(model) || state.warming) return;
+/** Load a model into memory in the background, so the next reply starts right away. */
+async function warmModel(model, { quiet = false } = {}) {
+  if (!model || !state.status.ollama || state.loaded.includes(model) || state.warming === model) return;
   state.warming = model;
   renderReadyDot();
-  try { await api('/api/models/warm', json('POST', { model })); } catch (err) { toast(err.message, 'error'); }
-  state.warming = null;
+  try { await api('/api/models/warm', json('POST', { model })); } catch (err) { if (!quiet) toast(err.message, 'error'); }
+  if (state.warming === model) state.warming = null;
   refreshLoaded();
-});
+}
+$('#readyDot').addEventListener('click', (e) => { e.stopPropagation(); warmModel(currentModel()); });
+// Get the model ready while you're still reading or typing: when Athena opens and when you switch tabs.
+function preloadCurrentModel() {
+  if (state.settings.preload_model === false || state.abort) return;
+  setTimeout(() => warmModel(currentModel(), { quiet: true }), 300);
+}
 
 function openModelMenu() {
   const menu = $('#modelMenu');
@@ -252,7 +257,7 @@ function setMode(mode, { keepModel = false } = {}) {
 }
 $('#modeSwitch').onclick = (e) => {
   const b = e.target.closest('[data-mode]');
-  if (b) switchMode(b.dataset.mode).then(() => $('#input').focus());
+  if (b) switchMode(b.dataset.mode).then(() => { $('#input').focus(); preloadCurrentModel(); });
 };
 
 // Each mode keeps its own chat: switching to Study shows your study chat (or a fresh one),
@@ -1486,7 +1491,9 @@ async function generateReply({ voice = false, model = null } = {}) {
 // ------------------------------------------------------------ smart titles
 async function smartTitle(chat, reply) {
   const user = chat.messages.find((m) => m.role === 'user');
-  const model = pickDefaultModel('voice') || reply.model; // a small, fast model is plenty for a title
+  // Use the model that just answered: it's already loaded. Loading a different one for the title could push
+  // your chat model out of the graphics card's memory and make your next message slow.
+  const model = reply.model || currentModel();
   try {
     const { title, icon } = await api('/api/title', json('POST', { model, user: user?.display ?? user?.content ?? '', reply: splitThinking(reply).content }));
     if (!title || chat.autoTitle === false) return;
@@ -2019,6 +2026,8 @@ function openSettings(tab = 'general') {
   $('#setReplyLength').value = s.reply_length || 'normal';
   $('#setShooting').checked = s.shooting_stars !== false;
   $('#setAutoPreview').checked = s.auto_preview !== false;
+  $('#setKeepAlive').value = s.keep_alive || '30m';
+  $('#setPreload').checked = s.preload_model !== false;
   $('#setAlerts').checked = s.alerts_enabled !== false;
   $('#setAlertsSpeak').checked = s.alerts_speak !== false;
   $$('[data-alert]').forEach((el) => { el.checked = s[`alert_${el.dataset.alert}`] !== false; });
@@ -2177,6 +2186,8 @@ bind('#setDirect', 'direct_mode', (el) => el.checked);
 bind('#setReplyLength', 'reply_length');
 bind('#setShooting', 'shooting_stars', (el) => el.checked);
 bind('#setAutoPreview', 'auto_preview', (el) => el.checked);
+bind('#setKeepAlive', 'keep_alive');
+bind('#setPreload', 'preload_model', (el) => el.checked);
 bind('#setSeasonal', 'seasonal_effects', (el) => el.checked);
 bind('#setMemory', 'memory_enabled', (el) => el.checked);
 bind('#setFiles', 'files_enabled', (el) => el.checked);
@@ -3513,7 +3524,7 @@ async function init() {
   if (isNarrow()) toggleSidebar(false);
   await refreshStatus();
   await refreshModels();
-  refreshLoaded();
+  refreshLoaded().then(preloadCurrentModel);
   initCanvas({ state, model: () => currentModel(), save: () => saveChat(), toast,
     onShow: () => { if (innerWidth < 1400 && innerWidth > 860) toggleSidebar(false); } });
   newChat();

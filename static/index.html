@@ -286,6 +286,16 @@
       </section>
 
       <section data-panel="models" hidden>
+        <label class="check"><input type="checkbox" id="setPreload" /> Load my model in the background when Athena opens (so the first reply is fast)</label>
+        <label>Keep models loaded after use
+          <select id="setKeepAlive">
+            <option value="5m">5 minutes (frees graphics memory sooner)</option>
+            <option value="30m">30 minutes (recommended)</option>
+            <option value="1h">1 hour</option>
+            <option value="-1">Always (until you restart the PC or quit Ollama)</option>
+          </select>
+        </label>
+        <p class="muted small" style="margin-top:-6px">A loaded model answers right away. It uses graphics card memory, so games may run slower while it's loaded; pick a shorter time if you game a lot.</p>
         <button type="button" class="ghost" id="bestModels">✨ Use the best models for my PC</button>
         <p class="muted small" id="bestModelsNote"></p>
         <label>Assistant model <select id="setModelAssistant"></select></label>

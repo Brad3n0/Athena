@@ -296,6 +296,13 @@ def _clean_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return cleaned
 
 
+def keep_alive(settings: dict[str, Any]) -> str | int:
+    """How long Ollama keeps a model in memory after its last use. Loading a big model takes a while,
+    so keeping it around makes the next reply start right away. "-1" means until Athena/Ollama closes."""
+    value = str(settings.get("keep_alive") or "30m")
+    return -1 if value in ("-1", "always", "forever") else value
+
+
 def _is_image_error(text: str) -> bool:
     low = text.lower()
     return "multimodal" in low or ("image" in low and ("support" in low or "vision" in low))
@@ -362,7 +369,7 @@ async def chat(request: Request):
         messages: list[dict[str, Any]] = [system, *history]
 
         for _round in range(MAX_TOOL_ROUNDS):
-            payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True}
+            payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
             if use_tools:
                 payload["tools"] = [t.spec() for t in enabled_tools(settings)] + (workspace.specs() if code_root else [])
             if mode == "voice" and think_off:
@@ -519,7 +526,7 @@ async def look_at_screen(question: str = "") -> dict[str, Any]:
         prompt += f" Focus on answering: {question}"
     try:
         resp = await client.post(f"{OLLAMA}/api/chat", json={
-            "model": model, "stream": False,
+            "model": model, "stream": False, "keep_alive": keep_alive(store.get_settings()),
             "messages": [{"role": "user", "content": prompt, "images": [image]}],
         }, timeout=httpx.Timeout(10.0, read=300))
         data = resp.json()
@@ -581,7 +588,7 @@ async def _vision(prompt: str, image: str, max_tokens: int = 120) -> str | None:
         return None
     try:
         resp = await client.post(f"{OLLAMA}/api/chat", json={
-            "model": model, "stream": False, "options": {"temperature": 0, "num_predict": max_tokens},
+            "model": model, "stream": False, "options": {"temperature": 0, "num_predict": max_tokens}, "keep_alive": keep_alive(store.get_settings()),
             "messages": [{"role": "user", "content": prompt, "images": [image]}]}, timeout=httpx.Timeout(10.0, read=180))
         return (resp.json().get("message") or {}).get("content", "")
     except Exception:
@@ -926,6 +933,7 @@ async def make_title(request: Request):
             {"role": "user", "content": f"Name this conversation:\n\nUser: {user}\n\nAssistant: {reply}"},
         ],
     }
+    payload["keep_alive"] = keep_alive(store.get_settings())
     for _ in range(2):
         try:
             resp = await client.post(f"{OLLAMA}/api/chat", json=payload, timeout=httpx.Timeout(10.0, read=60))
@@ -1096,6 +1104,7 @@ async def rewrite(request: Request):
     else:
         prompt = f"Write a new document. Instruction: {instruction}\n\nReply with only the document, in Markdown."
     payload: dict[str, Any] = {"model": model, "stream": True, "think": False, "options": {"temperature": 0.6},
+                               "keep_alive": keep_alive(store.get_settings()),
                                "messages": [{"role": "system", "content": REWRITE_SYSTEM}, {"role": "user", "content": prompt}]}
 
     async def gen():
@@ -1198,7 +1207,7 @@ async def selftest():
         if not test_model:
             return "skip", "No chat model to test"
         r = await client.post(f"{OLLAMA}/api/chat", json={
-            "model": test_model, "stream": False, "options": {"num_predict": 12},
+            "model": test_model, "stream": False, "options": {"num_predict": 12}, "keep_alive": keep_alive(store.get_settings()),
             "messages": [{"role": "user", "content": "Reply with just the word: ready"}]}, timeout=httpx.Timeout(10, read=240))
         data = r.json()
         if data.get("error"):
@@ -1212,7 +1221,7 @@ async def selftest():
             return "skip", "No chat model to test"
         from .tools import BY_NAME
         r = await client.post(f"{OLLAMA}/api/chat", json={
-            "model": test_model, "stream": False, "tools": [BY_NAME["get_current_datetime"].spec()],
+            "model": test_model, "stream": False, "tools": [BY_NAME["get_current_datetime"].spec()], "keep_alive": keep_alive(store.get_settings()),
             "messages": [{"role": "user", "content": "What time is it? Use your tool."}]}, timeout=httpx.Timeout(10, read=240))
         data = r.json()
         if data.get("error"):
@@ -1430,7 +1439,7 @@ async def warm_model(request: Request):
     if not model:
         raise HTTPException(400, "No model")
     try:
-        resp = await client.post(f"{OLLAMA}/api/generate", json={"model": model, "prompt": "", "keep_alive": "30m"},
+        resp = await client.post(f"{OLLAMA}/api/generate", json={"model": model, "prompt": "", "keep_alive": keep_alive(store.get_settings())},
                                  timeout=httpx.Timeout(10.0, read=300))
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"Couldn't load {model}: {exc}") from exc
