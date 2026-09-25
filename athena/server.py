@@ -54,6 +54,9 @@ async def lifespan(_app: FastAPI):
     client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
     events.bind_loop(asyncio.get_running_loop())
     scheduler.start()
+    from . import monitor
+
+    monitor.start()
     if tts.available():
         threading.Thread(target=tts.warm_up, daemon=True).start()
     if store.get_settings().get("wake_enabled"):
@@ -206,6 +209,20 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
         if "pc" in groups:
             abilities.append("- PC: open apps, control volume and media, lock/shutdown the PC, and read or set the clipboard "
                              "(e.g. 'rewrite what I copied' → get_clipboard, rewrite, set_clipboard).")
+            abilities.append("- Like Jarvis: pc_status for 'how's my PC doing'; window_control to focus, minimize, maximize, close or move "
+                             "windows between monitors; type_text and press_keys to operate apps; click_on_screen to click things you "
+                             "can see; send_message to message people on Discord (default), WhatsApp, text or email (look up "
+                             "list_contacts when unsure who someone is); routines (list/run/create_routine) chain several of these. "
+                             "For multi-step app tasks, work step by step: open or focus the app, then type/press keys/click, and "
+                             "use look_at_screen to check the result when it matters. Keep spoken confirmations short, like Jarvis.")
+            try:
+                from . import routines as _routines
+
+                names = [f"{r['name']} (say: {', '.join(r['phrases'][:2])})" for r in _routines.list_routines()][:12]
+                if names:
+                    abilities.append("- The user's routines: " + "; ".join(names) + ".")
+            except Exception:
+                pass
         if "screen" in groups:
             abilities.append("- Screen: look_at_screen takes a screenshot and describes it, so you can help with whatever the user is looking at.")
         if "code" in groups:
@@ -327,8 +344,19 @@ async def chat(request: Request):
         extra_prompt += await run_in_threadpool(workspace.prompt, code_root)
     shown: set[str] = set()
 
+    # Saying a routine's phrase ("goodnight", "game time") runs it straight away, no model needed.
+    from . import routines as routines_mod
+
+    routine = None
+    if history and history[-1]["role"] == "user" and not no_tools and settings.get("pc_enabled", True):
+        routine = routines_mod.match_phrase(history[-1]["content"])
+
     async def generate() -> AsyncIterator[bytes]:
         nonlocal use_tools, auto_approve
+        if routine:
+            async for chunk in _routine_stream(routine, settings):
+                yield chunk
+            return
         think_off = True
         system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
@@ -440,7 +468,7 @@ async def chat(request: Request):
                 if code_root and name in workspace.NAMES:
                     result = await run_in_threadpool(workspace.run, code_root, name, args)
                 elif tool and tool.arun:
-                    ctx = {"client": client, "settings": settings, "look_at_screen": look_at_screen}
+                    ctx = tool_ctx(settings)
                     result = await arun_tool(name, args, ctx)
                 else:
                     result = await run_in_threadpool(run_tool, name, args)
@@ -500,6 +528,102 @@ async def look_at_screen(question: str = "") -> dict[str, Any]:
     if data.get("error"):
         return {"error": data["error"]}
     return {"screen": data.get("message", {}).get("content", ""), "seen_by": model}
+
+
+async def _routine_stream(routine: dict[str, Any], settings: dict[str, Any]) -> AsyncIterator[bytes]:
+    """Run a routine and stream each step to the chat as it happens."""
+    from .tools import run_steps
+
+    queue: asyncio.Queue = asyncio.Queue()
+    ids: dict[int, str] = {}
+    done = object()
+
+    async def on_start(i, name, args):
+        if name not in ("say", "wait"):
+            ids[i] = store.new_id()
+            await queue.put(_event("tool_start", id=ids[i], name=name, args=args))
+
+    async def on_step(i, name, args, result):
+        if i in ids:
+            await queue.put(_event("tool", id=ids[i], name=name, args=args, result=result))
+
+    async def runner():
+        try:
+            return await run_steps(routine, tool_ctx(settings), on_step, on_start)
+        finally:
+            await queue.put(done)
+
+    task = asyncio.create_task(runner())
+    while (item := await queue.get()) is not done:
+        yield item
+    try:
+        summary = task.result()
+    except Exception as exc:  # a broken step must not leave the chat hanging
+        yield _event("error", message=f"The routine stopped: {exc}")
+        return
+    failed = [s for s in summary["steps"] if s.get("error")]
+    text = summary["say"] or f"{routine.get('icon') or '⚡'} {routine['name']} is on."
+    if failed:
+        text += f" ({len(failed)} step{'s' if len(failed) > 1 else ''} didn't work: " + "; ".join(f"{s['step']}: {s['error']}" for s in failed) + ")"
+    yield _event("token", content=text)
+    yield _event("done", stats={})
+
+
+def tool_ctx(settings: dict[str, Any]) -> dict[str, Any]:
+    return {"client": client, "settings": settings, "look_at_screen": look_at_screen, "verify_chat": verify_chat,
+            "locate_on_screen": locate_on_screen}
+
+
+async def _vision(prompt: str, image: str, max_tokens: int = 120) -> str | None:
+    """Ask the vision model about a screenshot. None if there's no vision model or it failed."""
+    model = await pick_vision_model()
+    if not model:
+        return None
+    try:
+        resp = await client.post(f"{OLLAMA}/api/chat", json={
+            "model": model, "stream": False, "options": {"temperature": 0, "num_predict": max_tokens},
+            "messages": [{"role": "user", "content": prompt, "images": [image]}]}, timeout=httpx.Timeout(10.0, read=180))
+        return (resp.json().get("message") or {}).get("content", "")
+    except Exception:
+        return None
+
+
+async def verify_chat(name: str, app: str) -> bool | None:
+    """Did the right conversation open? True / False, or None when there's no vision model to check with."""
+    from . import pc
+
+    try:
+        image = await run_in_threadpool(pc.screenshot)
+    except pc.PCError:
+        return None
+    answer = await _vision(f"This is a screenshot of {app}. Look at the name at the top of the conversation that is open right now. "
+                           f"Is the open conversation, DM or channel with '{name}' (the same name, ignoring capital letters)? "
+                           "Reply with only YES or NO.", image, 8)
+    if answer is None:
+        return None
+    return "YES" in answer.upper() and "NO" not in answer.upper().replace("NOW", "")
+
+
+async def locate_on_screen(target: str) -> dict[str, Any]:
+    """Find something on screen from a description and return real screen coordinates for a click."""
+    from . import pc
+
+    try:
+        shot = await run_in_threadpool(pc.screenshot_for_pointing)
+    except pc.PCError as exc:
+        return {"error": str(exc)}
+    answer = await _vision(
+        f"This screenshot is {shot['width']}x{shot['height']} pixels. Find: {target}. Reply with only JSON giving the pixel "
+        'position of its center, like {"x": 100, "y": 200}, or {"x": null, "y": null} if it is not visible.', shot["image"], 40)
+    if answer is None:
+        return {"error": "Clicking on things needs a vision model. Download qwen2.5vl:7b in Settings → Models."}
+    m = re.search(r'"?x"?\s*[:=]\s*(\d+(?:\.\d+)?)\D+?"?y"?\s*[:=]\s*(\d+(?:\.\d+)?)', answer) or re.search(r"\(?\[?\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", answer)
+    if not m:
+        return {"error": f"I couldn't find '{target}' on the screen."}
+    x, y = float(m.group(1)), float(m.group(2))
+    if not (0 <= x <= shot["width"] and 0 <= y <= shot["height"]):
+        return {"error": f"I couldn't find '{target}' on the screen."}
+    return {"x": round(shot["left"] + x * shot["scale_x"]), "y": round(shot["top"] + y * shot["scale_y"])}
 
 
 def _screen_target(name: str, args: dict[str, Any]) -> str | None:
@@ -824,6 +948,89 @@ async def make_title(request: Request):
     if not title:
         raise HTTPException(502, "No title")
     return {"title": title[:60], "icon": icon}
+
+
+# --------------------------------------------------------------- Jarvis: routines, contacts, heads-ups
+
+@app.get("/api/routines")
+async def get_routines():
+    from . import routines
+
+    return {"routines": [{**r, "summary": [routines.describe_step(x) for x in r["steps"]]} for r in routines.list_routines()],
+            "step_types": {k: v[1] for k, v in routines.STEP_TYPES.items()}}
+
+
+@app.post("/api/routines")
+async def save_routine(request: Request):
+    from . import routines
+
+    body = await request.json()
+    try:
+        return routines.save_routine(body, body.get("id"))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/api/routines/{routine_id}")
+async def delete_routine(routine_id: str):
+    from . import routines
+
+    return {"ok": routines.delete_routine(routine_id)}
+
+
+@app.post("/api/routines/{routine_id}/run")
+async def run_routine_now(routine_id: str):
+    from . import routines
+    from .tools import run_steps
+
+    r = next((x for x in routines.list_routines() if x["id"] == routine_id), None)
+    if not r:
+        raise HTTPException(404, "No such routine")
+    result = await run_steps(r, tool_ctx(store.get_settings()))
+    if result["say"]:
+        events.publish("alert", category="routine", text=result["say"], speak=True)
+    return result
+
+
+@app.get("/api/contacts")
+async def get_contacts():
+    from . import messaging
+
+    return messaging.list_contacts()
+
+
+@app.post("/api/contacts")
+async def save_contact(request: Request):
+    from . import messaging
+
+    body = await request.json()
+    try:
+        return messaging.save_contact(body, body.get("id"))
+    except messaging.MessageError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.delete("/api/contacts/{contact_id}")
+async def delete_contact(contact_id: str):
+    from . import messaging
+
+    return {"ok": messaging.delete_contact(contact_id)}
+
+
+@app.post("/api/alerts/test")
+async def test_alert():
+    events.publish("alert", category="test", text="This is how a heads-up looks and sounds.", speak=True)
+    return {"ok": True}
+
+
+@app.get("/api/pc-status")
+async def pc_status():
+    from . import pcstatus
+
+    try:
+        return await run_in_threadpool(pcstatus.status)
+    except ImportError as exc:
+        raise HTTPException(501, "PC status needs psutil — restart Athena with start.bat to install it") from exc
 
 
 # --------------------------------------------------------------- code projects

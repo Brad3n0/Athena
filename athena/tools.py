@@ -337,6 +337,218 @@ TOOLS: list[Tool] = [
           "value": {"type": "number", "description": "Brightness %, temperature or volume % when needed"}}, ["device", "action"],
          arun=_ha_control, approve=_approve_home),
 ]
+
+# ------------------------------------------------------------------ Jarvis: control the PC, message people, routines
+
+def _ctl(fn):
+    def run(a):
+        from . import automation, messaging
+        try:
+            return fn(**a)
+        except (automation.ControlError, messaging.MessageError, ValueError) as exc:
+            return {"error": str(exc)}
+    return run
+
+
+def _pc_status(a):
+    from . import pcstatus
+    return pcstatus.status()
+
+
+def _window(action="", app="", monitor=None):
+    from . import automation
+    return automation.window_control(action, app, monitor)
+
+
+def _type(text="", app="", newline="shift+enter"):
+    from . import automation
+    if app:
+        automation.focus_app(app, wait=5)
+    return automation.type_text(text, newline or "shift+enter")
+
+
+def _keys(keys="", app="", times=1):
+    from . import automation
+    if app:
+        automation.focus_app(app, wait=5)
+    return automation.press_keys(keys, times)
+
+
+def _safe(fn):
+    """Approval summaries must never crash the chat; if the arguments are bad, the tool itself reports it."""
+    def run(a):
+        try:
+            return fn(a)
+        except Exception:
+            return None
+    return run
+
+
+def _approve_message(a):
+    from . import messaging
+    return messaging.describe(messaging.plan(str(a.get("app") or "discord"), str(a.get("to", "")), str(a.get("text", "")), str(a.get("subject") or "")))
+
+
+async def _send_message(a, ctx):
+    from starlette.concurrency import run_in_threadpool
+
+    from . import automation, messaging
+    try:
+        p = messaging.plan(str(a.get("app") or "discord"), str(a.get("to", "")), str(a.get("text", "")), str(a.get("subject") or ""))
+        if p["app"] in ("sms", "email"):
+            return await run_in_threadpool(messaging.open_draft, p)
+        if p["app"] == "discord":
+            await run_in_threadpool(messaging.discord_open_chat, p["target"])
+            ready = False
+        else:
+            ready = await run_in_threadpool(messaging.whatsapp_open_chat, p["target"], p["to"], p["text"])
+        if not ready:
+            # Before typing anything, check the right chat opened (needs a vision model; skipped without one).
+            ok = await ctx["verify_chat"](p["target"] or p["to"], "Discord" if p["app"] == "discord" else "WhatsApp")
+            if ok is False:
+                await run_in_threadpool(automation.press_keys, "esc")
+                return {"error": f"I couldn't find a chat with {p['to']}, so I didn't send anything. Try their exact "
+                                 f"{'Discord username' if p['app'] == 'discord' else 'WhatsApp name'}, or add them in Settings → Jarvis → Contacts."}
+            await run_in_threadpool(messaging.type_and_send, p["text"])
+        else:
+            await run_in_threadpool(automation.press_keys, "enter")
+        return {"sent": True, "app": p["app"], "to": p["to"], "text": p["text"], "checked_chat": ready or ok is True}
+    except (messaging.MessageError, automation.ControlError) as exc:
+        return {"error": str(exc)}
+
+
+async def _click(a, ctx):
+    from starlette.concurrency import run_in_threadpool
+
+    from . import automation
+    target = str(a.get("target", "")).strip()
+    if not target:
+        return {"error": "What should I click?"}
+    spot = await ctx["locate_on_screen"](target)
+    if spot.get("error"):
+        return spot
+    try:
+        done = await run_in_threadpool(automation.click, spot["x"], spot["y"], str(a.get("button") or "left"), bool(a.get("double")))
+    except automation.ControlError as exc:
+        return {"error": str(exc)}
+    return {**done, "target": target}
+
+
+def _contacts(a):
+    from . import messaging
+    return {"contacts": [{k: v for k, v in c.items() if k != "id" and v} for c in messaging.list_contacts()]}
+
+
+def _add_contact(a):
+    from . import messaging
+    return {"saved": {k: v for k, v in messaging.save_contact(a).items() if k != "id" and v}}
+
+
+def _routines(a):
+    from . import routines
+    return {"routines": [{"name": r["name"], "say_any_of": r["phrases"], "steps": [routines.describe_step(s) for s in r["steps"]]}
+                         for r in routines.list_routines()]}
+
+
+def _create_routine(a):
+    from . import routines
+    r = routines.save_routine({"name": a.get("name"), "phrases": a.get("phrases"), "steps": a.get("steps"), "icon": a.get("icon")})
+    return {"saved_routine": r["name"], "say_any_of": r["phrases"], "steps": [routines.describe_step(s) for s in r["steps"]]}
+
+
+def _approve_routine(a):
+    from . import routines
+    steps = routines.clean_steps(a.get("steps"))
+    return f"Save the routine \"{a.get('name')}\":\n" + "\n".join(f"{i}. {routines.describe_step(s)}" for i, s in enumerate(steps, 1))
+
+
+def _delete_routine(a):
+    from . import routines
+    return {"deleted": routines.delete_routine(str(a.get("name", "")))}
+
+
+async def run_steps(routine, ctx, on_step=None, on_start=None):
+    """Run a routine's steps in order. on_start(i, tool, args) / on_step(i, tool, args, result) report progress."""
+    import asyncio
+
+    from starlette.concurrency import run_in_threadpool
+
+    from . import routines
+    said, results = [], []
+    for i, step in enumerate(routine["steps"]):
+        name, args = routines.step_call(step)
+        if on_start:
+            await on_start(i, name, args)
+        if name == "say":
+            said.append(str(args.get("text", "")))
+            result = {"said": args.get("text", "")}
+        elif name == "wait":
+            await asyncio.sleep(min(max(float(args.get("seconds") or 2), 0), 60))
+            result = {"waited": args.get("seconds", 2)}
+        else:
+            tool = BY_NAME.get(name)
+            result = await arun_tool(name, args, ctx) if tool and tool.arun else await run_in_threadpool(run_tool, name, args)
+            await asyncio.sleep(0.4)  # give apps a moment between steps
+        results.append({"step": routines.describe_step(step), **({"error": result["error"]} if isinstance(result, dict) and result.get("error") else {"ok": True})})
+        if on_step:
+            await on_step(i, name, args, result)
+    return {"routine": routine["name"], "steps": results, "say": " ".join(t for t in said if t)}
+
+
+async def _run_routine(a, ctx):
+    from . import routines
+    r = routines.find(str(a.get("name", "")))
+    if not r:
+        names = ", ".join(x["name"] for x in routines.list_routines()) or "none yet"
+        return {"error": f"No routine called '{a.get('name')}'. Routines: {names}"}
+    return await run_steps(r, ctx)
+
+
+STEP_HELP = ("Each step is an object with 'do' plus its settings: open_app{name}, close_app{app}, window{action: focus|minimize|maximize|"
+             "left|right|move, app, monitor}, minimize_all, volume{level}, media{action: play_pause|next|previous}, open_website{url}, "
+             "message{app: discord|whatsapp|text|email, to, text}, say{text}, wait{seconds}, type{text}, keys{keys}, timer{minutes, label}, "
+             "home{device, action}, lock, sleep, shutdown{minutes}.")
+
+TOOLS += [
+    Tool("pc_status", "pc", "How the PC is doing right now: CPU and memory use, graphics card load and memory (temperature on NVIDIA), "
+         "free disk space, network speed, battery, uptime, and which apps use the most. Use for 'how's my PC', 'why is it slow', etc.",
+         run=_pc_status),
+    Tool("window_control", "pc", "Control app windows: focus (bring to front), minimize, maximize, restore, close, move to a monitor "
+         "(monitor 1 is the main one), snap left/right half, minimize_all, or list open windows.",
+         {"action": S("focus, minimize, maximize, restore, close, move, left, right, minimize_all or list"),
+          "app": S("App or window name, e.g. Discord, Chrome, Spotify"), "monitor": {"type": "integer", "description": "Monitor number for move"}},
+         ["action"], run=_ctl(_window), approve=_safe(lambda a: f"Close {a.get('app')}" if str(a.get("action")).lower() == "close" else None)),
+    Tool("type_text", "pc", "Type text into the app that's in front (or into a named app, which is brought to the front first).",
+         {"text": S("What to type"), "app": S("Optional app to type into")}, ["text"], run=_ctl(_type),
+         approve=_safe(lambda a: f"Type into {a.get('app') or 'the window in front'}:\n\"{str(a.get('text'))[:300]}\"")),
+    Tool("press_keys", "pc", "Press a keyboard shortcut or key in the app in front (or a named app): e.g. ctrl+s, alt+tab, win+d, enter, "
+         "f5, space. Several: 'ctrl+a, delete'.",
+         {"keys": S("Keys, e.g. ctrl+shift+t"), "app": S("Optional app to send them to"), "times": {"type": "integer", "description": "Repeat count"}},
+         ["keys"], run=_ctl(_keys), approve=_safe(lambda a: f"Press {a.get('keys')}" + (f" in {a.get('app')}" if a.get("app") else ""))),
+    Tool("click_on_screen", "screen", "Click something visible on screen, described in words (e.g. 'the blue Join button', "
+         "'the search box'). Uses a screenshot to find it. For typing afterwards use type_text.",
+         {"target": S("What to click, described clearly"), "double": {"type": "boolean", "description": "Double-click"},
+          "button": S("left or right", enum=["left", "right"])}, ["target"], arun=_click,
+         approve=_safe(lambda a: f"Click \"{a.get('target')}\" on your screen")),
+    Tool("send_message", "pc", "Send a message to a person with Discord (default), WhatsApp, a text (Phone Link) or email. Athena opens "
+         "the app and sends it like the user would; the user approves first. Texts and emails open as a ready draft.",
+         {"to": S("Person's name (or Discord username / phone / email)"), "text": S("The message"),
+          "app": S("discord, whatsapp, text or email", enum=["discord", "whatsapp", "text", "email"]), "subject": S("Email subject")},
+         ["to", "text"], arun=_send_message, approve=_safe(_approve_message)),
+    Tool("list_contacts", "pc", "List the user's saved contacts (names with their Discord username, phone and email).", run=_contacts),
+    Tool("add_contact", "pc", "Save or update a contact so messages reach the right person.",
+         {"name": S("Name"), "discord": S("Discord username"), "phone": S("Phone number"), "email": S("Email address")}, ["name"],
+         run=_ctl(lambda **a: _add_contact(a))),
+    Tool("list_routines", "pc", "List the user's routines (one phrase that runs several steps).", run=_routines),
+    Tool("run_routine", "pc", "Run one of the user's routines by name (e.g. 'gaming', 'goodnight').", {"name": S("Routine name")}, ["name"],
+         arun=_run_routine),
+    Tool("create_routine", "pc", "Create or update a routine: a name, the phrases that start it, and its steps. " + STEP_HELP,
+         {"name": S("Routine name, e.g. Gaming"), "phrases": {"type": "array", "items": {"type": "string"}, "description": "Phrases that start it"},
+          "steps": {"type": "array", "items": {"type": "object"}, "description": "The steps in order"}, "icon": S("One emoji")},
+         ["name", "steps"], run=_ctl(lambda **a: _create_routine(a)), approve=_safe(_approve_routine)),
+    Tool("delete_routine", "pc", "Delete a routine.", {"name": S("Routine name")}, ["name"], run=_delete_routine,
+         approve=_safe(lambda a: f"Delete the routine \"{a.get('name')}\"")),
+]
 BY_NAME = {t.name: t for t in TOOLS}
 
 

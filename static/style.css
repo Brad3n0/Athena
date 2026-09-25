@@ -926,3 +926,36 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 .html-preview iframe { height: 460px; }
 .html-preview:fullscreen .hp-stage { flex: 1; display: flex; }
 .html-preview:fullscreen .hp-stage iframe { height: 100%; }
+
+/* ---------------- Jarvis tab ---------------- */
+.jv-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.jv-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 12px; background: rgba(255,255,255,.02); }
+.jv-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.jv-main .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jv-actions { display: flex; gap: 2px; }
+.jv-actions button { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: var(--text-3); }
+.jv-actions button:hover { background: var(--bg-hover); color: var(--accent); }
+.jv-actions svg { width: 16px; height: 16px; }
+.jv-editor { border: 1px solid rgba(var(--accent-rgb), .4); border-radius: 14px; padding: 12px; margin: 8px 0 14px; }
+.jv-editor .pull-row:first-child { display: flex; gap: 8px; }
+.jv-editor .pull-row:first-child #rtName { flex: 1; }
+.jv-editor input, .jv-editor select, .jv-contact-form input { background: var(--bg-input); border: 1px solid var(--border); border-radius: 9px; padding: 7px 10px; color: var(--text); outline: 0; min-width: 0; }
+.jv-editor input:focus, .jv-editor select:focus, .jv-contact-form input:focus { border-color: var(--accent); }
+.jv-editor label input { width: 100%; margin-top: 4px; }
+.rt-step { display: flex; align-items: center; gap: 6px; margin: 5px 0; flex-wrap: wrap; }
+.rt-step input { flex: 1; min-width: 90px; }
+.rt-step input[type="number"] { flex: 0 0 110px; }
+.rt-step button { width: 28px; height: 28px; border-radius: 7px; color: var(--text-3); display: grid; place-items: center; }
+.rt-step button:hover { background: var(--bg-hover); color: var(--text); }
+.rt-step button svg { width: 14px; height: 14px; }
+.rt-grip { color: var(--text-3); }
+.jv-contact-form { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 8px; }
+@media (max-width: 700px) { .jv-contact-form { grid-template-columns: 1fr 1fr; } }
+.jv-alerts { padding-left: 22px; }
+.pc-status { margin-top: 6px; }
+.pcs-row { display: grid; grid-template-columns: 90px 1fr 170px; align-items: center; gap: 10px; margin: 6px 0; font-size: 14px; }
+.pcs-bar { height: 8px; border-radius: 99px; background: rgba(255,255,255,.08); overflow: hidden; }
+.pcs-bar div { height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s; }
+.pcs-bar div.warm { background: #f59e0b; }
+.pcs-bar div.hot { background: #ef4444; }
+.approval-summary { white-space: pre-wrap; }

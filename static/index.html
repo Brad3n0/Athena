@@ -244,6 +244,7 @@
         <button type="button" data-tab="abilities">Abilities</button>
         <button type="button" data-tab="knowledge">Knowledge</button>
         <button type="button" data-tab="integrations">Integrations</button>
+        <button type="button" data-tab="jarvis">Jarvis</button>
         <button type="button" data-tab="desktop">Desktop app</button>
         <button type="button" data-tab="privacy">Privacy &amp; data</button>
         <button type="button" data-tab="stats">Your stats</button>
@@ -373,6 +374,52 @@
         <label>Access token <input id="setHaToken" type="password" autocomplete="off" /></label>
         <button type="button" class="ghost" id="testHome">Test connection</button>
         <p class="muted small" id="homeStatus"></p>
+      </section>
+
+      <section data-panel="jarvis" hidden>
+        <p class="muted small" style="margin-top:0">Athena can run your PC like Jarvis: say <i>"how's my PC doing?"</i>, <i>"put Discord on my second monitor"</i>,
+          <i>"message Jake on Discord that I'm running late"</i>, or a routine phrase like <i>"game time"</i>.</p>
+
+        <h3>⚡ Routines</h3>
+        <p class="muted small">One phrase, several steps. Say the phrase (typed or out loud) and she does them all.</p>
+        <div id="routineList" class="jv-list"></div>
+        <button type="button" class="ghost" id="routineNew">+ New routine</button>
+        <div class="jv-editor" id="routineEditor" hidden>
+          <div class="pull-row"><input id="rtIcon" class="proj-icon" maxlength="4" value="⚡" title="Emoji" /><input id="rtName" placeholder="Name, e.g. Gaming" /></div>
+          <label>Phrases that start it <span class="muted small">(comma separated)</span><input id="rtPhrases" placeholder="game time, I'm gaming, gaming mode" /></label>
+          <div class="muted small" style="margin:10px 0 4px">Steps</div>
+          <div id="rtSteps"></div>
+          <button type="button" class="ghost" id="rtAddStep">+ Add a step</button>
+          <div class="pull-row" style="justify-content:flex-end;gap:8px;margin-top:12px">
+            <button type="button" class="ghost" id="rtCancel">Cancel</button><button type="button" class="primary" id="rtSave">Save routine</button>
+          </div>
+        </div>
+
+        <h3>👥 Contacts</h3>
+        <p class="muted small">Who's who when you say "message Jake". Add their exact Discord username so she opens the right chat. A phone number is needed for WhatsApp and texts, and an email address for email.</p>
+        <div id="contactList" class="jv-list"></div>
+        <div class="jv-contact-form">
+          <input id="ctName" placeholder="Name" /><input id="ctDiscord" placeholder="Discord username" /><input id="ctPhone" placeholder="Phone" /><input id="ctEmail" placeholder="Email" />
+          <button type="button" class="primary" id="ctSave">Add</button>
+        </div>
+
+        <h3>🔔 Heads-ups</h3>
+        <p class="muted small">She tells you when something needs your attention (while Athena is open).</p>
+        <label class="check"><input type="checkbox" id="setAlerts" /> Heads-ups on</label>
+        <label class="check"><input type="checkbox" id="setAlertsSpeak" /> Say them out loud</label>
+        <div class="jv-alerts">
+          <label class="check"><input type="checkbox" data-alert="download" /> A download finished</label>
+          <label class="check"><input type="checkbox" data-alert="cpu" /> CPU maxed out for over a minute</label>
+          <label class="check"><input type="checkbox" data-alert="memory" /> Memory almost full</label>
+          <label class="check"><input type="checkbox" data-alert="gpu_temp" /> Graphics card running hot (NVIDIA)</label>
+          <label class="check"><input type="checkbox" data-alert="disk" /> Drive almost full</label>
+          <label class="check"><input type="checkbox" data-alert="battery" /> Battery low (laptops)</label>
+          <label class="check"><input type="checkbox" data-alert="reminder" /> 5-minute warning before reminders</label>
+        </div>
+        <button type="button" class="ghost" id="testAlert">▶ Try a heads-up</button>
+
+        <h3>🖥 PC status</h3>
+        <div id="pcStatus" class="pc-status"><button type="button" class="ghost" id="pcStatusBtn">Check my PC now</button></div>
       </section>
 
       <section data-panel="desktop" hidden>

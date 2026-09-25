@@ -984,6 +984,18 @@ const STEP_TEXT = {
   write_code: [(a) => `Writing ${a.path}`, (a, r) => r.created ? `Created ${r.created}` : `Rewrote ${r.edited || a.path} (+${r.added_lines ?? 0} −${r.removed_lines ?? 0})`],
   undo_code_edit: [() => 'Undoing the last edit', (a, r) => r.restored ? `Restored ${r.restored}` : r.removed_new_file ? `Removed ${r.removed_new_file}` : 'Nothing to undo'],
   run_in_project: [(a) => `Running ${a.command}`, (a, r) => r.timed_out ? `Stopped after ${r.seconds}s` : r.exit_code === 0 ? `Ran ${a.command}` : `${a.command} failed (exit ${r.exit_code})`],
+  pc_status: [() => 'Checking your PC', (a, r) => r.cpu ? `CPU ${r.cpu.usage_percent}% · memory ${r.memory.used_percent}%${r.gpu?.usage_percent != null ? ` · graphics ${r.gpu.usage_percent}%` : ''}` : 'Checked your PC'],
+  window_control: [(a) => `${a.action === 'list' ? 'Looking at open windows' : `${a.action} ${a.app || ''}`.trim()}`, (a, r) => r.closed ? `Closed ${r.closed.length} window${r.closed.length === 1 ? '' : 's'}` : r.minimized_all ? 'Minimized everything' : r.windows ? `${r.windows.length} windows open` : `${a.action}: ${r.app || a.app || ''}`],
+  type_text: [(a) => `Typing${a.app ? ` in ${a.app}` : ''}`, (a, r) => `Typed ${r.typed_characters ?? ''} characters${a.app ? ` in ${a.app}` : ''}`],
+  press_keys: [(a) => `Pressing ${a.keys}`, (a) => `Pressed ${a.keys}`],
+  click_on_screen: [(a) => `Finding ${q(a.target)} on screen`, (a) => `Clicked ${q(a.target)}`],
+  send_message: [(a) => `Messaging ${a.to} on ${a.app || 'Discord'}`, (a, r) => r.draft_opened ? `Draft ready for ${r.to}. Press Send` : `Sent to ${r.to} on ${r.app === 'sms' ? 'text' : r.app}`],
+  list_contacts: [() => 'Checking your contacts', (a, r) => `${r.contacts?.length || 0} contacts`],
+  add_contact: [(a) => `Saving ${a.name}`, (a, r) => `Saved ${r.saved?.name || a.name}`],
+  list_routines: [() => 'Checking your routines', (a, r) => `${r.routines?.length || 0} routines`],
+  run_routine: [(a) => `Running ${a.name}`, (a, r) => `Ran ${r.routine || a.name}`],
+  create_routine: [(a) => `Creating the ${a.name} routine`, (a, r) => `Saved routine: ${r.saved_routine || a.name}`],
+  delete_routine: [(a) => `Deleting ${a.name}`, (a) => `Deleted ${a.name}`],
   search_chats: [(a) => `Looking through past chats for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} past chat${r.results?.length === 1 ? '' : 's'}`],
   remember: [() => 'Saving to memory', (a, r) => `Remembered: ${r.remembered}`],
   forget: [() => 'Forgetting', (a, r) => `Forgot: ${r.forgot}`],
@@ -1990,6 +2002,9 @@ function openSettings(tab = 'general') {
   $('#setReplyLength').value = s.reply_length || 'normal';
   $('#setShooting').checked = s.shooting_stars !== false;
   $('#setAutoPreview').checked = s.auto_preview !== false;
+  $('#setAlerts').checked = s.alerts_enabled !== false;
+  $('#setAlertsSpeak').checked = s.alerts_speak !== false;
+  $$('[data-alert]').forEach((el) => { el.checked = s[`alert_${el.dataset.alert}`] !== false; });
   $('#setSeasonal').checked = s.seasonal_effects !== false;
   fillPersonas();
   renderAccents();
@@ -2075,6 +2090,7 @@ async function loadStats() {
 
 function switchTab(tab) {
   if (tab === 'stats') loadStats();
+  if (tab === 'jarvis') loadJarvis();
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('[data-panel]', dlg).forEach((p) => (p.hidden = p.dataset.panel !== tab));
 }
@@ -2496,6 +2512,137 @@ function autoPreview(el) {
   setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150);
 }
 
+// ------------------------------------------------------------ Jarvis: routines, contacts, heads-ups, PC status
+const STEP_FIELDS = {
+  open_app: [['name', 'App, e.g. Steam']], close_app: [['app', 'App, e.g. Chrome']],
+  window: [['action', ['focus', 'minimize', 'maximize', 'left', 'right', 'move']], ['app', 'App'], ['monitor', 'Monitor #', 'number']],
+  minimize_all: [], volume: [['level', 'Volume 0-100', 'number']], media: [['action', ['play_pause', 'next', 'previous']]],
+  open_website: [['url', 'https://…']], message: [['app', ['discord', 'whatsapp', 'text', 'email']], ['to', 'To (name)'], ['text', 'Message']],
+  say: [['text', 'What she says']], wait: [['seconds', 'Seconds', 'number']], type: [['text', 'Text to type']], keys: [['keys', 'e.g. ctrl+s']],
+  timer: [['minutes', 'Minutes', 'number'], ['label', 'For what']], home: [['device', 'Device'], ['action', 'on / off / toggle']],
+  lock: [], sleep: [], shutdown: [['minutes', 'In minutes (optional)', 'number']],
+};
+const jarvis = { routines: [], stepTypes: {}, editing: null };
+
+async function loadJarvis() {
+  const [r, contacts] = await Promise.all([api('/api/routines').catch(() => ({ routines: [], step_types: {} })), api('/api/contacts').catch(() => [])]);
+  jarvis.routines = r.routines;
+  jarvis.stepTypes = r.step_types;
+  $('#routineList').innerHTML = r.routines.length ? r.routines.map((x) => `
+    <div class="jv-item" data-rid="${x.id}">
+      <div class="jv-main"><b>${escapeHtml(x.icon || '⚡')} ${escapeHtml(x.name)}</b><span class="muted small">Say: ${x.phrases.map((p) => `“${escapeHtml(p)}”`).join(', ')}</span>
+        <span class="muted small">${x.summary.map(escapeHtml).join(' → ')}</span></div>
+      <div class="jv-actions"><button type="button" data-rt="run" title="Run now">▶</button><button type="button" data-rt="edit" title="Edit">${ICONS.edit}</button><button type="button" data-rt="delete" title="Delete">${ICONS.trash}</button></div>
+    </div>`).join('') : '<p class="muted small">No routines yet. Make one here, or just ask: <i>"make a goodnight routine that closes Chrome and Discord and locks my PC"</i>.</p>';
+  $('#contactList').innerHTML = contacts.length ? contacts.map((c) => `
+    <div class="jv-item" data-cid="${c.id}"><div class="jv-main"><b>${escapeHtml(c.name)}</b>
+      <span class="muted small">${[c.discord && `Discord: ${escapeHtml(c.discord)}`, c.phone && `📱 ${escapeHtml(c.phone)}`, c.email && `✉ ${escapeHtml(c.email)}`].filter(Boolean).join(' · ') || 'No details yet'}</span></div>
+      <div class="jv-actions"><button type="button" data-ct="delete" title="Delete">${ICONS.trash}</button></div></div>`).join('') : '<p class="muted small">No contacts yet.</p>';
+}
+
+function stepRow(step = { do: 'open_app' }) {
+  const row = document.createElement('div');
+  row.className = 'rt-step';
+  const kinds = Object.entries(jarvis.stepTypes).map(([k, label]) => `<option value="${k}"${k === step.do ? ' selected' : ''}>${escapeHtml(label)}</option>`).join('');
+  const fields = (STEP_FIELDS[step.do] || []).map(([key, ph, type]) => Array.isArray(ph)
+    ? `<select data-k="${key}">${ph.map((o) => `<option${String(step[key] ?? '') === o ? ' selected' : ''}>${o}</option>`).join('')}</select>`
+    : `<input data-k="${key}" placeholder="${escapeHtml(ph)}" ${type === 'number' ? 'type="number"' : ''} value="${escapeHtml(step[key] ?? '')}" />`).join('');
+  row.innerHTML = `<span class="rt-grip">⋮</span><select data-k="do">${kinds}</select>${fields}<button type="button" data-rt-step="up" title="Move up">↑</button><button type="button" data-rt-step="remove" title="Remove">${ICONS.x}</button>`;
+  row.querySelector('[data-k="do"]').onchange = (e) => row.replaceWith(stepRow({ do: e.target.value }));
+  return row;
+}
+
+function editRoutine(r) {
+  jarvis.editing = r?.id || null;
+  $('#rtName').value = r?.name || '';
+  $('#rtIcon').value = r?.icon || '⚡';
+  $('#rtPhrases').value = (r?.phrases || []).join(', ');
+  $('#rtSteps').innerHTML = '';
+  (r?.steps?.length ? r.steps : [{ do: 'open_app' }]).forEach((st) => $('#rtSteps').append(stepRow(st)));
+  $('#routineEditor').hidden = false;
+  $('#rtName').focus();
+}
+
+$('#routineNew').onclick = () => editRoutine(null);
+$('#rtAddStep').onclick = () => $('#rtSteps').append(stepRow());
+$('#rtCancel').onclick = () => { $('#routineEditor').hidden = true; };
+$('#rtSteps').onclick = (e) => {
+  const b = e.target.closest('[data-rt-step]');
+  if (!b) return;
+  const row = b.closest('.rt-step');
+  if (b.dataset.rtStep === 'remove') row.remove();
+  if (b.dataset.rtStep === 'up' && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
+};
+$('#rtSave').onclick = async () => {
+  const steps = $$('#rtSteps .rt-step').map((row) => Object.fromEntries($$('[data-k]', row).map((el) => [el.dataset.k, el.type === 'number' && el.value !== '' ? Number(el.value) : el.value]).filter(([, v]) => v !== '')));
+  try {
+    await api('/api/routines', json('POST', { id: jarvis.editing, name: $('#rtName').value, icon: $('#rtIcon').value, phrases: $('#rtPhrases').value.split(',').map((x) => x.trim()).filter(Boolean), steps }));
+    $('#routineEditor').hidden = true;
+    toast('Routine saved');
+    loadJarvis();
+  } catch (err) { toast(err.message, 'error'); }
+};
+$('#routineList').onclick = async (e) => {
+  const b = e.target.closest('[data-rt]');
+  if (!b) return;
+  const r = jarvis.routines.find((x) => x.id === b.closest('[data-rid]').dataset.rid);
+  if (b.dataset.rt === 'edit') editRoutine(r);
+  if (b.dataset.rt === 'delete' && confirm(`Delete the routine “${r.name}”?`)) { await api(`/api/routines/${r.id}`, { method: 'DELETE' }); loadJarvis(); }
+  if (b.dataset.rt === 'run') {
+    toast(`${r.icon || '⚡'} Running ${r.name}…`);
+    try {
+      const res = await api(`/api/routines/${r.id}/run`, { method: 'POST' });
+      const bad = res.steps.filter((x) => x.error);
+      toast(bad.length ? `${bad.length} step(s) didn't work: ${bad.map((x) => x.error).join('; ')}` : `${r.name} done ✓`, bad.length ? 'error' : '');
+    } catch (err) { toast(err.message, 'error'); }
+  }
+};
+$('#ctSave').onclick = async () => {
+  const data = { name: $('#ctName').value, discord: $('#ctDiscord').value, phone: $('#ctPhone').value, email: $('#ctEmail').value };
+  try {
+    await api('/api/contacts', json('POST', data));
+    ['#ctName', '#ctDiscord', '#ctPhone', '#ctEmail'].forEach((id) => { $(id).value = ''; });
+    loadJarvis();
+  } catch (err) { toast(err.message, 'error'); }
+};
+$('#contactList').onclick = async (e) => {
+  const b = e.target.closest('[data-ct="delete"]');
+  if (b) { await api(`/api/contacts/${b.closest('[data-cid]').dataset.cid}`, { method: 'DELETE' }); loadJarvis(); }
+};
+$('#setAlerts').onchange = (e) => {
+  saveSettings({ alerts_enabled: e.target.checked });
+  if (e.target.checked && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+};
+$('#setAlertsSpeak').onchange = (e) => saveSettings({ alerts_speak: e.target.checked });
+$$('[data-alert]').forEach((el) => { el.onchange = () => saveSettings({ [`alert_${el.dataset.alert}`]: el.checked }); });
+$('#testAlert').onclick = () => api('/api/alerts/test', { method: 'POST' }).catch((err) => toast(err.message, 'error'));
+async function checkPc() {
+  const box = $('#pcStatus');
+  box.innerHTML = '<span class="muted small">Checking…</span>';
+  try {
+    const st = await api('/api/pc-status');
+    const bar = (label, pct, extra = '') => `<div class="pcs-row"><span>${label}</span><div class="pcs-bar"><div style="width:${Math.min(100, pct || 0)}%" class="${pct >= 90 ? 'hot' : pct >= 70 ? 'warm' : ''}"></div></div><span class="muted small">${extra}</span></div>`;
+    const g = st.gpu;
+    box.innerHTML = bar('CPU', st.cpu.usage_percent, `${st.cpu.usage_percent}%`) +
+      bar('Memory', st.memory.used_percent, `${st.memory.used_gb} / ${st.memory.total_gb} GB`) +
+      (g ? bar('Graphics', g.usage_percent, `${g.usage_percent ?? '?'}%${g.memory_used_gb != null ? ` · ${g.memory_used_gb}/${g.memory_total_gb ?? '?'} GB` : ''}${g.temperature_c ? ` · ${g.temperature_c}°C` : ''}`) : '') +
+      st.disks.map((d) => bar(escapeHtml(d.drive), d.used_percent, `${d.free_gb} GB free`)).join('') +
+      `<p class="muted small">Up ${escapeHtml(st.uptime)} · busiest: ${st.busiest_apps_cpu.slice(0, 3).map((a) => escapeHtml(a.app)).join(', ') || 'nothing much'}</p>
+       <button type="button" class="ghost" data-pc-check>Check again</button>`;
+  } catch (err) { box.innerHTML = `<span class="err">${escapeHtml(err.message)}</span> <button type="button" class="ghost" data-pc-check>Try again</button>`; }
+}
+$('#pcStatus').onclick = (e) => { if (e.target.closest('[data-pc-check], #pcStatusBtn')) checkPc(); };
+
+/** A heads-up from Athena: pop it up, say it, and notify even when the window is in the background. */
+function showAlert(ev) {
+  sfx?.('done');
+  toast(`🔔 ${ev.text}`, '', { ms: 9000 });
+  if (ev.speak && !state.voice.active) { speaker.reset(); speaker.say(ev.text); }
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    try { new Notification('Athena', { body: ev.text, silent: true }); } catch { /* ignore */ }
+  }
+}
+
 // ------------------------------------------------------------ live events
 function connectEvents() {
   const es = new EventSource('/api/events');
@@ -2503,6 +2650,7 @@ function connectEvents() {
     let ev;
     try { ev = JSON.parse(e.data); } catch { return; }
     if (ev.type === 'reminder') fireReminder(ev);
+    else if (ev.type === 'alert') showAlert(ev);
     else if (ev.type === 'briefing') startBriefing();
     else if (ev.type === 'wake') {
       if (state.voice.sleeping) { state.voice.wakeUp?.(); return; }

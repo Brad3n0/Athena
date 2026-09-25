@@ -200,6 +200,27 @@ def screenshot(max_width: int = 1600) -> str:
             return base64.b64encode(mss.tools.to_png(shot.rgb, shot.size)).decode()
 
 
+def screenshot_for_pointing(width: int = 1288) -> dict[str, Any]:
+    """A screenshot of the main screen sized for vision models to point at things (sides are multiples of 28,
+    which is how Qwen-VL models measure), plus what's needed to turn their answer back into screen pixels."""
+    try:
+        import mss
+        from PIL import Image
+    except ImportError:
+        raise PCError("Clicking on things needs 'mss' and 'Pillow' — restart Athena with start.bat to install them")
+    with mss.mss() as sct:
+        mon = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+        shot = sct.grab(mon)
+    img = Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+    w = min(width, img.width) // 28 * 28
+    h = max(28, round(img.height * w / img.width / 28) * 28)
+    img = img.resize((w, h))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=88)
+    return {"image": base64.b64encode(buf.getvalue()).decode(), "width": w, "height": h,
+            "left": mon["left"], "top": mon["top"], "scale_x": mon["width"] / w, "scale_y": mon["height"] / h}
+
+
 # --------------------------------------------------------------- run code
 
 # Loaded before the user's script when it uses matplotlib: plt.show() (and any figure left open at the end)

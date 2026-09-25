@@ -109,6 +109,19 @@ Projects are folders for your chats, like one per class or per app you're buildi
 
 While a project is open, new chats go into it, and the sidebar only shows that project's chats. Press ✕ to go back to all chats. To move an existing chat, hover over it and click the 📁 folder icon.
 
+## Like Jarvis: run your PC
+
+With PC control on (Settings → Abilities), just ask, typed or out loud:
+
+- **"How's my PC doing?"** CPU, memory, graphics card load and memory, free space, network, battery and the busiest apps. There's also a live view in **Settings → Jarvis**. Temperatures show for NVIDIA cards; Windows doesn't share AMD or CPU temperatures with apps.
+- **Windows:** *"put Discord on my second monitor"*, *"snap Chrome to the left"*, *"minimize everything"*, *"close Spotify"*.
+- **Typing and clicking:** *"type my address into Notepad"*, *"press ctrl+s"*, *"click the Join button"*. Clicking uses a screenshot, so it needs a vision model like `qwen2.5vl:7b`.
+- **Messages:** *"message Jake on Discord that I'm running 10 minutes late"*. She opens Discord, jumps to Jake with Ctrl+K, checks the right chat opened (with a vision model), and sends it. You see exactly who and what first and press **Allow**. WhatsApp works the same way (most reliable with a saved phone number). Texts (through Phone Link) and emails open as a ready draft for you to send. Add people in **Settings → Jarvis → Contacts** with their exact Discord username.
+- **Routines:** one phrase, many steps. Make them in **Settings → Jarvis → Routines** or just ask: *"make a goodnight routine that closes Chrome and Discord, sets volume to 20 and locks my PC"*. Then say *"goodnight"* (or *"Hey Athena, game time"*) and it all happens instantly.
+- **Heads-ups:** she speaks up when a download finishes, the CPU is maxed or memory is almost full (and says which app), a drive is nearly full, a laptop battery is low, or a reminder is 5 minutes away. Choose which ones in **Settings → Jarvis**.
+
+She works your real apps with the keyboard and mouse like you would, so keep the PC unlocked while she's doing things, and keep your hands off the keyboard for those few seconds.
+
 ## Desktop app, "Hey Athena" and more
 
 - **Desktop app:** double-click **`start-desktop.bat`**. Athena opens in her own window and lives in the system tray. Press **Ctrl+Space** anywhere to bring her up, or **Ctrl+Shift+Space** to start talking. In **Settings → Desktop app** you can turn on **Start with Windows** and create Desktop/Start menu shortcuts.
@@ -182,6 +195,11 @@ athena/          Python server (FastAPI)
   events.py      Live events to open windows (reminders, wake word)
   pc.py          Apps, volume/media keys, power, clipboard, screenshots, running code
   knowledge.py   Document indexing and search (Ollama embeddings)
+  automation.py  Windows, monitors, typing, keys and clicks (Windows API)
+  messaging.py   Discord / WhatsApp / text / email, and contacts
+  routines.py    One phrase, many steps
+  monitor.py     Heads-ups: downloads, PC health, reminders
+  pcstatus.py    "How's my PC doing?"
   workspace.py   Code projects: read, search and edit a folder of code, with diffs and undo
   integrations.py  Image generation (Stable Diffusion) and Home Assistant
   weather.py     Weather (Open-Meteo)
