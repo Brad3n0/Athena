@@ -3,6 +3,7 @@ import { renderMarkdown, toSpeech } from './markdown.js';
 import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices, lastLanguage } from './voice.js';
 import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
+import { marbleTexture } from './marble.js';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf, mistakePrompt } from './study.js';
 import { hydrateGraphs } from './graph.js';
@@ -126,6 +127,9 @@ function applyTheme() {
   const t = state.settings.theme || 'dark';
   const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  // Marble: the light theme on white-and-gold marble
+  document.documentElement.dataset.skin = t === 'marble' ? 'marble' : '';
+  if (t === 'marble') document.documentElement.style.setProperty('--marble', `url(${marbleTexture()})`);
   applyAccent(state.settings.accent || 'gold');
   document.documentElement.dataset.size = state.settings.text_size || 'normal';
   document.documentElement.dataset.compact = state.settings.compact ? 'true' : 'false';
@@ -3775,6 +3779,13 @@ async function init() {
   state.settings = await api('/api/settings').catch(() => ({}));
   applyTheme();
   renderThinkBtn();
+  // Start the sky straight away (the opening constellation plays while Athena connects).
+  const stars = startStars($('#stars'), () => ({ shooting: state.settings.shooting_stars !== false, seasonal: state.settings.seasonal_effects !== false }));
+  new MutationObserver(() => stars.redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  if (stars.introPlaying()) { // the greeting fades in as the constellation drifts apart
+    document.documentElement.classList.add('intro');
+    setTimeout(() => document.documentElement.classList.remove('intro'), 2900);
+  }
   if (isNarrow()) toggleSidebar(false);
   await refreshStatus();
   await refreshModels();
@@ -3793,8 +3804,6 @@ async function init() {
   refreshDeckBadge();
   setInterval(refreshDeckBadge, 10 * 60000);
   if (!state.settings.setup_done) openWizard();
-  const stars = startStars($('#stars'), () => ({ shooting: state.settings.shooting_stars !== false, seasonal: state.settings.seasonal_effects !== false }));
-  new MutationObserver(() => stars.redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   $('#lockBtn').hidden = !state.settings.pin_set;
   if (new URLSearchParams(location.search).get('voice') === '1') {
     history.replaceState(null, '', location.pathname);

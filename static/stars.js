@@ -9,6 +9,9 @@ export function startStars(canvas, getOptions = () => ({ shooting: true, seasona
   let stars = [], w = 0, h = 0, last = 0;
   let meteors = [], nextMeteor = performance.now() + 6000 + Math.random() * 10000;
   let flakes = [], sparks = [], nextBurst = 0, seasonKey = '';
+  // Startup constellation: some stars gather into the spearhead A, glow, then drift back into the sky.
+  let intro = still ? null : { start: 0, pts: [] };
+  const IN = 1.5, HOLD = 1.3, OUT = 1.6;
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -28,7 +31,44 @@ export function startStars(canvas, getOptions = () => ({ shooting: true, seasona
       drift: 2 + Math.random() * 5, // px per second
     }));
     seasonKey = '';
+    if (intro && !intro.start && w > 0 && h > 0) setupIntro();
     draw(performance.now());
+  }
+
+  // The A logo's shape (same geometry as the logo, viewBox 10..54 × 9..53): two legs meeting at the tip, and the spark.
+  function logoPoints(n) {
+    const pts = [], legs = Math.max(4, Math.round((n - 4) / 2));
+    for (let i = 0; i < legs; i++) { const k = i / (legs - 1); pts.push([17 + (32 - 17) * k, 49 + (13 - 49) * k, 'L']); }
+    for (let i = 1; i < legs; i++) { const k = i / (legs - 1); pts.push([32 + (47 - 32) * k, 13 + (49 - 13) * k, 'R']); }
+    for (const [x, y] of [[32, 31], [38, 38], [32, 45], [26, 38]]) pts.push([x, y, 'S']);
+    return pts;
+  }
+  function setupIntro() {
+    if (!intro || intro.start) return;
+    const shape = logoPoints(Math.min(26, stars.length));
+    if (stars.length < shape.length) { intro = null; return; }
+    // Centre on the chat area (not the sidebar), where the welcome logo sits.
+    const area = document.querySelector('.main')?.getBoundingClientRect();
+    const cx = area?.width ? area.left + area.width / 2 : w / 2, cy = area?.height ? area.top + area.height * 0.4 : h * 0.4;
+    const size = Math.min(h * 0.42, (area?.width || w) * 0.6, 300);
+    const pool = [...stars].sort(() => Math.random() - 0.5);
+    intro.pts = shape.map(([x, y, part], i) => ({
+      star: pool[i], part,
+      tx: cx + ((x - 32) / 44) * size, ty: cy + ((y - 31) / 44) * size,
+    }));
+    intro.start = performance.now() + 250;
+  }
+  const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+  // How far into the shape each gathered star is (0 = its own place in the sky, 1 = in the A).
+  function introMix(now) {
+    if (!intro?.start) return -1;
+    const t = (now - intro.start) / 1000;
+    if (t < 0) return 0;
+    if (t < IN) return ease(t / IN);
+    if (t < IN + HOLD) return 1;
+    if (t < IN + HOLD + OUT) return 1 - ease((t - IN - HOLD) / OUT);
+    intro = null;
+    return -1;
   }
 
   // ---- seasons: snow in December, leaves in autumn, fireworks at New Year and on the Fourth of July
@@ -143,20 +183,58 @@ export function startStars(canvas, getOptions = () => ({ shooting: true, seasona
     const G = palette().star.join(', ');
     ctx.clearRect(0, 0, w, h);
     if (document.documentElement.dataset.theme !== 'dark') return;
+    const mix = introMix(now);
+    const at = new Map();
+    if (mix >= 0) {
+      for (const p of intro.pts) at.set(p.star, [p.star.x + (p.tx - p.star.x) * mix, p.star.y + (p.ty - p.star.y) * mix, p]);
+      drawConstellation(mix, G);
+    }
     for (const s of stars) {
-      const alpha = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
+      const pos = at.get(s);
+      const x = pos ? pos[0] : s.x, y = pos ? pos[1] : s.y;
+      let alpha = 0.18 + 0.32 * (0.5 + 0.5 * Math.sin(t * s.speed + s.phase));
+      if (pos) {
+        alpha += (0.95 - alpha) * mix;
+        ctx.beginPath();
+        ctx.arc(x, y, (s.r + 0.9) * 4 * mix + 0.01, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${G}, ${0.22 * mix})`;
+        ctx.fill();
+      }
       ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.arc(x, y, pos ? s.r + 1.3 * mix : s.r, 0, Math.PI * 2);
       ctx.fillStyle = s.gold ? `rgba(${G}, ${alpha})` : `rgba(210, 222, 255, ${alpha * 0.8})`;
       ctx.fill();
       if (s.r > 1.1) { // soft glow on the few bigger stars
         ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r * 3.2, 0, Math.PI * 2);
+        ctx.arc(x, y, s.r * 3.2, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${G}, ${alpha * 0.12})`;
         ctx.fill();
       }
     }
     drawExtras();
+  }
+
+  // Faint gold lines joining the stars of the A while it's formed
+  function drawConstellation(mix, G) {
+    const line = Math.max(0, (mix - 0.7) / 0.3);
+    if (!line) return;
+    const pos = (p) => [p.star.x + (p.tx - p.star.x) * mix, p.star.y + (p.ty - p.star.y) * mix];
+    ctx.save();
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = `rgba(${G}, ${0.5 * line})`;
+    ctx.shadowColor = `rgba(${G}, ${0.8 * line})`;
+    ctx.shadowBlur = 10;
+    for (const part of ['L', 'R', 'S']) {
+      const pts = intro.pts.filter((p) => p.part === part);
+      if (part === 'R') pts.unshift(intro.pts.filter((p) => p.part === 'L').at(-1)); // join the legs at the tip
+      ctx.beginPath();
+      pts.forEach((p, i) => { const [x, y] = pos(p); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      if (part === 'S') ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function tick(now) {
@@ -177,5 +255,5 @@ export function startStars(canvas, getOptions = () => ({ shooting: true, seasona
   new ResizeObserver(resize).observe(canvas);
   resize();
   if (!still) requestAnimationFrame(tick);
-  return { redraw: () => draw(performance.now()) };
+  return { redraw: () => draw(performance.now()), introPlaying: () => !!intro && document.documentElement.dataset.theme === 'dark' };
 }
