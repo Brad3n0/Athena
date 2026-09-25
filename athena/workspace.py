@@ -226,6 +226,9 @@ def approval(root: Path, name: str, a: dict[str, Any]) -> dict[str, Any] | None:
         verb = "Create" if not p.exists() else "Edit"
         added = sum(1 for ln in new.splitlines() if ln) if not p.exists() else None
         return {"summary": f"{verb} {rel} in {root.name}" + (f" ({added} lines)" if added else ""), "diff": _diff(rel, old, new)[:40_000]}
+    if name == "upload_to_github":
+        where = a.get("repo_url") or "its GitHub repository"
+        return {"summary": f"Upload {root.name} to {where}:\ncommit \"{a.get('message') or 'Update from Athena'}\" and push"}
     if name == "run_in_project":
         return {"summary": f"Run this command in {root.name}:\n{a.get('command', '')}"}
     if name == "undo_code_edit":
@@ -291,8 +294,158 @@ def run_in_project(root: Path, a: dict[str, Any]) -> dict[str, Any]:
     return {"exit_code": r.returncode, "stdout": r.stdout[-8000:], "stderr": r.stderr[-6000:]}
 
 
+# ------------------------------------------------------------------ new projects, screenshots, GitHub
+
+PROJECTS_HOME_NAME = "Athena Projects"
+
+
+def projects_home() -> Path:
+    home = Path.home()
+    docs = next((d for d in (home / "Documents", home / "OneDrive" / "Documents") if d.is_dir()), home)
+    return docs / PROJECTS_HOME_NAME
+
+
+def new_project(name: str) -> Path:
+    """A fresh folder for something Athena builds from scratch, e.g. Documents/Athena Projects/snake-game."""
+    slug = re.sub(r"[^a-z0-9]+", "-", (name or "project").lower()).strip("-")[:50] or "project"
+    base = projects_home()
+    folder, n = base / slug, 2
+    while folder.exists() and any(folder.iterdir()):
+        folder, n = base / f"{slug}-{n}", n + 1
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
+def find_browser() -> str | None:
+    """Edge or Chrome for taking screenshots in the background (Edge comes with Windows)."""
+    env = os.environ.get("ATHENA_BROWSER")
+    if env and Path(env).exists():
+        return env
+    candidates = []
+    for base in filter(None, (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA"))):
+        candidates += [Path(base) / "Microsoft/Edge/Application/msedge.exe", Path(base) / "Google/Chrome/Application/chrome.exe"]
+    candidates += [Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"), Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge")]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    for name in ("msedge", "google-chrome", "chromium", "chromium-browser", "chrome"):
+        found = shutil.which(name)
+        if found:
+            return found
+    return None
+
+
+def screenshot(root: Path, target: str = "", width: int = 1280, height: int = 800, phone: bool = False) -> dict[str, Any]:
+    """Open a page from the project (or a local address like http://localhost:3000) in an invisible browser and
+    save a screenshot of it."""
+    from .integrations import IMAGES_DIR
+
+    browser = find_browser()
+    if not browser:
+        raise WorkspaceError("Screenshots need Microsoft Edge or Google Chrome installed")
+    target = (target or "").strip()
+    if target.startswith(("http://localhost", "http://127.0.0.1")):
+        url = target
+    else:
+        page = _inside(root, target or "index.html")
+        if page.is_dir():
+            page = page / "index.html"
+        if not page.is_file():
+            htmls = [f for f in walk(root) if f.suffix.lower() in (".html", ".htm")]
+            if not htmls:
+                raise WorkspaceError("There's no web page to screenshot yet (no .html file in the project)")
+            page = htmls[0]
+        url = page.as_uri()
+    if phone:
+        width, height = 390, 844
+    width, height = max(320, min(int(width), 2560)), max(320, min(int(height), 2000))
+    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    name = f"shot-{time.strftime('%Y%m%d-%H%M%S')}-{'phone' if phone else 'desktop'}.png"
+    out = IMAGES_DIR / name
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="athena-shot-") as profile:  # a throwaway profile: never touches your browser data
+        cmd = [browser, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--no-default-browser-check",
+               f"--user-data-dir={profile}", f"--window-size={width},{height}", "--virtual-time-budget=4000",
+               f"--screenshot={out}", url]
+        if hasattr(os, "geteuid") and os.geteuid() == 0:  # Linux as root only; Windows keeps the browser's normal sandbox
+            cmd.insert(1, "--no-sandbox")
+        if phone:
+            cmd.insert(-1, "--user-agent=Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148")
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except subprocess.TimeoutExpired:
+            raise WorkspaceError("The page took too long to load for a screenshot") from None
+    if not out.is_file() or out.stat().st_size < 100:
+        raise WorkspaceError("The browser couldn't take a screenshot of that page")
+    _trim_blank_bottom(out)
+    return {"image": f"/api/images/{name}", "file": str(out), "size": f"{width}x{height}", "view": "phone" if phone else "computer",
+            "page": url if url.startswith("http") else _rel(root, page)}
+
+
+def _trim_blank_bottom(path: Path) -> None:
+    """Chrome's background mode can leave a white strip under the page (the window is a bit taller than the page
+    area). Trim it, but only when it's a short strip under a non-white page, so white pages stay untouched."""
+    try:
+        from PIL import Image
+
+        img = Image.open(path).convert("RGB")
+        w, h = img.size
+        px = img.load()
+        y = h - 1
+        while y > 0 and all(px[x, y] == (255, 255, 255) for x in range(0, w, max(1, w // 40))):
+            y -= 1
+        strip = h - 1 - y
+        if 20 <= strip <= 160:
+            img.crop((0, 0, w, y + 1)).save(path)
+    except Exception:
+        pass
+
+
+def _git(root: Path, *args: str, timeout: int = 120) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace",
+                          creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+
+def git_publish(root: Path, a: dict[str, Any]) -> dict[str, Any]:
+    """Save the project with Git and upload it to GitHub (the user approves first)."""
+    if not shutil.which("git"):
+        raise WorkspaceError("Uploading needs Git. Run update.bat once (it installs Git), or get it from git-scm.com.")
+    message = str(a.get("message") or "Update from Athena").strip()[:200]
+    repo_url = str(a.get("repo_url") or "").strip()
+    if not (root / ".git").exists():
+        _git(root, "init", "-b", "main")
+    if not (root / ".gitignore").exists():
+        (root / ".gitignore").write_text("node_modules/\n__pycache__/\n.venv/\n.env\n*.log\ndist/\nbuild/\n", encoding="utf-8")
+    remotes = _git(root, "remote").stdout.split()
+    if repo_url:
+        if not re.match(r"^(https://github\.com/|git@github\.com:)[\w.-]+/[\w.-]+?(\.git)?/?$", repo_url):
+            raise WorkspaceError("That doesn't look like a GitHub repository address (https://github.com/you/project)")
+        _git(root, "remote", "set-url" if "origin" in remotes else "add", "origin", repo_url.rstrip("/"))
+        remotes = ["origin"]
+    _git(root, "add", "-A")
+    commit = _git(root, "commit", "-m", message)
+    committed = commit.returncode == 0
+    if "Please tell me who you are" in commit.stderr or "user.email" in commit.stderr:
+        _git(root, "config", "user.name", "Athena User")
+        _git(root, "config", "user.email", "athena@localhost")
+        committed = _git(root, "commit", "-m", message).returncode == 0
+    if "origin" not in remotes:
+        return {"saved_locally": committed, "uploaded": False,
+                "next_step": "To upload it, create an empty repository at https://github.com/new (no README), then tell me its address, "
+                             "e.g. 'upload it to https://github.com/you/" + root.name + "'."}
+    branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() or "main"
+    push = _git(root, "push", "-u", "origin", branch, timeout=300)
+    if push.returncode != 0:
+        err = (push.stderr or push.stdout).strip().splitlines()[-3:]
+        raise WorkspaceError("GitHub didn't accept the upload: " + " ".join(err) + " (If a GitHub sign-in window appeared, sign in and try again.)")
+    url = _git(root, "remote", "get-url", "origin").stdout.strip().removesuffix(".git")
+    return {"saved_locally": committed, "uploaded": True, "url": url, "branch": branch, "commit_message": message}
+
+
 RUNNERS = {"project_tree": project_tree, "read_code": read_code, "search_code": search_code,
-           "edit_code": apply_edit, "write_code": apply_edit, "undo_code_edit": undo, "run_in_project": run_in_project}
+           "edit_code": apply_edit, "write_code": apply_edit, "undo_code_edit": undo, "run_in_project": run_in_project,
+           "upload_to_github": git_publish}
 
 
 def run(root: Path, name: str, args: dict[str, Any]) -> dict[str, Any]:
@@ -314,7 +467,10 @@ def prompt(root: Path) -> str:
         "edit_code with 'find' copied EXACTLY from the file (a few lines, enough to be unique) and the 'replace' text; "
         "use write_code only for new files or complete rewrites. Keep each edit small and focused, match the existing "
         "style, and never invent file contents you haven't read. The user sees each change as a diff and approves it. "
-        "Use run_in_project for tests or build commands when useful. When done, briefly summarise what you changed."
+        "Use run_in_project for tests or build commands when useful. "
+        "For anything visual, CHECK YOUR WORK like a pro: after writing it, call screenshot_page (and phone=true for layouts), "
+        "read the description, fix anything that looks wrong, and screenshot again. When done, give a short report: what you "
+        "built, the files, what the screenshots show, and 1-2 ideas for next steps. Offer upload_to_github when it's finished."
     )
 
 
@@ -337,6 +493,14 @@ SPECS = [
       "replace": S("The new text"), "replace_all": {"type": "boolean", "description": "Replace every occurrence"}}, ["path", "find", "replace"]),
     ("write_code", "Create a new file (or completely rewrite one) in the open code project. The user approves the diff.",
      {"path": S("File path relative to the project"), "content": S("The complete file content")}, ["path", "content"]),
+    ("screenshot_page", "Take a screenshot of a web page in the project (default index.html) or a local address like "
+     "http://localhost:3000, show it to the user, and get a description of how it looks so you can check your work. "
+     "Use it after building or changing anything visual; set phone=true to check the phone layout too.",
+     {"page": S("File in the project (e.g. index.html) or http://localhost:PORT"), "phone": {"type": "boolean", "description": "Phone-size view"},
+      "check": S("What to look for, e.g. 'is the score visible and the layout centered?'")}, []),
+    ("upload_to_github", "Save the project with Git and upload it to GitHub (the user approves). If it has no GitHub repository yet, "
+     "the result explains how to make one; then call again with repo_url.",
+     {"message": S("Short description of the changes"), "repo_url": S("https://github.com/user/repo, only when connecting a new repository")}, []),
     ("undo_code_edit", "Undo the most recent code edit in this project (restores the previous version of the file).", {}, []),
     ("run_in_project", "Run a shell command in the project folder, e.g. tests or a build (the user approves it first).",
      {"command": S("The command, e.g. npm test or python -m pytest"), "timeout": {"type": "integer", "description": "Seconds (default 120)"}},
@@ -350,6 +514,10 @@ def specs() -> list[dict[str, Any]]:
 
 
 NAMES = {n for n, *_ in SPECS}
+NEW_PROJECT_SPEC = {"type": "function", "function": {
+    "name": "new_project", "description": "Create a new project folder (in Documents/Athena Projects) to build something real in: "
+    "multiple files, running it, screenshots, uploading to GitHub. Gives you the project tools.",
+    "parameters": {"type": "object", "properties": {"name": S("Short project name, e.g. snake-game")}, "required": ["name"]}}}
 
 
 def pick_folder() -> str | None:

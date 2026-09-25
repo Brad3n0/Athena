@@ -90,6 +90,12 @@ In **Code** mode, click the 📂 folder button under the message box (or type `/
 
 She skips `node_modules`, `.git`, build folders and anything in your `.gitignore`.
 
+**She can also build from scratch and check her own work** (like a real developer):
+- Ask Code mode for something real, like *"build me a portfolio website with a projects page"*. With no folder open, she makes one in `Documents\Athena Projects\` and writes the files there.
+- She opens what she built in an invisible browser (the Edge that comes with Windows), **takes screenshots at computer and phone size, and shows them in the chat**. With a vision model (`qwen2.5vl:7b`) she also *looks* at them, fixes anything broken like cut-off text or a messy layout, and checks again.
+- She finishes with a short report: what she built, the files, and what to try next.
+- *"Upload it to GitHub"* saves it with Git and pushes it, after you OK it. For a new project, create an empty repository at github.com/new and tell her its address.
+
 ## Writing canvas
 
 For essays, emails, cover letters and stories, click the 📄 button at the top (or type `/canvas cover letter for a barista job`). A document editor opens next to the chat.

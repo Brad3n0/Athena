@@ -1037,6 +1037,9 @@ const STEP_TEXT = {
   list_tasks: [() => 'Checking your tasks', (a, r) => `Checked your tasks (${r.count ?? 0})`],
   complete_task: [(a) => `Completing ${q(a.task)}`, (a, r) => `Completed: ${r.completed?.title}`],
   delete_task: [(a) => `Removing ${q(a.task)}`, (a, r) => `Removed task: ${r.deleted?.title}`],
+  new_project: [(a) => `Starting a new project: ${a.name}`, (a, r) => r.created ? `Created 📁 ${r.workspace?.name || a.name}` : 'Project folder'],
+  screenshot_page: [(a) => `Taking a ${a.phone ? 'phone' : 'computer'} screenshot${a.page ? ` of ${a.page}` : ''}`, (a, r) => `📸 ${r.view === 'phone' ? 'Phone' : 'Computer'} screenshot of ${r.page || 'the page'}`],
+  upload_to_github: [() => 'Uploading to GitHub', (a, r) => r.uploaded ? `Uploaded to ${r.url}` : r.saved_locally !== undefined ? 'Saved with Git (not uploaded yet)' : 'GitHub'],
   project_tree: [() => 'Looking at the project files', (a, r) => r.files != null ? `Saw ${r.files} files` : 'Looked at the project'],
   read_code: [(a) => `Reading ${a.path}`, (a, r) => `Read ${r.path || a.path}${r.lines ? ` (lines ${r.lines})` : ''}`],
   search_code: [(a) => `Searching the code for ${q(a.query)}`, (a, r) => `Found ${r.matches?.length || 0} match${r.matches?.length === 1 ? '' : 'es'} for ${q(a.query)}`],
@@ -1116,7 +1119,11 @@ function stepHtml(t, i, openSteps) {
   } else if (r?.url && t.name === 'read_webpage') {
     detail = `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>`;
   }
-  else if (r?.diff) {
+  else if (t.name === 'screenshot_page' && r?.looks_like) {
+    detail = `<div class="muted small">${escapeHtml(r.looks_like)}</div>`;
+  } else if (t.name === 'upload_to_github' && r) {
+    detail = r.uploaded ? `<a href="${escapeHtml(r.url)}" target="_blank" rel="noopener">${escapeHtml(r.url)}</a>` : `<div class="muted small">${escapeHtml(r.next_step || '')}</div>`;
+  } else if (r?.diff) {
     detail = `<pre class="diff">${diffHtml(r.diff)}</pre>`;
   } else if (t.name === 'run_in_project' && r) {
     detail = `<pre class="run-output">${runOutputHtml(r)}</pre>`;
@@ -1659,6 +1666,14 @@ $('#approvalDeny').onclick = () => answerApproval(false);
 
 // ------------------------------------------------------------ tools / timers
 function handleToolEvent(ev) {
+  if (['write_code', 'edit_code', 'undo_code_edit'].includes(ev.name) && state.chat.workspace?.path && !ev.result?.error) {
+    api('/api/workspace/open', json('POST', { path: state.chat.workspace.path })).then((info) => { state.chat.workspace = info; renderWorkspaceChip(); }).catch(() => {});
+  }
+  if (ev.name === 'new_project' && ev.result?.workspace) {
+    state.chat.workspace = ev.result.workspace;
+    renderWorkspaceChip();
+    toast(`📁 Working in ${ev.result.created}`);
+  }
   if (['add_task', 'complete_task', 'delete_task'].includes(ev.name)) loadTasks();
   if (ev.name === 'set_timer' && ev.result?.timer_set) toast(`⏱ Timer started: ${fmtDuration(ev.result.seconds)}${ev.result.label && ev.result.label !== 'Timer' ? ` — ${ev.result.label}` : ''}`);
   if (ev.name === 'start_focus' && ev.result?.focus_started) startFocus(ev.result.minutes, ev.result.task, ev.result.break_minutes);

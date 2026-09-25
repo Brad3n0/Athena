@@ -977,3 +977,5 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
   box-shadow: 0 0 0 1px rgba(var(--accent-rgb), .2), 0 0 28px rgba(var(--accent-rgb), .18);
 }
 .route-tag { display: inline-block; font-size: 11.5px; padding: 1px 8px; margin-right: 6px; border-radius: 99px; background: rgba(var(--accent-rgb), .12); color: var(--accent); border: 1px solid rgba(var(--accent-rgb), .25); }
+.gen-images img[src*="/shot-"] { max-width: min(100%, 680px); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.gen-images img[src*="-phone.png"] { max-width: 230px; border-radius: 22px; border: 6px solid #0b0f17; }

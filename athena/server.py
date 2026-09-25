@@ -344,11 +344,20 @@ async def chat(request: Request):
         code_root = None
     if code_root and model not in _no_tool_models:
         use_tools = True
+    # Code mode can start its own project folder (Documents/Athena Projects/...) when none is open.
+    builder = mode == "code" and not no_tools and model not in _no_tool_models and settings.get("code_enabled", True)
+    if builder:
+        use_tools = True
     extra_prompt = project_context(project) + canvas_context(body.get("canvas"))
     if lang_line := language_line(settings, body.get("spoken_language")):
         extra_prompt += "\n\n" + lang_line
     if code_root:
         extra_prompt += await run_in_threadpool(workspace.prompt, code_root)
+    elif builder:
+        extra_prompt += ("\n\nNo project folder is open. For a quick snippet or a single page, just answer in the chat (```html "
+                         "blocks preview live). For a real multi-file project, or when the user wants files, screenshots or GitHub, "
+                         "call new_project first: it creates a folder and gives you tools to write files, run them, screenshot "
+                         "the result, fix it, and upload it.")
     shown: set[str] = set()
 
     # Saying a routine's phrase ("goodnight", "game time") runs it straight away, no model needed.
@@ -359,7 +368,7 @@ async def chat(request: Request):
         routine = routines_mod.match_phrase(history[-1]["content"])
 
     async def generate() -> AsyncIterator[bytes]:
-        nonlocal use_tools, auto_approve
+        nonlocal use_tools, auto_approve, code_root
         if routine:
             async for chunk in _routine_stream(routine, settings):
                 yield chunk
@@ -372,6 +381,8 @@ async def chat(request: Request):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
             if use_tools:
                 payload["tools"] = [t.spec() for t in enabled_tools(settings)] + (workspace.specs() if code_root else [])
+                if builder and not code_root:
+                    payload["tools"].append(workspace.NEW_PROJECT_SPEC)
             if mode == "voice" and think_off:
                 payload["think"] = False  # reasoning models answer much faster aloud without it
             content, calls, stats = "", [], {}
@@ -472,7 +483,18 @@ async def chat(request: Request):
                             await asyncio.sleep(1.2)  # let the window appear so the user can watch
 
                 tool = BY_NAME.get(name)
-                if code_root and name in workspace.NAMES:
+                if name == "new_project" and builder:
+                    try:
+                        code_root = await run_in_threadpool(workspace.new_project, str(args.get("name") or "project"))
+                        info = await run_in_threadpool(workspace.summary, code_root)
+                        result = {"created": str(code_root), "workspace": info,
+                                  "next": "Write the files with write_code, check visual work with screenshot_page, then report."}
+                        messages[0] = {"role": "system", "content": messages[0]["content"] + await run_in_threadpool(workspace.prompt, code_root)}
+                    except OSError as exc:
+                        result = {"error": f"Couldn't create the project folder: {exc}"}
+                elif name == "screenshot_page" and code_root:
+                    result = await screenshot_and_look(code_root, args)
+                elif code_root and name in workspace.NAMES:
                     result = await run_in_threadpool(workspace.run, code_root, name, args)
                 elif tool and tool.arun:
                     ctx = tool_ctx(settings)
@@ -574,6 +596,24 @@ async def _routine_stream(routine: dict[str, Any], settings: dict[str, Any]) -> 
         text += f" ({len(failed)} step{'s' if len(failed) > 1 else ''} didn't work: " + "; ".join(f"{s['step']}: {s['error']}" for s in failed) + ")"
     yield _event("token", content=text)
     yield _event("done", stats={})
+
+
+async def screenshot_and_look(root, args: dict[str, Any]) -> dict[str, Any]:
+    """Screenshot a page Athena built, show it in the chat, and describe it so the model can check its own work."""
+    try:
+        shot = await run_in_threadpool(workspace.screenshot, root, str(args.get("page") or ""), 1280, 800, bool(args.get("phone")))
+    except workspace.WorkspaceError as exc:
+        return {"error": str(exc)}
+    import base64
+
+    image = base64.b64encode(Path(shot.pop("file")).read_bytes()).decode()
+    check = str(args.get("check") or "").strip()
+    seen = await _vision(
+        "This is a screenshot of a web page that was just built" + (" (phone size)" if args.get("phone") else "") + ". Describe what it "
+        "looks like: layout, colors, text you can read, and anything that looks broken or wrong (overlapping or cut-off text, empty "
+        "areas, missing images, unreadable colors, things off-screen)." + (f" Also answer: {check}" if check else ""), image, 400)
+    shot["looks_like"] = seen if seen else "(No vision model to describe it. Download qwen2.5vl:7b so I can check my work.)"
+    return shot
 
 
 def tool_ctx(settings: dict[str, Any]) -> dict[str, Any]:
