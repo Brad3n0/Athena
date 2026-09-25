@@ -165,6 +165,30 @@ function pickDefaultModel(mode) {
 
 const fmtSize = (b) => (b ? (b / 1e9 >= 1 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`) : '');
 
+// ---------------------------------------------------------- auto: one Athena, the best model for each message
+// In the Assistant tab she picks the specialist herself: code questions go to the coder, math and school to the
+// study model, pictures to the vision model, everything else to the all-rounder. Instant (no extra AI call).
+const autoOn = () => state.mode === 'assistant' && state.settings.auto_route !== false && !state.chat?.pinnedModel;
+const ROUTE_LABEL = { code: '💻 code', study: '🧮 math & study', vision: '👁 vision', assistant: '✨ general' };
+const CODE_WORDS = /\b(code|coding|program|programming|script|bug|debug|compile|compiler|python|javascript|typescript|java|c\+\+|c#|rust|golang|html|css|react|vue|node|api|sql|regex|json|function|variable|loop|array|github|git|terminal|powershell|batch file|localhost|npm|pip|syntax|runtime|stack ?overflow|frontend|backend|database|website|webpage|web page|web app|landing page|discord bot|minecraft mod)\b/g;
+const STUDY_WORDS = /\b(solve|equation|equations|derivative|derivatives|integral|integrals|calculus|algebra|geometry|trig|trigonometry|limit|limits|polynomial|fraction|fractions|percent|percentage|probability|statistics|matrix|matrices|vector|proof|theorem|homework|worksheet|quiz me|flashcards?|study guide|exam|chemistry|physics|biology|molecule|atom|velocity|acceleration|formula|simplify|factor|factoring|slope|parabola|logarithm|exponent|math|history test|essay outline)\b/g;
+
+function routeMessage(text, chat) {
+  const t = text.toLowerCase();
+  let code = (t.match(CODE_WORDS) || []).length;
+  let study = (t.match(STUDY_WORDS) || []).length * 1.5;
+  if (/```|\bdef \w+\(|\bfunction \w*\(|=>|console\.log|<\/?(div|html|body|script|button|span)\b|#include|^\s*import \w+|\bclass \w+[:({]|traceback|syntaxerror|typeerror|referenceerror|nullpointer|segmentation fault|exception in/im.test(text)) code += 3;
+  if (/\b(build|make|create|write|code|program)\b.{0,40}\b(website|web ?page|web ?app|app|game|bot|script|program|extension|calculator|site|tool|clone)\b/.test(t)) code += 3;
+  if (/\w\.(py|js|ts|jsx|tsx|html|css|json|java|cpp|cs|rs|go|bat|ps1)\b/.test(t)) code += 2;
+  if (/[=^√∫∑π≤≥÷]|\d\s*[a-z]\s*[+\-=^]|\b\d+\s*[+\-*/x×]\s*\d+\b|\\frac|\b(sin|cos|tan|log|ln)\s*\(/.test(text)) study += 2;
+  if (/\b(quiz me|flashcards?|study guide|practice (test|questions|problems)|homework|worksheet|cheat ?sheet)\b/.test(t)) study += 2; // these get Study's interactive quizzes and cards
+  if (code >= 2 || study >= 2) return code >= study ? 'code' : 'study';
+  // No clear signal: a short follow-up ("why?", "make it shorter") stays with whoever answered last.
+  const last = [...chat.messages].reverse().find((m) => m.role === 'assistant' && m.route)?.route;
+  if (last && last !== 'vision' && t.split(/\s+/).length <= 12) return last;
+  return 'assistant';
+}
+
 // ---------------------------------------------------------- model picker
 function currentModel() {
   if (!state.chat.model || !modelNames().includes(state.chat.model)) state.chat.model = pickDefaultModel(state.mode);
@@ -173,7 +197,8 @@ function currentModel() {
 
 function renderModelButton() {
   if (!state.chat) return;
-  $('#modelName').textContent = currentModel() || (state.models.length ? 'Select a model' : 'No models installed');
+  $('#modelName').textContent = autoOn() && state.models.length ? '✨ Auto' : currentModel() || (state.models.length ? 'Select a model' : 'No models installed');
+  $('#modelBtn').title = autoOn() ? `Auto picks the best model for each message (usually ${currentModel()})` : '';
   renderReadyDot();
 }
 
@@ -213,11 +238,14 @@ function preloadCurrentModel() {
 function openModelMenu() {
   const menu = $('#modelMenu');
   const cur = currentModel();
+  const autoRow = state.mode === 'assistant' && state.settings.auto_route !== false
+    ? `<button class="opt" data-model="__auto"><div><div>✨ Auto</div><div class="meta">Picks the best model for each message: code, math, pictures or chat</div></div>${autoOn() ? `<span class="check">${ICONS.check}</span>` : ''}</button>`
+    : '';
   menu.innerHTML = state.models.length
-    ? state.models.map((m) => `
+    ? autoRow + state.models.map((m) => `
       <button class="opt" data-model="${escapeHtml(m.name)}">
         <div><div>${escapeHtml(m.name)}</div><div class="meta">${escapeHtml([m.parameters, m.family, fmtSize(m.size)].filter(Boolean).join(' · '))}</div></div>
-        ${m.name === cur ? `<span class="check">${ICONS.check}</span>` : `<span class="cmp-btn" data-compare="${escapeHtml(m.name)}" title="Compare side by side with ${escapeHtml(cur)}">⚖</span>`}
+        ${m.name === cur && !autoOn() ? `<span class="check">${ICONS.check}</span>` : `<span class="cmp-btn" data-compare="${escapeHtml(m.name)}" title="Compare side by side with ${escapeHtml(cur)}">⚖</span>`}
       </button>`).join('') + '<div class="hint">⚖ answers your next messages with two models side by side · download more in Settings → Models</div>'
     : '<div class="hint">No models yet. Open Settings → Models to download one.</div>';
   menu.hidden = false;
@@ -236,7 +264,13 @@ $('#modelMenu').onclick = (e) => {
   }
   const opt = e.target.closest('[data-model]');
   if (!opt) return;
-  state.chat.model = opt.dataset.model;
+  if (opt.dataset.model === '__auto') {
+    state.chat.pinnedModel = false;
+    state.chat.model = pickDefaultModel('assistant');
+  } else {
+    state.chat.model = opt.dataset.model;
+    state.chat.pinnedModel = state.mode === 'assistant'; // you picked one yourself: Auto is off for this chat
+  }
   $('#modelMenu').hidden = true;
   renderModelButton();
   if (state.chat.id && state.chat.messages.length) saveChat();
@@ -799,7 +833,7 @@ messagesEl.addEventListener('click', async (e) => {
       const versions = msg.versions ? [...msg.versions] : [snapshot(msg)];
       state.chat.messages.splice(idx);
       renderMessages();
-      const fresh = await generateReply();
+      const fresh = await generateReply({ model: msg.route ? msg.model : null, route: msg.route || null });
       if (fresh && !fresh.error) {
         fresh.versions = [...versions, snapshot(fresh)];
         fresh.v = fresh.versions.length - 1;
@@ -971,7 +1005,7 @@ function updateAssistantEl(el, m) {
     <button data-msg-act="canvas" title="Edit in canvas">${ICONS.canvas}</button>
     <button data-msg-act="branch" title="Branch: start a new chat from here">${ICONS.branch}</button>
     <button data-msg-act="retry" title="Regenerate">${ICONS.retry}</button>
-    <span class="stats">${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
+    <span class="stats">${m.route ? `<span class="route-tag" title="Auto picked ${escapeHtml(m.model || '')} for this">${ROUTE_LABEL[m.route] || ''}</span>` : ''}${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
   const idx = Number(el.dataset.idx);
   const isLast = state.chat && idx === state.chat.messages.length - 1;
   if (isLast && content && !m.error && !m.voice) {
@@ -1241,12 +1275,17 @@ async function sendMessage(text, { voice = false, display = null } = {}) {
   if (!state.status.ollama) { await refreshStatus(); }
   let model = voice ? pickDefaultModel('voice') : currentModel();
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); openSettings('models'); return; }
+  let route = null;
+  if (autoOn() && !voice && !state.compare) {
+    route = routeMessage(text, state.chat);
+    model = (route === 'assistant' ? currentModel() : pickDefaultModel(route)) || model;
+  }
   // A new picture, or a follow-up right after one ("what's the answer?"), goes to a model that can see it.
   const newImage = state.attachments.some((a) => a.kind === 'image');
   const recentImage = state.chat.messages.slice(-4).some((m) => m.images?.length);
   if (!voice && (newImage || recentImage) && !isVision(model)) {
     const vision = pickVisionModel();
-    if (vision) { if (newImage) toast(`Using ${vision} to look at the image`); model = vision; }
+    if (vision) { if (newImage && !route) toast(`Using ${vision} to look at the image`); model = vision; if (route) route = 'vision'; }
     else if (newImage) toast('To understand images, download a vision model like qwen2.5vl:7b or gemma3:4b (Settings → Models).', 'error');
   }
 
@@ -1267,7 +1306,7 @@ async function sendMessage(text, { voice = false, display = null } = {}) {
   state.chat.messages.push(msg);
   renderMessages();
   if (state.compare && !voice) await compareReplies(state.compare);
-  else await generateReply({ voice, model });
+  else await generateReply({ voice, model, route });
 }
 
 // ------------------------------------------------------------ compare two models
@@ -1361,11 +1400,12 @@ async function compareReplies(models) {
   el.querySelectorAll('.cmp-keep').forEach((b) => { b.classList.add('ready'); });
 }
 
-async function generateReply({ voice = false, model = null } = {}) {
+async function generateReply({ voice = false, model = null, route = null } = {}) {
   const chat = state.chat;
-  const mode = voice ? 'voice' : state.mode;
+  // With Auto, a routed message uses that specialist's instructions too (code, study); pictures and chat stay general.
+  const mode = voice ? 'voice' : route === 'code' || route === 'study' ? route : state.mode;
   model = model || currentModel();
-  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), ...(voice ? { voice: true } : {}) };
+  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), ...(voice ? { voice: true } : {}), ...(route ? { route } : {}) };
   chat.messages.push(reply);
 
   const thread = $('.thread', messagesEl);
@@ -2027,6 +2067,7 @@ function openSettings(tab = 'general') {
   $('#setShooting').checked = s.shooting_stars !== false;
   $('#setAutoPreview').checked = s.auto_preview !== false;
   $('#setKeepAlive').value = s.keep_alive || '30m';
+  $('#setAutoRoute').checked = s.auto_route !== false;
   $('#setPreload').checked = s.preload_model !== false;
   $('#setAlerts').checked = s.alerts_enabled !== false;
   $('#setAlertsSpeak').checked = s.alerts_speak !== false;
@@ -2187,6 +2228,7 @@ bind('#setReplyLength', 'reply_length');
 bind('#setShooting', 'shooting_stars', (el) => el.checked);
 bind('#setAutoPreview', 'auto_preview', (el) => el.checked);
 bind('#setKeepAlive', 'keep_alive');
+$('#setAutoRoute').addEventListener('change', async (e) => { await saveSettings({ auto_route: e.target.checked }); renderModelButton(); });
 bind('#setPreload', 'preload_model', (el) => el.checked);
 bind('#setSeasonal', 'seasonal_effects', (el) => el.checked);
 bind('#setMemory', 'memory_enabled', (el) => el.checked);

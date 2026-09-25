@@ -69,6 +69,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "theme": "dark",
     "shooting_stars": True,
     "auto_preview": True,
+    "auto_route": True,  # Assistant tab picks the best model per message
     "keep_alive": "30m",  # how long models stay loaded after use
     "preload_model": True,  # load your model in the background when Athena opens
     "seasonal_effects": True,
