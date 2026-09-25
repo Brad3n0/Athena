@@ -959,3 +959,20 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 .pcs-bar div.warm { background: #f59e0b; }
 .pcs-bar div.hot { background: #ef4444; }
 .approval-summary { white-space: pre-wrap; }
+
+/* ---------------- Smooth transitions between chats and tabs ---------------- */
+#messages.swap-right > * { animation: swapRight .38s cubic-bezier(.2,.7,.2,1) both; }
+#messages.swap-left > * { animation: swapLeft .38s cubic-bezier(.2,.7,.2,1) both; }
+#messages.swap-up > * { animation: swapUp .34s cubic-bezier(.2,.7,.2,1) both; }
+@keyframes swapRight { from { opacity: 0; transform: translateX(26px); } }
+@keyframes swapLeft { from { opacity: 0; transform: translateX(-26px); } }
+@keyframes swapUp { from { opacity: 0; transform: translateY(10px); } }
+#messages.swap-right .msg, #messages.swap-left .msg, #messages.swap-up .msg { animation: none; } /* no double animation on messages */
+@media (prefers-reduced-motion: reduce) { #messages[class*="swap-"] > * { animation: none !important; } }
+
+/* ---------------- Soft glow on the message box, brighter while typing ---------------- */
+.composer { border-color: rgba(var(--accent-rgb), .3); box-shadow: 0 0 20px rgba(var(--accent-rgb), .11), 0 0 0 1px rgba(255,255,255,.02); }
+.composer:focus-within {
+  border-color: rgba(var(--accent-rgb), .5);
+  box-shadow: 0 0 0 1px rgba(var(--accent-rgb), .2), 0 0 28px rgba(var(--accent-rgb), .18);
+}

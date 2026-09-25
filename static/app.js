@@ -270,9 +270,21 @@ function rememberModeChat() {
   try { localStorage.setItem('athena-mode-chats', JSON.stringify(modeChatIds)); } catch { /* ignore */ }
 }
 
+// Chats slide and fade in when you switch tabs or chats (never while you're sending messages).
+const MODE_ORDER = ['assistant', 'code', 'study'];
+function animateSwap(dir = 'up') {
+  messagesEl.classList.remove('swap-left', 'swap-right', 'swap-up');
+  void messagesEl.offsetWidth; // restart the animation
+  messagesEl.classList.add(`swap-${dir}`);
+  clearTimeout(animateSwap.t);
+  animateSwap.t = setTimeout(() => messagesEl.classList.remove(`swap-${dir}`), 500);
+}
+
 async function switchMode(mode) {
   if (mode === state.mode) return;
   if (state.abort) { toast('She\'s still answering. Wait a moment or press stop first.'); return; }
+  const dir = MODE_ORDER.indexOf(mode) > MODE_ORDER.indexOf(state.mode) ? 'right' : 'left';
+  queueMicrotask(() => animateSwap(dir));
   rememberModeChat();
   // Brand-new chats may not be in the sidebar list yet, so only forget chats you actually deleted.
   const exists = (c) => c && !deletedChats.has(c.id) && (!state.project || c.project_id === state.project);
@@ -454,6 +466,7 @@ const isNarrow = () => matchMedia('(max-width: 860px)').matches;
 function newChat() {
   stopGenerating();
   state.chat = { id: null, title: '', mode: state.mode, model: '', messages: [], project_id: state.project || null };
+  animateSwap('up');
   setMode(state.mode);
   renderMessages();
   renderSidebar();
@@ -472,6 +485,7 @@ async function openChat(id) {
   try {
     const chat = await api(`/api/conversations/${id}`);
     state.chat = { ...chat, messages: chat.messages || [] };
+    animateSwap('up');
     setMode(['code', 'study'].includes(chat.mode) ? chat.mode : 'assistant', { keepModel: true });
     rememberModeChat();
     renderMessages();
