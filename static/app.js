@@ -1012,7 +1012,7 @@ const STEP_TEXT = {
   get_clipboard: [() => 'Reading your clipboard', (a, r) => r.empty ? 'Your clipboard is empty' : `Read your clipboard (${r.clipboard.length} characters)`],
   set_clipboard: [() => 'Copying to your clipboard', (a, r) => `Copied ${r.copied_characters} characters — ready to paste`],
   look_at_screen: [() => 'Looking at your screen', (a, r) => `Looked at your screen (${r.seen_by})`],
-  run_python: [() => 'Running Python code', (a, r) => r.timed_out ? `Code stopped after ${r.seconds}s` : r.exit_code === 0 ? 'Ran the code' : 'The code hit an error'],
+  run_python: [() => 'Running Python code', (a, r) => r.opened_window ? 'Opened it in a window on your PC' : r.timed_out ? `Code stopped after ${r.seconds}s` : r.exit_code === 0 ? 'Ran the code' : 'The code hit an error'],
   search_documents: [(a) => `Searching your documents for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} passages in your documents`],
   generate_image: [() => 'Creating an image', () => 'Created an image'],
   list_home_devices: [() => 'Checking your smart home', (a, r) => `Found ${r.count} devices`],
@@ -1435,6 +1435,7 @@ async function generateReply({ voice = false, model = null } = {}) {
     if (!reply.tools.length) delete reply.tools;
     const { content } = splitThinking(reply);
     if (!abort.signal.aborted && chat === state.chat && /```canvas/.test(content)) applyCanvasReply(content);
+    if (!voice && !abort.signal.aborted && chat === state.chat && /```(html|htm|svg)\b/i.test(content)) setTimeout(() => autoPreview(el), 50);
     if (speakThis && !abort.signal.aborted) speaker.feed(content, true);
     if (voice) state.voice.avatar?.setMood?.(detectMood(content));
     if (reply.error && speakThis) speaker.say(`Sorry, something went wrong. ${reply.error}`);
@@ -1988,6 +1989,7 @@ function openSettings(tab = 'general') {
   $('#setDirect').checked = !!s.direct_mode;
   $('#setReplyLength').value = s.reply_length || 'normal';
   $('#setShooting').checked = s.shooting_stars !== false;
+  $('#setAutoPreview').checked = s.auto_preview !== false;
   $('#setSeasonal').checked = s.seasonal_effects !== false;
   fillPersonas();
   renderAccents();
@@ -2141,6 +2143,7 @@ bind('#setTools', 'tools_enabled', (el) => el.checked);
 bind('#setDirect', 'direct_mode', (el) => el.checked);
 bind('#setReplyLength', 'reply_length');
 bind('#setShooting', 'shooting_stars', (el) => el.checked);
+bind('#setAutoPreview', 'auto_preview', (el) => el.checked);
 bind('#setSeasonal', 'seasonal_effects', (el) => el.checked);
 bind('#setMemory', 'memory_enabled', (el) => el.checked);
 bind('#setFiles', 'files_enabled', (el) => el.checked);
@@ -2343,6 +2346,7 @@ async function runCodeBlock(btn) {
 }
 
 function runOutputHtml(r) {
+  if (r.opened_window) return `<span class="tip">🪟 ${escapeHtml(r.message || 'Opened in its own window on your PC.')}</span>`;
   const body = r.timed_out
     ? `<span class="err">Stopped after ${r.seconds}s (time limit)</span>\n${escapeHtml(r.stdout || '')}`
     : `${escapeHtml(r.stdout || '')}${r.stderr ? `<span class="err">${escapeHtml(r.stderr)}</span>` : ''}`;
@@ -2413,28 +2417,83 @@ $('#workspaceChip').onclick = (e) => {
 
 // ------------------------------------------------------------ live HTML preview
 // Runs in a sandboxed frame with no access to Athena (a unique, empty origin), so page code can't touch your chats or PC.
+const LANG_OF = (b) => (b.querySelector('code')?.dataset.lang || '').toLowerCase();
+
+/** The page to show: the HTML block, plus any CSS / JavaScript blocks from the same reply stitched in. */
+function previewSource(block) {
+  const lang = LANG_OF(block);
+  let src = block.querySelector('code').innerText;
+  if (lang === 'svg') return `<body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#fff">${src}</body>`;
+  const siblings = [...(block.closest('.msg')?.querySelectorAll('.code-block') || [])].filter((b) => b !== block);
+  const css = siblings.filter((b) => LANG_OF(b) === 'css').map((b) => b.querySelector('code').innerText);
+  const js = siblings.filter((b) => ['javascript', 'js'].includes(LANG_OF(b))).map((b) => b.querySelector('code').innerText);
+  if (css.length || js.length) {
+    // The reply split the page into files: drop links to local files and put the code in directly.
+    src = src.replace(/<link[^>]+href=["'](?!https?:|\/\/)[^"']+\.css["'][^>]*>/gi, '').replace(/<script[^>]+src=["'](?!https?:|\/\/)[^"']+\.js["'][^>]*>\s*<\/script>/gi, '');
+    const style = css.length ? `<style>\n${css.join('\n')}\n</style>` : '';
+    const script = js.length ? `<script>\n${js.join('\n;\n')}\n</script>` : '';
+    src = /<\/head>/i.test(src) ? src.replace(/<\/head>/i, `${style}</head>`) : style + src;
+    src = /<\/body>/i.test(src) ? src.replace(/<\/body>(?![\s\S]*<\/body>)/i, `${script}</body>`) : src + script;
+  }
+  return src;
+}
+
 function togglePreview(btn) {
   const block = btn.closest('.code-block');
   const open = block.querySelector('.html-preview');
   if (open) { open.remove(); btn.classList.remove('on'); return; }
-  const codeEl = block.querySelector('code');
-  let src = codeEl.innerText;
-  if (/^svg$/i.test(codeEl.dataset.lang)) src = `<body style="margin:0;display:grid;place-items:center;min-height:100vh;background:#fff">${src}</body>`;
+  openPreview(block);
+}
+
+function openPreview(block) {
+  const btn = block.querySelector('[data-preview]');
+  const src = previewSource(block);
   const wrap = document.createElement('div');
   wrap.className = 'html-preview';
-  wrap.innerHTML = `<div class="hp-bar"><span>Live preview</span><button type="button" data-hp="reload" title="Reload">↻</button><button type="button" data-hp="full" title="Full screen">⛶</button></div>`;
+  wrap.innerHTML = `<div class="hp-bar"><span>✨ Live preview</span>
+    <button type="button" data-hp="desktop" class="on" title="Computer size">🖥</button><button type="button" data-hp="phone" title="Phone size">📱</button>
+    <button type="button" data-hp="reload" title="Restart">↻</button><button type="button" data-hp="tab" title="Open in a new tab">↗</button><button type="button" data-hp="full" title="Full screen">⛶</button></div>
+    <div class="hp-stage"></div>`;
   const frame = document.createElement('iframe');
   frame.setAttribute('sandbox', 'allow-scripts allow-modals allow-forms allow-pointer-lock');
   frame.setAttribute('referrerpolicy', 'no-referrer');
   frame.srcdoc = src;
-  wrap.append(frame);
+  wrap.querySelector('.hp-stage').append(frame);
   block.append(wrap);
-  btn.classList.add('on');
+  btn?.classList.add('on');
   wrap.querySelector('.hp-bar').onclick = (e) => {
     const act = e.target.closest('[data-hp]')?.dataset.hp;
     if (act === 'reload') { frame.srcdoc = ''; frame.srcdoc = src; }
     if (act === 'full') wrap.requestFullscreen?.();
+    if (act === 'phone' || act === 'desktop') {
+      wrap.classList.toggle('phone', act === 'phone');
+      wrap.querySelectorAll('[data-hp="phone"],[data-hp="desktop"]').forEach((b) => b.classList.toggle('on', b.dataset.hp === act));
+    }
+    if (act === 'tab') openPreviewTab(src, state.chat?.title);
   };
+  return wrap;
+}
+
+/** A full-size tab. The page still runs inside the same locked-down sandbox (see preview.html). */
+function openPreviewTab(src, title) {
+  const win = window.open('preview.html', '_blank');
+  if (!win) return toast('Your browser blocked the new tab. Allow pop-ups for Athena and try again.', 'error');
+  const onReady = (e) => {
+    if (e.source !== win || !e.data?.previewReady) return;
+    win.postMessage({ src, title: title || 'Preview' }, location.origin);
+    removeEventListener('message', onReady);
+  };
+  addEventListener('message', onReady);
+}
+
+/** Right after she finishes building something visual, show it running. */
+function autoPreview(el) {
+  if (state.settings.auto_preview === false) return;
+  const blocks = [...el.querySelectorAll('.code-block')].filter((b) => b.querySelector('[data-preview]'));
+  const main = blocks.find((b) => LANG_OF(b) !== 'svg' && /<(html|body|canvas|div)/i.test(b.querySelector('code').innerText)) || blocks.at(-1);
+  if (!main || main.querySelector('.html-preview')) return;
+  const wrap = openPreview(main);
+  setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 150);
 }
 
 // ------------------------------------------------------------ live events

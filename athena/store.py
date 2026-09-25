@@ -68,6 +68,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "reply_length": "normal",
     "theme": "dark",
     "shooting_stars": True,
+    "auto_preview": True,
     "seasonal_effects": True,
     "setup_done": False,  # first-run wizard finished
     "text_size": "normal",  # small | normal | large

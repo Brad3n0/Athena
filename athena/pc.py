@@ -11,6 +11,7 @@ import difflib
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -282,6 +283,8 @@ def run_code(code: str, language: str = "python", timeout: int = 30) -> dict[str
         need = _NEEDS.get(norm)
         raise PCError(f"Running {language} needs {need}, which isn't installed." if need else f"Can't run {language} code yet.")
     name, cmd = runner
+    if name == "main.py" and GUI_HINT.search(code):
+        return _run_window(code)
     with tempfile.TemporaryDirectory(prefix="athena-run-") as tmp:
         folder = Path(tmp)
         (folder / name).write_text(code, encoding="utf-8", newline="\r\n" if name.endswith(".bat") else None)
@@ -302,13 +305,56 @@ def run_code(code: str, language: str = "python", timeout: int = 30) -> dict[str
         result["images"] = images
     missing = re.search(r"No module named '([\w.]+)'", result["stderr"])
     if missing:
-        pkg = PIP_NAMES.get(missing.group(1).split(".")[0], missing.group(1).split(".")[0])
-        result["tip"] = f'This needs the {pkg} package. Install it with:  "{sys.executable}" -m pip install {pkg}'
+        result["tip"] = _install_tip(missing.group(1))
     return result
 
 
 # Python import name -> pip package name, when they differ.
 PIP_NAMES = {"cv2": "opencv-python", "PIL": "pillow", "sklearn": "scikit-learn", "bs4": "beautifulsoup4", "yaml": "pyyaml"}
+
+
+# Programs that open their own window (games, apps, drawings). These keep running until you close them,
+# so they aren't cut off by the time limit, and the window pops up on your PC.
+GUI_HINT = re.compile(r"^\s*(import|from)\s+(tkinter|pygame|turtle|pyglet|arcade|kivy|PyQt5|PyQt6|PySide6|customtkinter|ursina|wx)\b", re.M)
+
+
+def _run_window(code: str) -> dict[str, Any]:
+    import time
+
+    from . import store
+
+    runs = store.DATA_DIR / "runs"
+    folder = runs / time.strftime("%Y%m%d-%H%M%S")
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in sorted(p for p in runs.iterdir() if p.is_dir())[:-20]:  # keep the 20 most recent
+        shutil.rmtree(old, ignore_errors=True)
+    (folder / "main.py").write_text(code, encoding="utf-8")
+    log = open(folder / "output.txt", "w", encoding="utf-8")
+    exe = Path(sys.executable)
+    windowed = exe.with_name("pythonw.exe")  # no black console window next to the app on Windows
+    flags = 0x00000008 | 0x00000200 if os.name == "nt" else 0  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    proc = subprocess.Popen([str(windowed if windowed.exists() else exe), "main.py"], cwd=folder, stdout=log, stderr=subprocess.STDOUT,
+                            env={**os.environ, "PYTHONIOENCODING": "utf-8"}, creationflags=flags, start_new_session=os.name != "nt")
+    try:
+        code_ = proc.wait(timeout=3)  # did it crash straight away (e.g. a missing package)?
+    except subprocess.TimeoutExpired:
+        return {"opened_window": True, "message": "It's running in its own window on your PC. Close the window when you're done."}
+    finally:
+        log.close()
+    out = (folder / "output.txt").read_text(encoding="utf-8", errors="replace").replace(str(folder) + os.sep, "")
+    result: dict[str, Any] = {"exit_code": code_, "stdout": "" if code_ else out[-8000:], "stderr": out[-6000:] if code_ else ""}
+    missing = re.search(r"No module named '([\w.]+)'", out)
+    if missing:
+        result["tip"] = _install_tip(missing.group(1))
+    return result
+
+
+def _install_tip(module: str) -> str:
+    name = module.split(".")[0]
+    if name in ("tkinter", "_tkinter", "turtle"):
+        return "tkinter comes with Python: run the Python installer again, choose Modify, and tick \"tcl/tk and IDLE\"."
+    pkg = PIP_NAMES.get(name, name)
+    return f'This needs the {pkg} package. Install it with:  "{sys.executable}" -m pip install {pkg}'
 
 
 def _clean_trace(err: str) -> str:

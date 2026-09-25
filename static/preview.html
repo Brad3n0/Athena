@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Preview · Athena</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; }
+  iframe { display: block; border: 0; width: 100%; height: 100%; }
+  .wait { font: 15px system-ui, sans-serif; color: #888; position: fixed; inset: 0; display: grid; place-items: center; }
+</style>
+</head>
+<body>
+<div class="wait" id="wait">Loading preview…</div>
+<!-- The page Athena made runs in a sandbox with its own empty origin: it can't read your chats or reach your PC. -->
+<iframe sandbox="allow-scripts allow-modals allow-forms allow-pointer-lock" referrerpolicy="no-referrer"></iframe>
+<script>
+  const frame = document.querySelector('iframe');
+  addEventListener('message', (e) => {
+    if (e.origin !== location.origin || typeof e.data?.src !== 'string') return;
+    frame.srcdoc = e.data.src;
+    document.title = `${e.data.title || 'Preview'} · Athena`;
+    document.getElementById('wait').remove();
+  });
+  if (opener) opener.postMessage({ previewReady: true }, location.origin);
+  else document.getElementById('wait').textContent = 'Open this from the ↗ button on a preview in Athena.';
+</script>
+</body>
+</html>

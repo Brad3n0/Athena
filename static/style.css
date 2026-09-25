@@ -919,3 +919,10 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
   color: var(--text); padding: 10px 12px; font: inherit; outline: 0; }
 .edit-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .edit-actions button { padding: 6px 14px; border-radius: 99px; font-size: 13.5px; }
+.html-preview .hp-stage { background: #fff; }
+.html-preview.phone .hp-stage { background: repeating-linear-gradient(45deg, #1b2130, #1b2130 10px, #1e2535 10px, #1e2535 20px); padding: 14px 0; }
+.html-preview.phone iframe { width: 390px; max-width: 100%; height: 700px; margin: 0 auto; border-radius: 22px; box-shadow: 0 0 0 8px #0b0f17, 0 10px 30px rgba(0,0,0,.5); }
+.html-preview .hp-bar button.on { color: var(--accent); background: rgba(var(--accent-rgb), .12); }
+.html-preview iframe { height: 460px; }
+.html-preview:fullscreen .hp-stage { flex: 1; display: flex; }
+.html-preview:fullscreen .hp-stage iframe { height: 100%; }
