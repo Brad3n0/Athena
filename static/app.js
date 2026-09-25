@@ -534,6 +534,19 @@ function renderWelcome() {
   $('#goModels')?.addEventListener('click', () => openSettings('models'));
 }
 
+/** Turn microphone errors into what to actually do about them. */
+function micHelp(e) {
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    return 'Voice needs the microphone, which browsers only allow on the PC itself. Open Athena at http://localhost:8765 on your PC.';
+  }
+  if (e?.name === 'NotFoundError' || /not found/i.test(e?.message || '')) return 'No microphone found. Plug one in (or check Windows Settings → Sound → Input), then try again.';
+  if (e?.name === 'NotAllowedError' || /denied|allowed/i.test(e?.message || '')) {
+    return 'Microphone access is blocked. Click the 🔒 icon at the left of the address bar, allow the Microphone, then try again.';
+  }
+  if (e?.name === 'NotReadableError') return 'Another app is using the microphone (like Discord or a game). Close it or switch its input, then try again.';
+  return `Microphone problem: ${e?.message || e}`;
+}
+
 // ------------------------------------------------------------ orb mood
 // A rough read of how her reply feels, so the orb glows warmer, livelier or calmer while she says it.
 function detectMood(text) {
@@ -1694,7 +1707,7 @@ $('#micBtn').onclick = async () => {
       input.focus();
     }
   } catch (e) {
-    toast(e.message, 'error');
+    toast(e instanceof DOMException || !navigator.mediaDevices ? micHelp(e) : e.message, 'error', { ms: 9000 });
   } finally {
     dictating = null;
     if (!state.voice.active) pauseWake(false);
@@ -1803,7 +1816,7 @@ async function startVoice(firstCommand = '') {
   try {
     if (state.status.whisper) await mic.open();
   } catch (e) {
-    toast(`Microphone error: ${e.message}`, 'error');
+    toast(micHelp(e), 'error', { ms: 9000 });
     endVoice();
     return;
   }
