@@ -41,7 +41,7 @@ export function marbleTexture(width = 720, height = 450) {
   const ctx = canvas.getContext('2d');
   const img = ctx.createImageData(width, height);
   const n1 = makeNoise(7), n2 = makeNoise(42);
-  const gold = [201, 160, 72];
+  const gold = [214, 184, 118]; // pale gold, so the veins stay in the background
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const nx = x / 220, ny = y / 220;
@@ -51,8 +51,8 @@ export function marbleTexture(width = 720, height = 450) {
       const turb = fbm(n1, nx, ny, 5);
       const vein = Math.abs(Math.sin((x * 0.8 + y * 0.5) / 120 + turb * 3.2));
       const fine = Math.abs(Math.sin((x * 0.3 - y * 0.9) / 80 + fbm(n1, nx * 1.6 + 9, ny * 1.6, 5) * 4));
-      const goldAmt = Math.pow(Math.max(0, 1 - vein / 0.03), 1.5) * 0.9 + Math.pow(Math.max(0, 1 - fine / 0.018), 1.5) * 0.35;
-      const greyAmt = Math.max(0, 1 - vein / 0.22) * 0.13 + Math.max(0, 1 - fine / 0.1) * 0.05 + (cloud - 0.5) * 0.14;
+      const goldAmt = Math.pow(Math.max(0, 1 - vein / 0.03), 1.5) * 0.45 + Math.pow(Math.max(0, 1 - fine / 0.018), 1.5) * 0.15;
+      const greyAmt = Math.max(0, 1 - vein / 0.22) * 0.06 + Math.max(0, 1 - fine / 0.1) * 0.02 + (cloud - 0.5) * 0.07;
       let r = 250 - greyAmt * 85, g = 248 - greyAmt * 84, b = 244 - greyAmt * 78;
       const k = Math.min(1, goldAmt);
       r += (gold[0] - r) * k; g += (gold[1] - g) * k; b += (gold[2] - b) * k;

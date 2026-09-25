@@ -1043,4 +1043,4 @@ a.side-link { color: inherit; text-decoration: none; }
 /* Opening constellation: the greeting waits for the stars to form the A, then fades in */
 .welcome { transition: opacity .9s ease; }
 .intro .welcome { opacity: 0; animation: none; }
-:root[data-skin="marble"] .main { background: rgba(252, 250, 246, .32); }
+:root[data-skin="marble"] .main { background: rgba(252, 250, 246, .45); }
