@@ -1020,3 +1020,4 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 .rsteps .note summary { cursor: pointer; font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
 .rsteps .note .md { font-size: 13px; color: var(--text-2); padding: 4px 0 2px; }
 @media (max-width: 480px) { .research-btn .lbl { display: none; } .think-btn { padding: 0 9px; } }
+a.side-link { color: inherit; text-decoration: none; }

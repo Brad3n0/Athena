@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Athena Field Guide</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml" />
+<style>@font-face { font-family: "Cinzel"; font-weight: 700; font-display: swap; src: url("vendor/cinzel/cinzel-latin-700-normal.woff2") format("woff2"); }
+:root {
+  --ground: #faf7ef; --panel: #ffffff; --ink: #1b2130; --ink-2: #4a5366; --ink-3: #7b8397;
+  --gold: #a8760c; --gold-soft: rgba(168, 118, 12, .10); --gold-line: rgba(168, 118, 12, .28);
+  --rule: #e7e1d2; --logo-1: #d8a52a; --logo-2: #9c6d0a;
+  --display: "Cinzel", "Trajan Pro", Georgia, serif;
+  --body: "Alegreya Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #10151f; --panel: #1a1f2b; --ink: #eceff5; --ink-2: #b3bacb; --ink-3: #8a93a8;
+    --gold: #f5c542; --gold-soft: rgba(245, 197, 66, .09); --gold-line: rgba(245, 197, 66, .26);
+    --rule: #2a3142; --logo-1: #ffd970; --logo-2: #d49b17; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #10151f; --panel: #1a1f2b; --ink: #eceff5; --ink-2: #b3bacb; --ink-3: #8a93a8;
+  --gold: #f5c542; --gold-soft: rgba(245, 197, 66, .09); --gold-line: rgba(245, 197, 66, .26);
+  --rule: #2a3142; --logo-1: #ffd970; --logo-2: #d49b17; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 17px/1.5 var(--body); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; }
+header { display: grid; grid-template-columns: auto 1fr; gap: 6px 18px; align-items: center; }
+header svg { width: 58px; height: 58px; grid-row: span 2; }
+h1 { font: 700 clamp(30px, 5vw, 44px)/1.05 var(--display); letter-spacing: .04em; margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-2); max-width: 62ch; }
+.tools { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; background: var(--ground);
+  display: flex; flex-direction: column; gap: 12px; padding-block: 18px 14px; margin-top: 22px; border-bottom: 1px solid var(--rule); }
+.search { display: flex; align-items: center; gap: 10px; border: 1px solid var(--gold-line); background: var(--panel);
+  border-radius: 12px; padding: 0 14px; max-width: 520px; }
+.search input { flex: 1; border: 0; background: transparent; color: var(--ink); font: inherit; padding: 11px 0; outline: none; min-width: 0; }
+.search:focus-within { box-shadow: 0 0 0 3px var(--gold-soft); border-color: var(--gold); }
+.search svg { width: 18px; height: 18px; stroke: var(--ink-3); fill: none; stroke-width: 2; flex: none; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; }
+nav a { font: 600 12px/1 var(--body); letter-spacing: .09em; text-transform: uppercase; text-decoration: none; color: var(--ink-2);
+  padding: 7px 11px; border-radius: 99px; border: 1px solid var(--rule); }
+nav a:hover, nav a:focus-visible { color: var(--gold); border-color: var(--gold-line); outline: none; }
+main { columns: 2 460px; column-gap: 28px; margin-top: 28px; }
+section { break-inside: avoid; margin: 0 0 28px; padding: 22px 22px 8px; background: var(--panel); border: 1px solid var(--rule); border-radius: 16px; scroll-margin-top: 150px; }
+section > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 12px; border-bottom: 1px solid var(--gold-line); margin-bottom: 4px; }
+h2 { font: 700 20px/1.2 var(--display); letter-spacing: .05em; margin: 0; color: var(--ink); }
+.where { font: 600 11.5px/1 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+dl { margin: 0; }
+.item { padding: 12px 0; border-bottom: 1px solid var(--rule); }
+.item:last-child { border-bottom: 0; }
+dt { font-weight: 700; }
+dd { margin: 2px 0 0; color: var(--ink-2); }
+.try { display: inline-flex; align-items: center; gap: 8px; margin-top: 7px; max-width: 100%; font: 13.5px/1.35 var(--mono);
+  color: var(--ink); background: var(--gold-soft); border: 1px solid var(--gold-line); border-radius: 8px; padding: 5px 9px; cursor: pointer; overflow-wrap: anywhere; text-align: left; }
+.try::before { content: "try"; font: 700 10px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--gold); flex: none; }
+.try:hover, .try:focus-visible { border-color: var(--gold); outline: none; }
+.try.copied::after { content: "copied"; font: 700 10px/1 var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--gold); }
+.empty { color: var(--ink-3); margin-top: 28px; }
+footer { color: var(--ink-3); font-size: 14.5px; margin-top: 12px; }
+mark { background: var(--gold-soft); color: inherit; border-radius: 3px; box-shadow: 0 0 0 1px var(--gold-line); }
+@media (max-width: 520px) { body { font-size: 16px; } section { padding: 18px 16px 6px; } .tools { position: static; } }
+@media (prefers-reduced-motion: no-preference) { section { transition: opacity .2s; } }
+</style>
+<script>fetch('/api/settings').then((r) => r.json()).then((s) => { if (s.theme === 'light' || s.theme === 'dark') document.documentElement.dataset.theme = s.theme; }).catch(() => {});</script>
+</head>
+<body>
+<div class="wrap">
+<header><svg viewBox="10 9 44 44" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" style="stop-color:var(--logo-1)"/><stop offset="1" style="stop-color:var(--logo-2)"/></linearGradient></defs><path d="M17 49 L32 13 L47 49" fill="none" stroke="url(#lg)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M32 31 Q33 37 38 38 Q33 39 32 45 Q31 39 26 38 Q31 37 32 31 Z" style="fill:var(--logo-1)"/></svg><h1>Athena Field Guide</h1>
+<p class="lede">All 66 things your Athena can do, in one place. Tap a <b>try</b> example to copy it, then paste it into Athena.</p></header>
+<div class="tools"><label class="search" for="q"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+<input id="q" type="search" placeholder="Find a feature, e.g. flashcards, Discord, timer" autocomplete="off" /></label>
+<nav aria-label="Sections"><a href="#chat">Chatting</a><a href="#research">Deep research</a><a href="#learns">Athena learns</a><a href="#voice">Voice</a><a href="#study">Study</a><a href="#code">Code</a><a href="#canvas">Writing canvas</a><a href="#jarvis">Jarvis: your PC</a><a href="#files">Files &amp; web</a><a href="#everyday">Everyday</a><a href="#setup">Looks &amp; setup</a></nav></div>
+<main><section id="chat" data-name="Chatting"><header><h2>Chatting</h2><span class="where">Every tab</span></header><dl><div class="item"><dt>Three tabs</dt><dd>Assistant, Code and Study. Each tab keeps its own chat when you switch.</dd></div><div class="item"><dt>✨ Auto</dt><dd>In Assistant, she picks the best model for each message: code, math and school, pictures or general chat.</dd></div><div class="item"><dt>Think button</dt><dd>⚡ Quick, Normal or 🧠 Deep. The 🧠 under an answer redoes just that one with Deep thinking.</dd></div><div class="item"><dt>Answer style</dt><dd>Classic or Polished. Settings → General.</dd></div><div class="item"><dt>Reply length &amp; Direct mode</dt><dd>Short, Normal or Detailed. Direct mode skips lecturing and needless warnings.</dd></div><div class="item"><dt>Regenerate &amp; versions</dt><dd>Get a new answer and flip between versions with ‹ ›.</dd></div><div class="item"><dt>Edit your message</dt><dd>Change a message you sent and resend it in place.</dd></div><div class="item"><dt>Branch</dt><dd>Start a new chat from any answer. The original stays as it was.</dd></div><div class="item"><dt>Compare models</dt><dd>Two models answer side by side. Keep the better one.</dd></div><div class="item"><dt>Pictures</dt><dd>Attach photos, worksheets or screenshots, or let her look at your screen.</dd><button type="button" class="try" data-text="/screen what does this error mean?" title="Copy">/screen what does this error mean?</button></div><div class="item"><dt>Saved replies</dt><dd>Star any answer to keep it.</dd><button type="button" class="try" data-text="/saved" title="Copy">/saved</button></div><div class="item"><dt>Search everything</dt><dd>Search every chat and every message from the sidebar.</dd></div><div class="item"><dt>Projects</dt><dd>Folders of chats with shared instructions and files.</dd></div><div class="item"><dt>Pin, rename, export</dt><dd>Tidy chats from the sidebar. Titles get an emoji automatically.</dd></div><div class="item"><dt>Slash commands</dt><dd>Type / to see them all.</dd><button type="button" class="try" data-text="/" title="Copy">/</button></div></dl></section><section id="research" data-name="Deep research"><header><h2>Deep research</h2><span class="where">Research button</span></header><dl><div class="item"><dt>🔭 Research</dt><dd>She plans searches, reads about a dozen pages, fills gaps, then writes a report with numbered citations and sources.</dd><button type="button" class="try" data-text="/research best laptop for college under $800" title="Copy">/research best laptop for college under $800</button></div><div class="item"><dt>Watch her work</dt><dd>A live panel shows each search, each page she reads or skips, and what she found. Takes a few minutes.</dd></div><div class="item"><dt>Quick web search</dt><dd>For a fast answer from the web.</dd><button type="button" class="try" data-text="/search best budget graphics card" title="Copy">/search best budget graphics card</button></div></dl></section><section id="learns" data-name="Athena learns"><header><h2>Athena learns</h2><span class="where">Settings → About you</span></header><dl><div class="item"><dt>Remembers you</dt><dd>Picks up lasting things you mention: your grade, hobbies, projects, likes.</dd><button type="button" class="try" data-text="/remember my sister&#x27;s birthday is June 3" title="Copy">/remember my sister&#x27;s birthday is June 3</button></div><div class="item"><dt>👍 / 👎</dt><dd>Rate answers and say what to do better. It becomes a rule she follows in every chat.</dd></div><div class="item"><dt>Corrections</dt><dd>Say “no, I meant…” and she learns from it.</dd></div><div class="item"><dt>About you page</dt><dd>See, edit, add or delete everything she&#x27;s learned, or turn learning off.</dd></div></dl></section><section id="voice" data-name="Voice"><header><h2>Voice</h2><span class="where">Voice button</span></header><dl><div class="item"><dt>Voice orb</dt><dd>Talk back and forth. The orb shows her mood. Talk over her to interrupt.</dd><button type="button" class="try" data-text="/voice" title="Copy">/voice</button></div><div class="item"><dt>Natural offline voice</dt><dd>Kokoro voice, or your Windows voices.</dd></div><div class="item"><dt>Dictation</dt><dd>The mic button types what you say.</dd></div><div class="item"><dt>Voice commands</dt><dd>“slower”, “faster”, “stop”, “new chat” and more.</dd></div><div class="item"><dt>Other languages</dt><dd>Talk in your language and she answers in it.</dd></div><div class="item"><dt>Hey Athena</dt><dd>Wake word and hotkeys, with the desktop app.</dd><button type="button" class="try" data-text="Ctrl + Space" title="Copy">Ctrl + Space</button></div></dl></section><section id="study" data-name="Study"><header><h2>Study</h2><span class="where">Study tab</span></header><dl><div class="item"><dt>Homework help</dt><dd>Step by step, with the working shown.</dd></div><div class="item"><dt>Explain my mistake</dt><dd>Show your work and she finds where it went wrong.</dd></div><div class="item"><dt>Quizzes &amp; flashcards</dt><dd>Made from any topic or your notes.</dd><button type="button" class="try" data-text="quiz me on the cell" title="Copy">quiz me on the cell</button></div><div class="item"><dt>Decks &amp; review</dt><dd>Saved decks with spaced review of what&#x27;s due.</dd><button type="button" class="try" data-text="/review" title="Copy">/review</button></div><div class="item"><dt>Graphs</dt><dd>Plots functions and data right in the chat.</dd><button type="button" class="try" data-text="graph y = x² − 4" title="Copy">graph y = x² − 4</button></div><div class="item"><dt>Cheat sheets</dt><dd>One printable page on any topic.</dd><button type="button" class="try" data-text="/cheatsheet derivatives" title="Copy">/cheatsheet derivatives</button></div><div class="item"><dt>Study streak 🔥</dt><dd>Counts the days in a row you study.</dd></div><div class="item"><dt>Focus timer</dt><dd>A timed study session.</dd><button type="button" class="try" data-text="/focus 25 minutes on homework" title="Copy">/focus 25 minutes on homework</button></div></dl></section><section id="code" data-name="Code"><header><h2>Code</h2><span class="where">Code tab</span></header><dl><div class="item"><dt>Live previews</dt><dd>Websites, games and apps run right in the chat, or in a new tab.</dd></div><div class="item"><dt>Run code</dt><dd>Python, JavaScript, TypeScript, PowerShell, Batch and Bash.</dd><button type="button" class="try" data-text="/run count the words in a sentence" title="Copy">/run count the words in a sentence</button></div><div class="item"><dt>Project folders</dt><dd>Open a real folder. She reads it, shows a diff and asks before each change.</dd><button type="button" class="try" data-text="/folder" title="Copy">/folder</button></div><div class="item"><dt>Builds like a developer</dt><dd>Creates the project, writes the files, runs them, screenshots the result and fixes problems.</dd><button type="button" class="try" data-text="make me a snake game" title="Copy">make me a snake game</button></div><div class="item"><dt>Upload to GitHub</dt><dd>Publishes a finished project. Asks first.</dd></div></dl></section><section id="canvas" data-name="Writing canvas"><header><h2>Writing canvas</h2><span class="where">Canvas button</span></header><dl><div class="item"><dt>Write together</dt><dd>Essays, letters and stories side by side with the chat.</dd><button type="button" class="try" data-text="/canvas cover letter for a barista job" title="Copy">/canvas cover letter for a barista job</button></div><div class="item"><dt>Edit tools</dt><dd>Proofread, make it shorter or more formal, print or export.</dd></div></dl></section><section id="jarvis" data-name="Jarvis: your PC"><header><h2>Jarvis: your PC</h2><span class="where">Settings → Jarvis</span></header><dl><div class="item"><dt>Apps &amp; controls</dt><dd>Open apps, volume, media keys, lock, clipboard, screenshots.</dd><button type="button" class="try" data-text="/open Spotify" title="Copy">/open Spotify</button></div><div class="item"><dt>Messages</dt><dd>Discord, WhatsApp, texts and email to saved contacts. Always asks before sending.</dd><button type="button" class="try" data-text="message Jake on Discord I&#x27;m on" title="Copy">message Jake on Discord I&#x27;m on</button></div><div class="item"><dt>Windows</dt><dd>Focus, minimize, maximize, snap left or right, close, move to another monitor.</dd><button type="button" class="try" data-text="put Chrome on my second monitor" title="Copy">put Chrome on my second monitor</button></div><div class="item"><dt>Type &amp; click</dt><dd>Types text for you and clicks things on screen.</dd></div><div class="item"><dt>Routines</dt><dd>One phrase runs several steps.</dd><button type="button" class="try" data-text="goodnight" title="Copy">goodnight</button></div><div class="item"><dt>PC status</dt><dd>CPU, graphics card, memory, disks, network and the busiest apps.</dd><button type="button" class="try" data-text="how&#x27;s my PC doing?" title="Copy">how&#x27;s my PC doing?</button></div><div class="item"><dt>Heads-ups</dt><dd>Download finished, PC maxed out, drive nearly full, low battery, reminder coming up.</dd></div></dl></section><section id="files" data-name="Files &amp; web"><header><h2>Files &amp; web</h2><span class="where">Settings → Abilities</span></header><dl><div class="item"><dt>Find files</dt><dd>Anywhere in your folders.</dd><button type="button" class="try" data-text="/find my resume" title="Copy">/find my resume</button></div><div class="item"><dt>Organize folders</dt><dd>Sorts a messy folder into groups. Asks before moving or deleting.</dd><button type="button" class="try" data-text="/organize Downloads" title="Copy">/organize Downloads</button></div><div class="item"><dt>Your documents</dt><dd>Answers from files in your Knowledge folders.</dd><button type="button" class="try" data-text="/docs what does my lease say about pets?" title="Copy">/docs what does my lease say about pets?</button></div><div class="item"><dt>Weather</dt><dd>Now and the next 3 days.</dd><button type="button" class="try" data-text="/weather Chicago" title="Copy">/weather Chicago</button></div></dl></section><section id="everyday" data-name="Everyday"><header><h2>Everyday</h2><span class="where">Sidebar</span></header><dl><div class="item"><dt>Tasks</dt><dd>A to-do list she can add to and check off.</dd></div><div class="item"><dt>Reminders &amp; timers</dt><dd>Pop up and speak when it&#x27;s time.</dd><button type="button" class="try" data-text="/remind at 6pm to call mom" title="Copy">/remind at 6pm to call mom</button></div><div class="item"><dt>Morning briefing</dt><dd>Weather, tasks and reminders for the day.</dd><button type="button" class="try" data-text="/brief" title="Copy">/brief</button></div><div class="item"><dt>Images</dt><dd>With the optional Stable Diffusion add-on.</dd><button type="button" class="try" data-text="/image a gold owl on a night sky" title="Copy">/image a gold owl on a night sky</button></div><div class="item"><dt>Smart home</dt><dd>With the optional Home Assistant add-on.</dd></div></dl></section><section id="setup" data-name="Looks &amp; setup"><header><h2>Looks &amp; setup</h2><span class="where">Settings</span></header><dl><div class="item"><dt>Themes</dt><dd>Gold night sky, 11 accent colours, light or dark.</dd></div><div class="item"><dt>Effects</dt><dd>Shooting stars, seasonal effects, special-day greetings.</dd></div><div class="item"><dt>Comfort</dt><dd>Text size, compact mode, sound effects.</dd></div><div class="item"><dt>PIN lock</dt><dd>Locks Athena after a while.</dd></div><div class="item"><dt>Best models for my PC</dt><dd>One click picks the best installed model for each job.</dd></div><div class="item"><dt>Health check</dt><dd>Tests everything and says what to fix.</dd></div><div class="item"><dt>Updating</dt><dd>Run update.bat in the Athena folder.</dd></div></dl></section></main>
+<p class="empty" id="empty" hidden>Nothing matches that. Try a shorter word, or type / in Athena to see every command.</p>
+<footer>Everything runs on your PC. Only web search, research and weather use the internet.</footer>
+</div>
+<script>
+(() => {
+  const q = document.getElementById('q');
+  const sections = [...document.querySelectorAll('main section')];
+  const empty = document.getElementById('empty');
+  const clean = (s) => s.toLowerCase();
+  q.addEventListener('input', () => {
+    const term = clean(q.value.trim());
+    let shown = 0;
+    for (const sec of sections) {
+      let any = false;
+      for (const item of sec.querySelectorAll('.item')) {
+        const hit = !term || clean(item.textContent).includes(term) || clean(sec.dataset.name).includes(term);
+        item.hidden = !hit;
+        any = any || hit;
+      }
+      sec.hidden = !any;
+      if (any) shown++;
+    }
+    empty.hidden = shown > 0;
+  });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('.try');
+    if (!b) return;
+    const text = b.dataset.text;
+    const done = () => { b.classList.add('copied'); setTimeout(() => b.classList.remove('copied'), 1400); };
+    try {
+      navigator.clipboard.writeText(text).then(done, () => { select(b); });
+    } catch { select(b); }
+  });
+  function select(el) { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+})();
+</script>
+</body>
+</html>

@@ -1230,6 +1230,7 @@ const COMMANDS = [
     openCanvas();
     if (r) sendMessage(`Write this in the canvas: ${r}`, { display: `/canvas ${r}` });
   } },
+  { cmd: '/guide', desc: 'Everything Athena can do', action: () => window.open('guide.html', '_blank', 'noopener') },
   { cmd: '/shortcuts', desc: 'Keyboard shortcuts', action: () => $('#shortcutsDlg').showModal() },
 ];
 const slash = { open: false, items: [], index: 0 };
