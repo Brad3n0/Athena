@@ -252,12 +252,13 @@ function setMode(mode, { keepModel = false } = {}) {
 }
 $('#modeSwitch').onclick = (e) => {
   const b = e.target.closest('[data-mode]');
-  if (b) switchMode(b.dataset.mode);
+  if (b) switchMode(b.dataset.mode).then(() => $('#input').focus());
 };
 
 // Each mode keeps its own chat: switching to Study shows your study chat (or a fresh one),
 // and switching back to Assistant brings back the chat you were in.
 const modeChats = {};
+const deletedChats = new Set();
 let modeChatIds = {};
 try { modeChatIds = JSON.parse(localStorage.getItem('athena-mode-chats') || '{}'); } catch { /* ignore */ }
 
@@ -273,7 +274,8 @@ async function switchMode(mode) {
   if (mode === state.mode) return;
   if (state.abort) { toast('She\'s still answering. Wait a moment or press stop first.'); return; }
   rememberModeChat();
-  const exists = (c) => c && (!c.id || state.chats.some((x) => x.id === c.id)) && (!state.project || c.project_id === state.project);
+  // Brand-new chats may not be in the sidebar list yet, so only forget chats you actually deleted.
+  const exists = (c) => c && !deletedChats.has(c.id) && (!state.project || c.project_id === state.project);
   const inMemory = modeChats[mode];
   if (exists(inMemory)) {
     state.chat = inMemory;
@@ -399,13 +401,14 @@ $('#chatList').onclick = async (e) => {
   if (act === 'delete') {
     // Hide it right away; really delete after a few seconds unless you press Undo.
     const removed = state.chats.find((c) => c.id === id);
+    deletedChats.add(id);
     state.chats = state.chats.filter((c) => c.id !== id);
     if (state.chat?.id === id) newChat();
     renderSidebar();
     let undone = false;
     toast(`Deleted “${removed?.title || 'chat'}”`, '', {
       ms: 6000,
-      action: { label: 'Undo', fn: () => { undone = true; loadChats(); } },
+      action: { label: 'Undo', fn: () => { undone = true; deletedChats.delete(id); loadChats(); } },
     });
     setTimeout(async () => { if (!undone) { await api(`/api/conversations/${id}`, { method: 'DELETE' }).catch(() => {}); } }, 6200);
   } else if (act === 'rename') {
