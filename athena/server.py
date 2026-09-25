@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import decks, events, files, knowledge, learning, scheduler, security, speech, store, tts, workspace
+from . import decks, events, files, knowledge, learning, research, scheduler, security, speech, store, tts, workspace
 from .tools import BY_NAME, approval_summary, arun_tool, enabled_tools, parse_args, run_tool
 
 STATIC_DIR = store.ROOT / "static"
@@ -257,6 +257,12 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
         parts.append("Keep replies short: get straight to the point in a few sentences or a short list. The user can ask for more.")
     elif length == "detailed" and mode != "voice":
         parts.append("Give thorough, detailed replies: explain the reasoning, cover edge cases, and include examples.")
+    if settings.get("answer_style") == "polished" and mode != "voice":
+        parts.append(
+            "Answer style: polished. Open with the direct answer in one or two sentences (bold the key result). Then, if more "
+            "is needed, organise it with short headings, bullet points and tables where they help, in plain friendly language. "
+            "Skip filler and repetition. For longer answers, end with a one-line **Bottom line:** summary. "
+            "Casual chat stays casual and short.")
     custom = (settings.get("custom_instructions") or "").strip()
     if custom:
         parts.append("Additional instructions from the user:\n" + custom)
@@ -374,6 +380,10 @@ async def chat(request: Request):
 
     # Saying a routine's phrase ("goodnight", "game time") runs it straight away, no model needed.
     from . import routines as routines_mod
+
+    if body.get("research") and mode != "voice" and history and history[-1]["role"] == "user":
+        return StreamingResponse(_research_stream(model, mode, settings, history, extra_prompt, think),
+                                 media_type="application/x-ndjson")
 
     routine = None
     if history and history[-1]["role"] == "user" and not no_tools and settings.get("pc_enabled", True):
@@ -712,6 +722,69 @@ def _show(target: str) -> str | None:
         return files.open_on_screen(target)
     except Exception:
         return None
+
+
+async def _research_stream(model: str, mode: str, settings: dict[str, Any], history: list[dict[str, Any]],
+                           extra_prompt: str, think: Any) -> AsyncIterator[bytes]:
+    """Deep research: plan → search → read & take notes → fill gaps → write a cited report. Streams every step."""
+    if not settings.get("web_enabled", True):
+        yield _event("error", message="Deep research needs the internet ability. Turn on Web in Settings → Abilities.")
+        return
+    question = history[-1]["content"]
+    context = "\n".join(f"{m['role']}: {m['content'][:400]}" for m in history[-5:-1])
+    ka = keep_alive(settings)
+    sources: list[dict[str, Any]] = []
+    notes = ""
+    try:
+        async for ev in research.run(client, OLLAMA, model, ka, question, context, datetime.now().strftime("%A, %B %d, %Y")):
+            if ev["step"] == "sources":
+                sources, notes = ev["sources"], ev["notes"]
+                continue
+            yield _event("research", **ev)
+    except httpx.ConnectError:
+        yield _event("error", message=f"Can't reach Ollama at {OLLAMA}. Is the Ollama app running?")
+        return
+    except (httpx.HTTPError, RuntimeError) as exc:
+        yield _event("error", message=_ollama_error(str(exc), 500) if isinstance(exc, RuntimeError) else f"Research stopped: {exc}")
+        return
+    if not sources:
+        yield _event("error", message="I couldn't find anything useful online for that. Are you connected to the internet? "
+                                      "Try rewording it, or ask without Research.")
+        return
+    system = build_system_prompt(mode, settings, False) + extra_prompt
+    messages = [{"role": "system", "content": system},
+                *[{"role": m["role"], "content": m["content"][:2000]} for m in history[-5:-1]],
+                {"role": "user", "content": research.report_prompt(question, notes)}]
+    payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": ka}
+    if think is not None:
+        payload["think"] = think
+    stats: dict[str, Any] = {}
+    for _attempt in range(2):
+        async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload) as resp:
+            if resp.status_code != 200:
+                text = (await resp.aread()).decode(errors="replace")
+                if "think" in payload and "think" in text.lower():
+                    payload.pop("think")
+                    continue
+                yield _event("error", message=_ollama_error(text, resp.status_code))
+                return
+            async for line in resp.aiter_lines():
+                if not line.strip():
+                    continue
+                chunk = json.loads(line)
+                if chunk.get("error"):
+                    yield _event("error", message=chunk["error"])
+                    return
+                msg = chunk.get("message") or {}
+                if msg.get("thinking"):
+                    yield _event("thinking", content=msg["thinking"])
+                if msg.get("content"):
+                    yield _event("token", content=msg["content"])
+                if chunk.get("done"):
+                    stats = {k: chunk.get(k) for k in ("eval_count", "eval_duration", "total_duration")}
+        break
+    yield _event("token", content=research.sources_markdown(sources))
+    yield _event("done", stats=stats)
 
 
 @app.post("/api/approvals/{step}")

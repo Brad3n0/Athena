@@ -66,6 +66,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "reply_length": "normal",
+    "answer_style": "classic",  # classic | polished
     "think_level": "normal",  # quick | normal | deep ("Think harder")
     "auto_learn": True,  # pick up facts about you from chats, and lessons from 👍/👎 and corrections
     "theme": "dark",

@@ -845,7 +845,7 @@ messagesEl.addEventListener('click', async (e) => {
       const versions = msg.versions ? [...msg.versions] : [snapshot(msg)];
       state.chat.messages.splice(idx);
       renderMessages();
-      const fresh = await generateReply({ model: msg.route ? msg.model : null, route: msg.route || null, think: act.dataset.msgAct === 'deeper' ? 'deep' : null });
+      const fresh = await generateReply({ model: msg.route ? msg.model : null, route: msg.route || null, think: act.dataset.msgAct === 'deeper' ? 'deep' : null, research: !!msg.research });
       if (fresh && !fresh.error) {
         fresh.versions = [...versions, snapshot(fresh)];
         fresh.v = fresh.versions.length - 1;
@@ -914,8 +914,8 @@ messagesEl.addEventListener('click', async (e) => {
 });
 
 function snapshot(m) {
-  const { content, thinking, tools, model, stats, time, savedId, think } = m;
-  return { content, thinking, tools, model, stats, time, savedId, think };
+  const { content, thinking, tools, model, stats, time, savedId, think, research } = m;
+  return { content, thinking, tools, model, stats, time, savedId, think, research };
 }
 
 function rerenderMessage(idx) {
@@ -986,6 +986,7 @@ function updateAssistantEl(el, m) {
   const openSteps = new Set($$('.step[open]', el).map((d) => d.dataset.id));
   const steps = (m.tools || []).map((t, i) => stepHtml(t, i, openSteps)).join('');
   let html = steps ? `<div class="activity">${steps}</div>` : '';
+  if (m.research) html += researchHtml(m, el);
   const pics = (m.tools || []).filter((t) => t.result?.image).map((t) => `<a href="${escapeHtml(t.result.image)}" target="_blank"><img src="${escapeHtml(t.result.image)}" alt="${escapeHtml(t.result.prompt || 'Generated image')}"></a>`);
   if (pics.length) html += `<div class="gen-images">${pics.join('')}</div>`;
   if (thinking.trim()) {
@@ -1206,6 +1207,7 @@ const COMMANDS = [
   { cmd: '/remind', desc: 'Set a reminder', hint: 'at 6pm to call mom', to: (r) => `Remind me ${r}` },
   { cmd: '/timer', desc: 'Start a timer', hint: '10 minutes for the pasta', to: (r) => `Set a timer for ${r}` },
   { cmd: '/weather', desc: 'Check the weather', hint: 'Chicago', to: (r) => (r ? `What's the weather in ${r}?` : "What's the weather like today?") },
+  { cmd: '/research', desc: 'Deep research: reads many sources, writes a cited report', hint: 'best laptop for college under $800', action: (r) => (r ? sendMessage(r, { research: true }) : setResearch(true)) },
   { cmd: '/search', desc: 'Search the web', hint: 'best budget graphics card', to: (r) => `Search the web for: ${r}` },
   { cmd: '/image', desc: 'Create an image', hint: 'a gold owl on a night sky', to: (r) => `Generate an image: ${r}` },
   { cmd: '/find', desc: 'Find a file on your PC', hint: 'my resume', to: (r) => `Find ${r} on my PC` },
@@ -1293,12 +1295,14 @@ function stopGenerating() {
   updateComposerButtons();
 }
 
-async function sendMessage(text, { voice = false, display = null } = {}) {
+async function sendMessage(text, { voice = false, display = null, research = false } = {}) {
+  research = !voice && (research || state.researchNext);
+  if (research) setResearch(false);
   if (!state.status.ollama) { await refreshStatus(); }
   let model = voice ? pickDefaultModel('voice') : currentModel();
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); openSettings('models'); return; }
   let route = null;
-  if (autoOn() && !voice && !state.compare) {
+  if (autoOn() && !voice && !state.compare && !research) {
     route = routeMessage(text, state.chat);
     model = (route === 'assistant' ? currentModel() : pickDefaultModel(route)) || model;
   }
@@ -1328,7 +1332,7 @@ async function sendMessage(text, { voice = false, display = null } = {}) {
   state.chat.messages.push(msg);
   renderMessages();
   if (state.compare && !voice) await compareReplies(state.compare);
-  else await generateReply({ voice, model, route });
+  else await generateReply({ voice, model, route, research });
 }
 
 // ------------------------------------------------------------ compare two models
@@ -1422,14 +1426,14 @@ async function compareReplies(models) {
   el.querySelectorAll('.cmp-keep').forEach((b) => { b.classList.add('ready'); });
 }
 
-async function generateReply({ voice = false, model = null, route = null, think = null } = {}) {
+async function generateReply({ voice = false, model = null, route = null, think = null, research = false } = {}) {
   const chat = state.chat;
   // With Auto, a routed message uses that specialist's instructions too (code, study); pictures and chat stay general.
   const mode = voice ? 'voice' : route === 'code' || route === 'study' ? route : state.mode;
   model = model || currentModel();
   // Think harder: Quick / Normal / Deep. Voice keeps it quick so she answers straight away.
   const thinkLevel = voice ? 'normal' : think || state.settings.think_level || 'normal';
-  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), ...(voice ? { voice: true } : {}), ...(route ? { route } : {}), ...(thinkLevel === 'deep' ? { think: 'deep' } : {}) };
+  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), ...(voice ? { voice: true } : {}), ...(route ? { route } : {}), ...(thinkLevel === 'deep' ? { think: 'deep' } : {}), ...(research ? { research: { steps: [], started: Date.now() } } : {}) };
   chat.messages.push(reply);
 
   const thread = $('.thread', messagesEl);
@@ -1462,7 +1466,7 @@ async function generateReply({ voice = false, model = null, route = null, think 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         spoken_language: voice && state.status.whisper ? lastLanguage : null,
-        model, mode, think_level: thinkLevel, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, workspace: chat.workspace?.path || null, canvas: voice ? null : canvasForChat(),
+        model, mode, think_level: thinkLevel, research: research || undefined, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, workspace: chat.workspace?.path || null, canvas: voice ? null : canvasForChat(),
         messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })),
       }),
       signal: abort.signal,
@@ -1492,6 +1496,8 @@ async function generateReply({ voice = false, model = null, route = null, think 
             if (!speaker.speaking) setVoiceCaption(said, 'athena');
             if (/\b(ha(ha)+|he(he)+|yay|lol|hooray)\b|[♪♡]/i.test(said.slice(-40))) state.voice.avatar?.cheer?.();
           }
+        } else if (ev.type === 'research') {
+          researchEvent(reply.research, ev);
         } else if (ev.type === 'thinking') {
           if (!thinkStart) thinkStart = Date.now();
           reply.thinking += ev.content;
@@ -1530,6 +1536,7 @@ async function generateReply({ voice = false, model = null, route = null, think 
     raf = 0;
     reply.streaming = false;
     if (!reply.thinking) delete reply.thinking;
+    if (reply.research) reply.research.secs = Math.round((Date.now() - reply.research.started) / 1000);
     if (!reply.tools.length) delete reply.tools;
     const { content } = splitThinking(reply);
     if (!abort.signal.aborted && chat === state.chat && /```canvas/.test(content)) applyCanvasReply(content);
@@ -1552,6 +1559,59 @@ async function generateReply({ voice = false, model = null, route = null, think 
   }
   return reply;
 }
+
+// ------------------------------------------------------------ Deep research (watch her work)
+function researchEvent(r, ev) {
+  if (!r) return;
+  if (ev.step === 'plan' || ev.step === 'gaps') r.steps.push({ kind: ev.step, queries: ev.queries });
+  else if (ev.step === 'search') {
+    const row = r.steps.find((x) => x.kind === 'search' && x.query === ev.query && x.status === 'running');
+    if (row) Object.assign(row, { status: ev.status, count: ev.results?.length ?? 0, error: ev.error });
+    else r.steps.push({ kind: 'search', query: ev.query, status: ev.status });
+  } else if (ev.step === 'read') {
+    const row = r.steps.find((x) => x.kind === 'read' && x.id === ev.id);
+    if (row) Object.assign(row, ev.title ? { title: ev.title } : {}, { status: ev.status, note: ev.note, n: ev.n, reason: ev.reason });
+    else r.steps.push({ kind: 'read', id: ev.id, url: ev.url, title: ev.title, status: ev.status });
+  } else if (ev.step === 'write') r.writing = true;
+}
+
+function researchHtml(m, el) {
+  const r = m.research;
+  const reads = r.steps.filter((x) => x.kind === 'read');
+  const used = reads.filter((x) => x.status === 'done').length;
+  const live = m.streaming && !r.writing;
+  // Open while she works; folds away once the report is done (click to look again).
+  const box = el.querySelector('.research-box');
+  const open = m.streaming ? (box ? box.open : true) : box?.dataset.done ? box.open : false;
+  const label = live ? `Researching… ${reads.length ? `${used} source${used === 1 ? '' : 's'} so far` : 'planning'}`
+    : m.streaming ? `Writing the report from ${used} source${used === 1 ? '' : 's'}…`
+    : `Researched ${used} source${used === 1 ? '' : 's'}${r.secs ? ` in ${r.secs >= 60 ? `${Math.floor(r.secs / 60)}m ${r.secs % 60}s` : `${r.secs}s`}` : ''}`;
+  const icon = (st) => (st === 'running' || st === 'reading' ? '<span class="spin"></span>' : st === 'done' ? '<span class="ok">✓</span>' : '<span class="skip">–</span>');
+  const rows = r.steps.map((x) => {
+    if (x.kind === 'plan' || x.kind === 'gaps') {
+      return `<li class="plan"><b>${x.kind === 'plan' ? '🗺 Plan' : '🧩 Filling gaps'}</b><div>${x.queries.map((q) => `<span class="q">${escapeHtml(q)}</span>`).join('')}</div></li>`;
+    }
+    if (x.kind === 'search') {
+      return `<li>${icon(x.status)}<span>🔍 Searching <i>${escapeHtml(x.query)}</i>${x.status === 'done' ? ` <span class="muted small">· ${x.error ? escapeHtml(x.error) : `${x.count} result${x.count === 1 ? '' : 's'}`}</span>` : ''}</span></li>`;
+    }
+    const tag = x.n ? `<span class="cite">[${x.n}]</span> ` : '';
+    const note = x.note ? `<details class="note"><summary>What she found</summary><div class="md">${renderMarkdown(x.note)}</div></details>` : '';
+    return `<li class="${x.status === 'skip' ? 'skipped' : ''}">${icon(x.status)}<span>${tag}${x.status === 'reading' ? 'Reading ' : ''}<a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">${escapeHtml(x.title || host(x.url))}</a> <span class="muted small">${escapeHtml(host(x.url))}${x.status === 'skip' ? ` · skipped: ${escapeHtml(x.reason || '')}` : ''}</span>${note}</span></li>`;
+  }).join('');
+  const pct = live ? Math.min(92, 8 + reads.filter((x) => x.status !== 'reading').length * 8) : 100;
+  return `<details class="research-box"${open ? ' open' : ''}${m.streaming ? '' : ' data-done="1"'}><summary>🔭 ${label}</summary>${m.streaming ? `<div class="rbar"><i style="width:${pct}%"></i></div>` : ''}<ol class="rsteps">${rows}</ol></details>`;
+}
+
+function setResearch(on) {
+  state.researchNext = on;
+  const b = $('#researchBtn');
+  b.classList.toggle('on', on);
+  b.title = on ? 'Research is on for your next message: she searches the web, reads many sources and writes a cited report. Click to turn off.'
+    : 'Deep research: she searches the web, reads many sources while you watch, and writes a cited report';
+  $('#input').placeholder = on ? 'What should Athena research?' : 'Message Athena';
+  if (on) $('#input').focus();
+}
+$('#researchBtn').onclick = () => setResearch(!state.researchNext);
 
 // ------------------------------------------------------------ Athena learns
 const userText = (m) => (m?.display ?? m?.content ?? '').toString();
@@ -2168,6 +2228,7 @@ function openSettings(tab = 'general') {
   $('#setThinkLevel').value = s.think_level || 'normal';
   $('#setDirect').checked = !!s.direct_mode;
   $('#setReplyLength').value = s.reply_length || 'normal';
+  $('#setAnswerStyle').value = s.answer_style || 'classic';
   $('#setShooting').checked = s.shooting_stars !== false;
   $('#setAutoPreview').checked = s.auto_preview !== false;
   $('#setKeepAlive').value = s.keep_alive || '30m';
@@ -2330,6 +2391,7 @@ bind('#setTheme', 'theme');
 bind('#setTools', 'tools_enabled', (el) => el.checked);
 bind('#setDirect', 'direct_mode', (el) => el.checked);
 bind('#setReplyLength', 'reply_length');
+bind('#setAnswerStyle', 'answer_style');
 bind('#setAutoLearn', 'auto_learn', (el) => el.checked);
 bind('#setThinkLevel', 'think_level');
 $('#setThinkLevel').addEventListener('change', () => setTimeout(renderThinkBtn, 300));

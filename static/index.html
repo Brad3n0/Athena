@@ -133,6 +133,7 @@
           <button type="button" class="icon-btn" id="shotBtn" title="Show Athena your screen (screenshot in 3 seconds)">
             <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
           </button>
+          <button type="button" class="think-btn research-btn" id="researchBtn" title="Deep research: she searches the web, reads many sources while you watch, and writes a cited report">🔭<span class="lbl"> Research</span></button>
           <button type="button" class="think-btn" id="thinkBtn" title="How hard Athena thinks (click to change)"></button>
           <div class="spacer"></div>
           <button type="button" class="icon-btn" id="micBtn" title="Dictate">
@@ -280,6 +281,9 @@
           <select id="personaVoice"><option value="">Voice: same as usual</option></select>
           <button type="button" class="ghost" id="personaSave">Save personality</button>
         </details>
+        <label>Answer style
+          <select id="setAnswerStyle"><option value="classic">Classic — natural, conversational answers</option><option value="polished">Polished — direct answer first, then headings, bullets and a bottom line</option></select>
+        </label>
         <label>Reply length
           <select id="setReplyLength"><option value="short">Short — quick, to-the-point answers</option><option value="normal">Normal</option><option value="detailed">Detailed — thorough explanations with examples</option></select>
         </label>

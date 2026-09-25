@@ -998,3 +998,25 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 .ghost.danger:hover { background: rgba(220, 60, 60, .08); }
 .think-tag { display: inline-block; font-size: 11.5px; margin-right: 6px; color: var(--accent); }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ---- Deep research: watch her work */
+.research-btn.on { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); box-shadow: 0 0 14px rgba(var(--accent-rgb), .45); }
+.research-box { margin: 2px 0 12px; border: 1px solid rgba(var(--accent-rgb), .25); border-radius: 14px; background: rgba(var(--accent-rgb), .04); padding: 10px 14px; }
+.research-box > summary { cursor: pointer; font-weight: 600; color: var(--accent); list-style: none; }
+.research-box > summary::-webkit-details-marker { display: none; }
+.rbar { height: 3px; margin: 10px 0 4px; border-radius: 99px; background: var(--bg-hover); overflow: hidden; }
+.rbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .6s ease; box-shadow: 0 0 10px rgba(var(--accent-rgb), .6); }
+.rsteps { list-style: none; padding: 0; margin: 8px 0 0; font-size: 13.5px; }
+.rsteps > li { display: flex; gap: 9px; align-items: flex-start; padding: 5px 0; animation: fadeUp .25s ease; }
+.rsteps > li > span:last-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rsteps > li.skipped { opacity: .55; }
+.rsteps > li.plan { flex-direction: column; gap: 5px; }
+.rsteps .q { display: inline-block; margin: 0 6px 5px 0; padding: 2px 9px; border-radius: 99px; border: 1px solid var(--border); font-size: 12.5px; color: var(--text-2); }
+.rsteps .spin { margin-top: 3px; flex: none; }
+.rsteps .ok { color: var(--ok); width: 14px; text-align: center; flex: none; }
+.rsteps .skip { color: var(--text-3); width: 14px; text-align: center; flex: none; }
+.rsteps .cite { color: var(--accent); font-weight: 600; }
+.rsteps a { color: var(--text); }
+.rsteps .note summary { cursor: pointer; font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
+.rsteps .note .md { font-size: 13px; color: var(--text-2); padding: 4px 0 2px; }
+@media (max-width: 480px) { .research-btn .lbl { display: none; } .think-btn { padding: 0 9px; } }
