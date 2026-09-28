@@ -514,6 +514,10 @@ async def _click(a, ctx):
     if not target and not words:
         return {"error": "What should I click?"}
     button, double = str(a.get("button") or "left"), bool(a.get("double"))
+    if a.get("wait"):  # e.g. give a page that's just opening a few seconds to load
+        import asyncio
+
+        await asyncio.sleep(min(10.0, max(0.0, float(a.get("wait") or 0))))
     try:
         # 1) By its words, straight from Windows (exact, and scrolls down the page to it if needed)
         if words:
@@ -628,6 +632,7 @@ TOOLS += [
          {"target": S("What to click, described clearly (e.g. 'the video about the Crimson Desert trailer')"),
           "text": S("Words shown on it, if any, e.g. the video title or button label (partial is fine)"),
           "double": {"type": "boolean", "description": "Double-click"},
+          "wait": {"type": "number", "description": "Seconds to wait first, e.g. for a page that just opened (max 10)"},
           "button": S("left or right", enum=["left", "right"])}, ["target"], arun=_click,
          approve=_safe(lambda a: f"Click \"{a.get('target')}\" on your screen")),
     Tool("send_message", "pc", "Send a message to a person or group chat on any app or website: Discord (default), WhatsApp, "

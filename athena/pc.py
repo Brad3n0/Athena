@@ -59,6 +59,16 @@ def installed_apps() -> list[str]:
 
 
 def open_app(name: str) -> dict[str, Any]:
+    try:
+        return _open_app(name)
+    except PCError:
+        key = (name or "").strip().lower().removesuffix(".com")
+        if key in SITES:  # "open YouTube": it's a website, not an app
+            return open_website(name)
+        raise
+
+
+def _open_app(name: str) -> dict[str, Any]:
     query = (name or "").strip().lower()
     if not query:
         raise PCError("Which app?")

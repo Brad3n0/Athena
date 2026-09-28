@@ -399,10 +399,25 @@ async def chat(request: Request):
     if history and history[-1]["role"] == "user" and not no_tools and settings.get("pc_enabled", True):
         routine = routines_mod.match_phrase(history[-1]["content"])
 
+    # Everyday commands ("open YouTube", "message Jake on Discord: ...", "pause the music") run straight away,
+    # without waiting for the model to decide. Anything unclear goes to the model as usual.
+    quick = None
+    if not routine and history and history[-1]["role"] == "user" and not no_tools and not history[-1].get("images"):
+        from . import commands
+
+        quick = commands.match(history[-1]["content"])
+        allowed = {t.name for t in enabled_tools(settings)}
+        if quick and not all(name in allowed for name, _ in quick):
+            quick = None
+
     async def generate() -> AsyncIterator[bytes]:
         nonlocal use_tools, auto_approve, code_root
         if routine:
             async for chunk in _routine_stream(routine, settings):
+                yield chunk
+            return
+        if quick:
+            async for chunk in _quick_stream(quick, settings, auto_approve):
                 yield chunk
             return
         send_think = think is not None
@@ -467,11 +482,11 @@ async def chat(request: Request):
                 yield _event("error", message=f"Can't reach Ollama at {OLLAMA}. Is the Ollama app running?")
                 return
 
-            if not calls and not content.strip() and empty_retries < 2:
+            if not calls and not content.strip() and empty_retries < 3:
                 # The model stopped without answering (it happens now and then, mostly with lots of tools loaded).
-                # Try again, the second time without tools so there's always a real reply.
+                # Try again with its tools; the last try is without them, so there's always a real reply.
                 empty_retries += 1
-                if empty_retries == 2 and use_tools:
+                if empty_retries == 3 and use_tools:
                     use_tools = False
                     messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + extra_prompt}
                 yield _event("retry")
@@ -743,6 +758,48 @@ def _show(target: str) -> str | None:
         return files.open_on_screen(target)
     except Exception:
         return None
+
+
+async def _quick_stream(calls: list[tuple[str, dict[str, Any]]], settings: dict[str, Any], auto_approve: bool) -> AsyncIterator[bytes]:
+    """Run everyday commands directly (same approvals as always), then confirm in a sentence."""
+    from . import commands
+
+    results = []
+    for name, args in calls:
+        step = store.new_id()
+        yield _event("tool_start", id=step, name=name, args=args)
+        summary = None if auto_approve else await run_in_threadpool(approval_summary, name, args, settings)
+        if summary:
+            future = asyncio.get_running_loop().create_future()
+            _approvals[step] = future
+            yield _event("approval", id=step, name=name, summary=summary)
+            try:
+                decision = await asyncio.wait_for(future, APPROVAL_TIMEOUT)
+            except asyncio.TimeoutError:
+                decision = {"allow": False}
+            finally:
+                _approvals.pop(step, None)
+            if decision.get("always"):
+                auto_approve = True
+            if not decision.get("allow"):
+                result = {"denied": True}
+                yield _event("tool", id=step, name=name, args=args, result=result)
+                results.append((name, args, result))
+                break
+        tool = BY_NAME.get(name)
+        try:
+            if tool and tool.arun:
+                result = await arun_tool(name, args, tool_ctx(settings))
+            else:
+                result = await run_in_threadpool(run_tool, name, args)
+        except Exception as exc:  # never leave the chat hanging
+            result = {"error": str(exc)}
+        yield _event("tool", id=step, name=name, args=args, result=result)
+        results.append((name, args, result))
+        if isinstance(result, dict) and result.get("error"):
+            break
+    yield _event("token", content=commands.confirm(results))
+    yield _event("done", stats={})
 
 
 async def _research_stream(model: str, mode: str, settings: dict[str, Any], history: list[dict[str, Any]],
