@@ -97,12 +97,23 @@ async def make_room(model: str) -> None:
         return
     if not loaded or model in loaded or f"{model}:latest" in loaded:
         return
-    for other in loaded:
-        if other and not re.search(r"embed", other):
-            try:
-                await client.post(f"{OLLAMA}/api/generate", json={"model": other, "keep_alive": 0}, timeout=20)
-            except httpx.HTTPError:
-                pass
+    others = [m for m in loaded if m and not re.search(r"embed", m)]
+    for other in others:
+        try:
+            await client.post(f"{OLLAMA}/api/generate", json={"model": other, "keep_alive": 0}, timeout=20)
+        except httpx.HTTPError:
+            pass
+    # Ollama answers straight away but frees the graphics memory a moment later: wait until it's really gone,
+    # otherwise the next model starts loading into a card that's still full.
+    for _ in range(40):
+        await asyncio.sleep(0.5)
+        try:
+            still = [m.get("name") or m.get("model") for m in (await client.get(f"{OLLAMA}/api/ps", timeout=4)).json().get("models", [])]
+        except (httpx.HTTPError, ValueError):
+            return
+        if not any(o in still for o in others):
+            await asyncio.sleep(1.0)  # and a moment for the driver to hand the memory back
+            return
 
 
 def _out_of_memory(text: str) -> bool:
@@ -562,7 +573,7 @@ async def chat(request: Request):
             quick = None
 
     async def generate() -> AsyncIterator[bytes]:
-        nonlocal use_tools, auto_approve, code_root
+        nonlocal use_tools, auto_approve, code_root, model
         if covered:
             yield _event("summary", text=chat_summary, covered=covered)
         if routine:
@@ -590,6 +601,7 @@ async def chat(request: Request):
         recovered = False
         self_pushed = False
         oom_tries = 0
+        switched = False  # moved to another model because this one doesn't fit
         payload_extra: dict[str, Any] = {}  # extra model options after running out of graphics memory
         await make_room(model)  # switching models: unload the other big one first so both don't try to fit
         for _round in range(MAX_TOOL_ROUNDS):
@@ -608,7 +620,7 @@ async def chat(request: Request):
                 async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload) as resp:
                     if resp.status_code != 200:
                         text = (await resp.aread()).decode(errors="replace")
-                        if (_ollama_crashed(text) and not recovered) or (_out_of_memory(text) and oom_tries < 2):
+                        if (_ollama_crashed(text) and not recovered) or (_out_of_memory(text) and (oom_tries < 2 or not switched)):
                             raise OllamaStalled(text)
                         if "think" in payload and "think" in text.lower():
                             send_think = False  # this model can't change how much it thinks
@@ -645,7 +657,7 @@ async def chat(request: Request):
                         started = True
                         chunk = json.loads(line)
                         if chunk.get("error"):
-                            if (_ollama_crashed(str(chunk["error"])) and not recovered) or (_out_of_memory(str(chunk["error"])) and oom_tries < 2):
+                            if (_ollama_crashed(str(chunk["error"])) and not recovered) or (_out_of_memory(str(chunk["error"])) and (oom_tries < 2 or not switched)):
                                 raise OllamaStalled(str(chunk["error"]))
                             yield _event("error", message=_ollama_error(json.dumps(chunk), 200))
                             return
@@ -676,6 +688,17 @@ async def chat(request: Request):
                     if oom_tries == 2:
                         payload_extra["num_gpu"] = 24  # about half the layers on the graphics card, the rest on the CPU
                     continue
+                if _out_of_memory(str(exc)) and not switched:
+                    # Still doesn't fit: carry on with the Assistant model (it's the one that runs on this PC every day).
+                    fallback = ((settings.get("models") or {}).get("assistant") or "").strip()
+                    if fallback and fallback != model:
+                        switched = True
+                        yield _event("notice", message=f"{model} doesn't fit on your graphics card right now, so I'm using {fallback} instead.")
+                        yield _event("model", name=fallback)
+                        yield _event("retry")
+                        await make_room("")
+                        model, oom_tries, payload_extra = fallback, 0, {}
+                        continue
                 if recovered or not settings.get("auto_recover", True):
                     yield _event("error", message=f"Can't reach Ollama at {OLLAMA}. Is the Ollama app running?"
                                  if isinstance(exc, httpx.ConnectError) else "Ollama stopped responding. Try again in a moment.")

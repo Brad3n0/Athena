@@ -1601,6 +1601,9 @@ async function generateReply({ voice = false, model = null, route = null, think 
           thinkStart = 0;
         } else if (ev.type === 'summary') {
           chat.summary = { text: ev.text, upto: (summaryFor(chat)?.upto || 0) + ev.covered };
+        } else if (ev.type === 'model') {  // her model didn't fit on the graphics card: she switched, so keep using that one
+          reply.model = ev.name;
+          if (chat === state.chat) { chat.model = ev.name; renderModelButton(); }
         } else if (ev.type === 'notice') {
           toast(ev.message);
           if (voice) setVoiceState('thinking', ev.message);

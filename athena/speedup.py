@@ -13,7 +13,10 @@ import time
 from pathlib import Path
 from typing import Any
 
-WANTED = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0"}
+# OLLAMA_MAX_LOADED_MODELS=1: one model on the graphics card at a time. Ollama then waits for one to unload before
+# loading another, instead of trying to fit two big ones and running out of memory (it misjudges free memory on
+# some AMD cards).
+WANTED = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0", "OLLAMA_MAX_LOADED_MODELS": "1"}
 APP = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama app.exe"
 last = {"changed": False, "restarted": False, "note": ""}
 
@@ -81,7 +84,7 @@ def _restart_ollama(ollama_url: str) -> bool:
 def apply(enabled: bool, ollama_url: str) -> dict[str, Any]:
     """Turn the boost on (or off) for Ollama. Restarts Ollama once, only when something changed."""
     if not sys.platform.startswith("win"):
-        last.update(note="Set OLLAMA_FLASH_ATTENTION=1 and OLLAMA_KV_CACHE_TYPE=q8_0 for Ollama to use the speed boost")
+        last.update(note="Set OLLAMA_FLASH_ATTENTION=1, OLLAMA_KV_CACHE_TYPE=q8_0 and OLLAMA_MAX_LOADED_MODELS=1 for Ollama")
         return dict(last)
     try:
         current = _user_env()
@@ -110,4 +113,4 @@ def status(enabled: bool) -> tuple[str, str]:
         return "warn", str(exc)
     if not on:
         return "warn", "Not applied yet · restart Athena"
-    return ("warn", last["note"]) if last["note"] else ("ok", "Flash attention + compressed chat memory are on")
+    return ("warn", last["note"]) if last["note"] else ("ok", "Flash attention, compressed chat memory, one model at a time")
