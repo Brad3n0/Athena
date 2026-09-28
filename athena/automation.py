@@ -359,3 +359,76 @@ def window_control(action: str, app: str = "", monitor: int | None = None) -> di
 
 def close_app(app: str) -> dict[str, Any]:
     return window_control("close", app)
+
+
+# ------------------------------------------------------------------ find things by their words
+
+# Things worth clicking, best first. Plain text that's inside a link still works: we click where the words are.
+_CLICKABLE = {"HyperlinkControl": 0.06, "ButtonControl": 0.06, "ListItemControl": 0.05, "MenuItemControl": 0.05,
+              "TabItemControl": 0.05, "TreeItemControl": 0.04, "ImageControl": 0.02, "TextControl": 0.0,
+              "CheckBoxControl": 0.04, "RadioButtonControl": 0.04, "EditControl": 0.03, "DataItemControl": 0.03}
+
+
+def find_by_text(text: str, timeout: float = 5.0) -> dict[str, Any] | None:
+    """Find something in the window you're looking at by the words on it ("the video that says …").
+
+    Uses Windows UI Automation, the same thing screen readers use, so it reads the real text of buttons,
+    links, list items and web pages (Edge, Chrome, Discord, Spotify…). Returns the screen point to click,
+    scrolling the item into view if it's further down the page. None when nothing matches well.
+    """
+    _need_windows()
+    from .locate import norm, score
+
+    try:
+        import uiautomation as auto  # type: ignore
+    except ImportError:
+        return None
+    want = norm(text)
+    if len(want) < 2:
+        return None
+    best: tuple[float, Any] | None = None
+    deadline = time.time() + timeout
+    try:
+        with auto.UIAutomationInitializerInThread():
+            root = auto.GetForegroundControl()
+            if not root:
+                return None
+            for attempt in range(2):  # Chrome builds its page tree the first time it's asked; look twice
+                for control, _depth in auto.WalkControl(root, includeTop=False, maxDepth=60):
+                    if time.time() > deadline:
+                        break
+                    try:
+                        name = control.Name or ""
+                    except Exception:
+                        continue
+                    if not name or len(name) > 400:
+                        continue
+                    s = score(text, name)
+                    if want in norm(name):  # all the words the user said are in it
+                        s = max(s, 0.88)
+                    if s < 0.8:
+                        continue
+                    s += _CLICKABLE.get(control.ControlTypeName, 0)
+                    if best is None or s > best[0]:
+                        best = (s, control)
+                if best or time.time() > deadline:
+                    break
+                time.sleep(0.6)
+            if not best:
+                return None
+            control = best[1]
+            try:
+                if control.IsOffscreen:  # further down the page: scroll it into view first
+                    pattern = control.GetScrollItemPattern()
+                    if pattern:
+                        pattern.ScrollIntoView()
+                        time.sleep(0.5)
+            except Exception:
+                pass
+            rect = control.BoundingRectangle
+            if rect.width() <= 0 or rect.height() <= 0:
+                return None
+            return {"x": rect.xcenter(), "y": rect.ycenter(), "name": control.Name[:120],
+                    "kind": control.ControlTypeName.replace("Control", "").lower(), "score": round(best[0], 2)}
+    except Exception:
+        return None

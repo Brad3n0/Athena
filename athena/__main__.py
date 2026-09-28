@@ -46,15 +46,30 @@ def main() -> None:
 
     url = f"http://localhost:{args.port}"
     print(f"\n  Athena AI is running at {url}")
-    if host != "127.0.0.1":
-        from .phone import lan_urls
-
-        for phone_url in lan_urls(args.port):
-            print(f"  On your phone (same Wi-Fi): {phone_url}")
-    print("  Press Ctrl+C to stop.\n")
     if not args.no_browser:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
-    uvicorn.run("athena.server:app", host=host, port=args.port, log_level="warning")
+    if host == "127.0.0.1":
+        print("  Press Ctrl+C to stop.\n")
+        uvicorn.run("athena.server:app", host=host, port=args.port, log_level="warning")
+        return
+    # Phone access: the normal address, plus a secure (https) one so the phone's microphone works.
+    import asyncio
+
+    from . import phone
+    from .server import app
+
+    secure = phone.https_server(app, host, args.port)
+    for phone_url in phone.secure_urls() or phone.lan_urls(args.port):
+        print(f"  On your phone (same Wi-Fi): {phone_url}")
+    print("  Press Ctrl+C to stop.\n")
+    servers = [uvicorn.Server(uvicorn.Config(app, host=host, port=args.port, log_level="warning"))]
+    if secure:
+        servers.append(secure)
+
+    async def serve_all() -> None:
+        await asyncio.gather(*(srv.serve() for srv in servers))
+
+    asyncio.run(serve_all())
 
 
 def _default_host() -> str:

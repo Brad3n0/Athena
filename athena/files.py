@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -175,15 +176,26 @@ def find_files(query: str = "", folder: str = "", kind: str = "", contains: str 
     exts = CATEGORIES.get(kind.strip().capitalize()) if kind else None
     needle = contains.strip().lower()
     results, scanned = [], 0
+    squashed = re.sub(r"[^a-z0-9]", "", pattern)  # "crimson desert" also finds "CrimsonDesert" and "crimson_desert"
+
+    def matches(name: str) -> bool:
+        low = name.lower()
+        if wildcard:
+            return fnmatch.fnmatch(low, pattern)
+        return pattern in low or bool(squashed) and squashed in re.sub(r"[^a-z0-9]", "", low)
+
     for base in bases:
         for dirpath, dirnames, filenames in os.walk(base):
             dirnames[:] = [d for d in dirnames if not d.startswith((".", "$")) and d not in ("node_modules", "__pycache__", "AppData")]
+            if pattern and not exts and not needle:  # folders count too ("the folder my game is in")
+                for d in dirnames:
+                    if matches(d):
+                        results.append({"path": pretty(Path(dirpath) / d), "type": "folder"})
             for name in filenames:
                 scanned += 1
                 if scanned > MAX_WALK:
                     break
-                low = name.lower()
-                if pattern and not (fnmatch.fnmatch(low, pattern) if wildcard else pattern in low):
+                if pattern and not matches(name):
                     continue
                 p = Path(dirpath) / name
                 if exts is not None and p.suffix.lower() not in exts:

@@ -122,7 +122,9 @@ With PC control on (Settings → Abilities), just ask, typed or out loud:
 - **"How's my PC doing?"** CPU, memory, graphics card load and memory, free space, network, battery and the busiest apps. There's also a live view in **Settings → Jarvis**. Temperatures show for NVIDIA cards; Windows doesn't share AMD or CPU temperatures with apps.
 - **Windows:** *"put Discord on my second monitor"*, *"snap Chrome to the left"*, *"minimize everything"*, *"close Spotify"*.
 - **Typing and clicking:** *"type my address into Notepad"*, *"press ctrl+s"*, *"click the Join button"*. Clicking uses a screenshot, so it needs a vision model like `qwen2.5vl:7b`.
-- **Messages:** *"message Jake on Discord that I'm running 10 minutes late"*. She opens Discord, jumps to Jake with Ctrl+K, checks the right chat opened (with a vision model), and sends it. You see exactly who and what first and press **Allow**. WhatsApp works the same way (most reliable with a saved phone number). Texts (through Phone Link) and emails open as a ready draft for you to send. Add people in **Settings → Jarvis → Contacts** with their exact Discord username.
+- **Clicking by what it says:** *"click the video about the Crimson Desert trailer"* or *"click Subscribe"*. She reads the real words on the screen through Windows (like a screen reader does), scrolls down to it if needed, and clicks it. If the words aren't readable she looks at a screenshot instead.
+- **Finding where things are installed:** *"find the folder my game Crimson Desert is in"* looks where games really live: Steam libraries, Epic, Xbox / Game Pass, and your installed programs on every drive. Loose names, typos and short forms like *cs2* work. Regular file search also ignores spaces and capitals, and finds folders too.
+- **Messages:** *"message Jake on Discord that I'm running 10 minutes late"*. She opens Discord, jumps to Jake with Ctrl+K, checks the right chat opened (with a vision model), and sends it. You see exactly who and what first and press **Allow**. WhatsApp works the same way (most reliable with a saved phone number). Texts (through Phone Link) and emails open as a ready draft for you to send. Add people in **Settings → Jarvis → Contacts** with their exact Discord username, plus any **nicknames** you use for them (*"Jay, my brother"*), so *"message my brother"* just works. You can also just tell her: *"Jay is Jake Miller on Discord, jakey_2009"*.
   - **Group chats:** say the group's name, like *"message the Squad group chat on Discord: game at 8"*.
   - **Instagram, Messenger and Telegram:** *"message @jake.23 on Instagram: you up?"* opens your chat with them in your browser (be logged in there) and types it.
   - **Any other app or website** (Snapchat, Slack, Teams, X, Reddit…): *"message Mia on Snapchat: omw"*. She opens it, finds the search box, the person and the message box on screen with your vision model, checks it's the right chat, then sends. This needs a vision model like qwen2.5vl:7b, and works best with the app already signed in.
@@ -138,12 +140,13 @@ Athena runs on your PC, and your phone can use her over your home Wi-Fi.
 1. On the PC, set a PIN in **Settings → Privacy & data** (so nobody else on the Wi-Fi can get in).
 2. In **Settings → Desktop app**, tick **Let my phone use Athena**.
 3. Close Athena and open her again with **start.bat**. If Windows asks whether Python can use your network, tick **Private networks** and click **Allow**.
-4. Go back to **Settings → Desktop app** and scan the QR code with your phone's camera (or type the address it shows, like `http://192.168.1.20:8765`). Enter your PIN.
-5. Tip: in your phone's browser choose **Add to Home Screen**, and Athena opens like an app with her own icon.
+4. Go back to **Settings → Desktop app** and scan the QR code with your phone's camera (or type the address it shows, like `https://192.168.1.20:8766`).
+5. The first time, the phone warns that the connection isn't private. That's expected: the address is secured by your own PC's certificate, not a company's. Tap **Advanced → Proceed** (Android) or **Show Details → visit this website** (iPhone). Then enter your PIN.
+6. Tip: in your phone's browser choose **Add to Home Screen**, and Athena opens like an app with her own icon.
 
 Good to know:
 - The PC has to be on with Athena running. Everything still happens on the PC, so *"open Spotify"* opens it on the PC, which also makes your phone a remote control.
-- Typing, pictures, research, study tools and everything else work from the phone. The mic and voice chat only work on the PC, because phone browsers only allow the mic on secure (https) sites.
+- Everything works from the phone, **including voice chat and the mic**. That's why Athena uses the secure https address; phone browsers only allow the mic on secure pages.
 - From the phone you can't change or remove the PIN, or restore backups; do those on the PC.
 - **Away from home:** install the free **Tailscale** app on both the PC and your phone and sign in to both with the same account. Then open `http://<your-pc-name>:8765` on your phone from anywhere.
 

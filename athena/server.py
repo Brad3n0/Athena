@@ -192,7 +192,12 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
                      "The app draws it as an interactive graph. Use it whenever a picture of a function helps.")
     if tools_on:
         groups = {t.group for t in enabled_tools(settings)}
-        abilities = ["You have tools. Use them whenever they help, then briefly tell the user what you did."]
+        abilities = ["You have tools. Use them whenever they help, then briefly tell the user what you did. "
+                     "The user talks casually and won't spell everything out: work out what they actually mean and act on "
+                     "that, not on their exact words (e.g. 'find the folder my game X is in' means the game's install folder; "
+                     "'message my brother' means the contact they call that; 'click the video about cats' means the video "
+                     "whose title mentions cats). If a couple of things could fit, pick the most likely one and say which. "
+                     "Only ask when it's genuinely unclear or the action can't be undone."]
         if "tasks" in groups:
             abilities.append("- Tasks & timers: when the user asks you to remind them or add, finish or remove a to-do, use the task tools.")
         if "memory" in groups:
@@ -202,7 +207,9 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
             abilities.append(
                 f"- Files: you can find, read, move, organize, create and delete files inside these folders only: {folders}. "
                 "Use find_files or list_folder to locate things before acting, and use short paths like 'Downloads/report.pdf'. "
-                "Changes may need the user's approval on screen; if they decline, don't retry. You can undo your last change."
+                "Changes may need the user's approval on screen; if they decline, don't retry. You can undo your last change. "
+                "For where a game or app is installed ('the folder my game Crimson Desert is in', 'open Minecraft's folder') use "
+                "find_installed, which searches Steam, Epic, Xbox and installed programs anywhere on the PC."
             )
         if "tasks" in groups:
             abilities.append("- Reminders: set_reminder pops up and speaks at the exact time (compute the ISO date/time from now).")
@@ -212,7 +219,9 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
             abilities.append("- Like Jarvis: pc_status for 'how's my PC doing'; window_control to focus, minimize, maximize, close or move "
                              "windows between monitors; type_text and press_keys to operate apps; click_on_screen to click things you "
                              "can see; send_message to message people or group chats on Discord (default), WhatsApp, Instagram, Messenger, "
-                             "Telegram, text, email or any other app or site the user names (look up "
+                             "Telegram, text, email or any other app or site the user names; people may be called by a nickname or "
+                             "'my brother' (list_contacts has nicknames; when the user says who someone is, save it with "
+                             "add_contact) (look up "
                              "list_contacts when unsure who someone is); routines (list/run/create_routine) chain several of these. "
                              "For multi-step app tasks, work step by step: open or focus the app, then type/press keys/click, and "
                              "use look_at_screen to check the result when it matters. Keep spoken confirmations short, like Jarvis.")
@@ -667,8 +676,9 @@ async def verify_chat(name: str, app: str) -> bool | None:
     except pc.PCError:
         return None
     answer = await _vision(f"This is a screenshot of {app}. Look at the name at the top of the conversation that is open right now. "
-                           f"Is the open conversation, DM or channel with '{name}' (the same name, ignoring capital letters)? "
-                           "Reply with only YES or NO.", image, 8)
+                           f"Is the open conversation, DM, group chat or channel with any of these (they're all names for the same "
+                           f"person or group): {name}? Display names and nicknames count; ignore capital letters, emojis and small "
+                           "differences. Reply with only YES or NO.", image, 8)
     if answer is None:
         return None
     return "YES" in answer.upper() and "NO" not in answer.upper().replace("NOW", "")
@@ -1913,9 +1923,10 @@ async def phone_access(request: Request, call_next):
 async def phone_info(request: Request):
     from . import phone
 
-    port = request.url.port or 8765
+    port = (request.url.port or 8765) - (1 if request.url.scheme == "https" else 0)  # the regular (http) port
     return {"enabled": bool(store.get_settings().get("phone_access")), "pin_set": security.pin_set(),
             "listening": phone.listening_on_network(), "urls": await run_in_threadpool(phone.lan_urls, port),
+            "secure_urls": await run_in_threadpool(phone.secure_urls), "secure": request.url.scheme == "https",
             "this_is_phone": not _from_this_pc(request)}
 
 

@@ -605,7 +605,9 @@ function renderWelcome() {
 /** Turn microphone errors into what to actually do about them. */
 function micHelp(e) {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-    return 'Voice needs the microphone, which browsers only allow on the PC itself. Open Athena at http://localhost:8765 on your PC.';
+    return location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+      ? 'Voice needs the microphone, which browsers only allow on secure pages. Open Athena at http://localhost:8765.'
+      : 'On your phone, voice needs Athena\'s secure address (it starts with https://). Scan the QR code in Settings → Desktop app on your PC.';
   }
   if (e?.name === 'NotFoundError' || /not found/i.test(e?.message || '')) return 'No microphone found. Plug one in (or check Windows Settings → Sound → Input), then try again.';
   if (e?.name === 'NotAllowedError' || /denied|allowed/i.test(e?.message || '')) {
@@ -1070,6 +1072,7 @@ const STEP_TEXT = {
   press_keys: [(a) => `Pressing ${a.keys}`, (a) => `Pressed ${a.keys}`],
   click_on_screen: [(a) => `Finding ${q(a.target)} on screen`, (a) => `Clicked ${q(a.target)}`],
   send_message: [(a) => `Messaging ${a.to} on ${a.app || 'Discord'}`, (a, r) => r.draft_opened ? `Draft ready for ${r.to}. Press Send` : `Sent to ${r.to} on ${r.app === 'sms' ? 'text' : r.app}`],
+  find_installed: [(a) => `Looking for where ${a.name} is installed`, (a, r) => (r.best ? `Found ${r.best.name}${r.opened ? ' and opened its folder' : ''}` : `Couldn't find ${a.name} installed`)],
   list_contacts: [() => 'Checking your contacts', (a, r) => `${r.contacts?.length || 0} contacts`],
   add_contact: [(a) => `Saving ${a.name}`, (a, r) => `Saved ${r.saved?.name || a.name}`],
   list_routines: [() => 'Checking your routines', (a, r) => `${r.routines?.length || 0} routines`],
@@ -1637,16 +1640,21 @@ async function loadPhone() {
       If Windows asks whether Python can use your network, tick <b>Private networks</b> and click <b>Allow</b>.</p>`;
     return;
   }
-  const url = info.urls[0];
+  const secure = info.secure_urls?.length ? info.secure_urls : null;
+  const urls = secure || info.urls;
+  const url = urls[0];
   if (!url) { box.innerHTML = '<p class="small">This PC doesn\'t seem to be on a network right now.</p>'; return; }
   const qr = qrcode(0, 'M');
   qr.addData(url);
   qr.make();
   box.innerHTML = `<div class="phone-qr">${qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true })}</div>
     <div class="phone-steps"><p class="small"><b>Scan this with your phone's camera</b>, or type this address in its browser:</p>
-      <p class="phone-url">${info.urls.map((u) => `<code>${escapeHtml(u)}</code>`).join('<br>')}</p>
-      <p class="muted small">Then enter your PIN. Tip: use your browser's <b>Add to Home Screen</b> and Athena opens like an app.
-      Typing works everywhere; the mic and voice chat need the PC (phone browsers only allow the mic on secure https sites).</p></div>`;
+      <p class="phone-url">${urls.map((u) => `<code>${escapeHtml(u)}</code>`).join('<br>')}</p>
+      ${secure ? `<p class="muted small"><b>The first time, your phone warns that the connection isn't private.</b> That's expected: the
+      address is secured by your own PC, not a company. Tap <b>Advanced → Proceed</b> (Android) or <b>Show Details → visit this
+      website</b> (iPhone). Then enter your PIN, and voice chat works on your phone too.</p>`
+      : '<p class="muted small">Then enter your PIN. Typing works; for voice on the phone, update Athena so she can make her secure address.</p>'}
+      <p class="muted small">Tip: use your browser's <b>Add to Home Screen</b> and Athena opens like an app.</p></div>`;
 }
 $('#setPhone').addEventListener('change', async (e) => {
   await saveSettings({ phone_access: e.target.checked });
@@ -2857,7 +2865,7 @@ async function loadJarvis() {
     </div>`).join('') : '<p class="muted small">No routines yet. Make one here, or just ask: <i>"make a goodnight routine that closes Chrome and Discord and locks my PC"</i>.</p>';
   $('#contactList').innerHTML = contacts.length ? contacts.map((c) => `
     <div class="jv-item" data-cid="${c.id}"><div class="jv-main"><b>${escapeHtml(c.name)}</b>
-      <span class="muted small">${[c.discord && `Discord: ${escapeHtml(c.discord)}`, c.instagram && `Instagram: @${escapeHtml(c.instagram)}`, c.snapchat && `Snapchat: ${escapeHtml(c.snapchat)}`, c.telegram && `Telegram: @${escapeHtml(c.telegram)}`, c.phone && `📱 ${escapeHtml(c.phone)}`, c.email && `✉ ${escapeHtml(c.email)}`].filter(Boolean).join(' · ') || 'No details yet'}</span></div>
+      <span class="muted small">${[c.nicknames && `aka ${escapeHtml(c.nicknames)}`, c.discord && `Discord: ${escapeHtml(c.discord)}`, c.instagram && `Instagram: @${escapeHtml(c.instagram)}`, c.snapchat && `Snapchat: ${escapeHtml(c.snapchat)}`, c.telegram && `Telegram: @${escapeHtml(c.telegram)}`, c.phone && `📱 ${escapeHtml(c.phone)}`, c.email && `✉ ${escapeHtml(c.email)}`].filter(Boolean).join(' · ') || 'No details yet'}</span></div>
       <div class="jv-actions"><button type="button" data-ct="delete" title="Delete">${ICONS.trash}</button></div></div>`).join('') : '<p class="muted small">No contacts yet.</p>';
 }
 
@@ -2919,10 +2927,10 @@ $('#routineList').onclick = async (e) => {
   }
 };
 $('#ctSave').onclick = async () => {
-  const data = { name: $('#ctName').value, discord: $('#ctDiscord').value, instagram: $('#ctInstagram').value, snapchat: $('#ctSnapchat').value, telegram: $('#ctTelegram').value, phone: $('#ctPhone').value, email: $('#ctEmail').value };
+  const data = { name: $('#ctName').value, nicknames: $('#ctNicknames').value, discord: $('#ctDiscord').value, instagram: $('#ctInstagram').value, snapchat: $('#ctSnapchat').value, telegram: $('#ctTelegram').value, phone: $('#ctPhone').value, email: $('#ctEmail').value };
   try {
     await api('/api/contacts', json('POST', data));
-    ['#ctName', '#ctDiscord', '#ctInstagram', '#ctSnapchat', '#ctTelegram', '#ctPhone', '#ctEmail'].forEach((id) => { $(id).value = ''; });
+    ['#ctName', '#ctNicknames', '#ctDiscord', '#ctInstagram', '#ctSnapchat', '#ctTelegram', '#ctPhone', '#ctEmail'].forEach((id) => { $(id).value = ''; });
     loadJarvis();
   } catch (err) { toast(err.message, 'error'); }
 };

@@ -6,6 +6,7 @@ Models without tool support simply chat without them.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -233,6 +234,19 @@ def _pc(fn):
     return run
 
 
+def _find_installed(a):
+    from . import locate
+    out = locate.find_installed(str(a.get("name", "")))
+    best = out.get("best")
+    if a.get("open") and best and best.get("exists"):
+        try:
+            locate.open_folder(best["folder"])
+            out["opened"] = best["folder"]
+        except OSError as exc:
+            out["open_error"] = str(exc)
+    return out
+
+
 TOOLS: list[Tool] = [
     Tool("get_current_datetime", "core", "Get the current local date, time and weekday.", run=_now),
     Tool("set_timer", "core", "Start a countdown timer / reminder that alerts the user in the Athena window.",
@@ -259,7 +273,13 @@ TOOLS: list[Tool] = [
 
     Tool("list_folder", "files", "List what's inside a folder. Call with no path to see which folders you may use.",
          {"path": S("Folder, e.g. 'Downloads' or 'Documents/Taxes'"), "show_hidden": {"type": "boolean"}}, run=lambda a: files.list_folder(**a)),
-    Tool("find_files", "files", "Search the user's allowed folders for files by name, type or contents.",
+    Tool("find_installed", "files", "Find where a game or app is installed on this PC (Steam, Epic, Xbox/Game Pass, installed "
+         "programs, game folders on every drive). Use for 'where is X installed', 'find the folder my game X is in', "
+         "'open X's folder'. Understands loose names (spaces, capitals, ™ don't matter).",
+         {"name": S("The game or app, as the user said it (e.g. 'crimson desert')"),
+          "open": {"type": "boolean", "description": "Open the best match in File Explorer"}}, ["name"], run=_find_installed),
+    Tool("find_files", "files", "Search the user's allowed folders for files AND folders by name, type or contents. Loose names "
+         "work ('crimson desert' finds 'CrimsonDesert'). For where a game or app is installed, use find_installed instead.",
          {"query": S("Part of the file name, or a pattern like '*.pdf'"), "folder": S("Only search inside this folder"),
           "kind": S("Type of file", enum=["images", "videos", "music", "documents", "spreadsheets", "presentations", "archives", "installers", "code"]),
           "contains": S("Text that must appear inside the file (text files only)")},
@@ -406,7 +426,7 @@ async def _send_message(a, ctx):
             ready = await run_in_threadpool(messaging.whatsapp_open_chat, p["target"], p["to"], p["text"])
         if not ready:
             # Before typing anything, check the right chat opened (needs a vision model; skipped without one).
-            ok = await ctx["verify_chat"](p["target"] or p["to"], "Discord" if p["app"] == "discord" else "WhatsApp")
+            ok = await ctx["verify_chat"](" / ".join(p["aliases"]) or p["to"], "Discord" if p["app"] == "discord" else "WhatsApp")
             if ok is False:
                 await run_in_threadpool(automation.press_keys, "esc")
                 return {"error": f"I couldn't find a chat with {p['to']}, so I didn't send anything. Try their exact "
@@ -455,7 +475,7 @@ async def _send_on_screen(p, ctx):
             return {"error": f"I searched {app} for {target} but couldn't see them in the results, so I didn't send anything."}
         await asyncio.sleep(2.5)
     # Never type into the wrong chat: check the open conversation is with the right person first.
-    ok = await ctx["verify_chat"](target, app)
+    ok = await ctx["verify_chat"](" / ".join(p.get("aliases") or [target]), app)
     if ok is False:
         return {"error": f"The chat that opened in {app} doesn't look like {who}'s, so I didn't send anything. "
                          f"Try their exact username, or save it in Settings → Jarvis → Contacts."}
@@ -467,21 +487,42 @@ async def _send_on_screen(p, ctx):
     return {"sent": True, "app": app, "to": who, "text": p["text"], "checked_chat": ok is True}
 
 
+def _words_to_find(a) -> str:
+    """The words on the thing to click: the 'text' argument, or quoted words in the description
+    ("the video that says 'cat compilation'"), or what follows 'says' / 'called' / 'named' / 'titled'."""
+    text = str(a.get("text") or "").strip()
+    if text:
+        return text
+    target = str(a.get("target") or "")
+    m = re.search(r"[\"“'‘]([^\"”'’]{2,})[\"”'’]", target) or \
+        re.search(r"\b(?:says?|saying|called|named|titled|labell?ed)\s+(.+)$", target, re.I)
+    return m.group(1).strip(" .") if m else ""
+
+
 async def _click(a, ctx):
     from starlette.concurrency import run_in_threadpool
 
     from . import automation
     target = str(a.get("target", "")).strip()
-    if not target:
+    words = _words_to_find(a)
+    if not target and not words:
         return {"error": "What should I click?"}
-    spot = await ctx["locate_on_screen"](target)
-    if spot.get("error"):
-        return spot
+    button, double = str(a.get("button") or "left"), bool(a.get("double"))
     try:
-        done = await run_in_threadpool(automation.click, spot["x"], spot["y"], str(a.get("button") or "left"), bool(a.get("double")))
+        # 1) By its words, straight from Windows (exact, and scrolls down the page to it if needed)
+        if words:
+            hit = await run_in_threadpool(automation.find_by_text, words)
+            if hit:
+                done = await run_in_threadpool(automation.click, hit["x"], hit["y"], button, double)
+                return {**done, "target": target or words, "clicked": hit["name"], "found_by": "text"}
+        # 2) By looking at a screenshot with the vision model
+        spot = await ctx["locate_on_screen"](target + (f" (it shows the words '{words}')" if words and words not in target else ""))
+        if spot.get("error"):
+            return spot
+        done = await run_in_threadpool(automation.click, spot["x"], spot["y"], button, double)
     except automation.ControlError as exc:
         return {"error": str(exc)}
-    return {**done, "target": target}
+    return {**done, "target": target, "found_by": "screenshot"}
 
 
 def _contacts(a):
@@ -575,9 +616,12 @@ TOOLS += [
          "f5, space. Several: 'ctrl+a, delete'.",
          {"keys": S("Keys, e.g. ctrl+shift+t"), "app": S("Optional app to send them to"), "times": {"type": "integer", "description": "Repeat count"}},
          ["keys"], run=_ctl(_keys), approve=_safe(lambda a: f"Press {a.get('keys')}" + (f" in {a.get('app')}" if a.get("app") else ""))),
-    Tool("click_on_screen", "screen", "Click something visible on screen, described in words (e.g. 'the blue Join button', "
-         "'the search box'). Uses a screenshot to find it. For typing afterwards use type_text.",
-         {"target": S("What to click, described clearly"), "double": {"type": "boolean", "description": "Double-click"},
+    Tool("click_on_screen", "screen", "Click something on screen: a video, link, button, song, chat, menu item... Describe it, and "
+         "put the words shown on it in 'text' when there are any (e.g. a video's title). Finds it by its words first "
+         "(scrolling down to it if needed), then by looking at the screen. For typing afterwards use type_text.",
+         {"target": S("What to click, described clearly (e.g. 'the video about the Crimson Desert trailer')"),
+          "text": S("Words shown on it, if any, e.g. the video title or button label (partial is fine)"),
+          "double": {"type": "boolean", "description": "Double-click"},
           "button": S("left or right", enum=["left", "right"])}, ["target"], arun=_click,
          approve=_safe(lambda a: f"Click \"{a.get('target')}\" on your screen")),
     Tool("send_message", "pc", "Send a message to a person or group chat on any app or website: Discord (default), WhatsApp, "
@@ -590,7 +634,7 @@ TOOLS += [
          ["to", "text"], arun=_send_message, approve=_safe(_approve_message)),
     Tool("list_contacts", "pc", "List the user's saved contacts (names with their Discord username, phone and email).", run=_contacts),
     Tool("add_contact", "pc", "Save or update a contact so messages reach the right person.",
-         {"name": S("Name"), "discord": S("Discord username"), "instagram": S("Instagram username"), "snapchat": S("Snapchat username"),
+         {"name": S("Name"), "nicknames": S("Other names the user calls them, comma separated (e.g. 'Jay, my brother')"), "discord": S("Discord username"), "instagram": S("Instagram username"), "snapchat": S("Snapchat username"),
           "telegram": S("Telegram username"), "phone": S("Phone number"), "email": S("Email address")}, ["name"],
          run=_ctl(lambda **a: _add_contact(a))),
     Tool("list_routines", "pc", "List the user's routines (one phrase that runs several steps).", run=_routines),

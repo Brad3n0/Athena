@@ -250,6 +250,12 @@ def main(host: str = "127.0.0.1", port: int = 8765, hidden: bool = False) -> Non
     config = uvicorn.Config(server.app, host=host, port=port, log_level="warning")
     srv = uvicorn.Server(config)
     threading.Thread(target=srv.run, daemon=True, name="athena-server").start()
+    if host not in ("127.0.0.1", "localhost"):  # phone access: a secure address too, so the phone's mic works
+        from .phone import https_server
+
+        secure = https_server(server.app, host, port)
+        if secure:
+            threading.Thread(target=secure.run, daemon=True, name="athena-https").start()
     for _ in range(100):
         if _port_open(port):
             break

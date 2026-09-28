@@ -11,6 +11,9 @@ python-docx>=1.1
 mss>=9.0
 pyperclip>=1.8
 Pillow>=10.0
+cryptography>=41  # secure address for voice chat on your phone
 # Desktop app (tray icon + global hotkey) — Windows/macOS
 pystray>=0.19; sys_platform == "win32" or sys_platform == "darwin"
 pynput>=1.7; sys_platform == "win32" or sys_platform == "darwin"
+# Click things by their words (reads the screen like a screen reader) — Windows
+uiautomation>=2.0.18; sys_platform == "win32"

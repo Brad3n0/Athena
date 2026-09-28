@@ -52,6 +52,7 @@ def save_contact(data: dict[str, Any], contact_id: str | None = None) -> dict[st
     contacts = list_contacts()
     existing = next((c for c in contacts if c["id"] == contact_id), None) or next((c for c in contacts if c["name"].lower() == name.lower()), None)
     fields = {k: str(data.get(k) or "").strip()[:120] for k in (*HANDLE_FIELDS, "notes")}
+    fields["nicknames"] = ", ".join(n.strip() for n in str(data.get("nicknames") or "").split(",") if n.strip())[:200]
     if existing:
         existing.update({"name": name, **{k: v for k, v in fields.items() if v or k in data}})
         contact = existing
@@ -69,13 +70,27 @@ def delete_contact(contact_id: str) -> bool:
     return len(kept) != len(contacts)
 
 
+def nicknames(contact: dict[str, Any]) -> list[str]:
+    return [n.strip() for n in (contact.get("nicknames") or "").split(",") if n.strip()]
+
+
+def _plain(text: str) -> str:
+    """'My Brother' → 'brother', '@Jay!' → 'jay'."""
+    t = re.sub(r"^(my|our)\s+", "", (text or "").strip().lower())
+    return re.sub(r"[^\w\s.]", "", t).strip()
+
+
 def find_contact(name: str) -> dict[str, Any] | None:
-    q = (name or "").strip().lower()
+    q = (name or "").strip().lower().lstrip("@")
     if not q:
         return None
     contacts = list_contacts()
     for c in contacts:
         if q in (c["name"].lower(), *(c.get(k, "").lower().lstrip("@") for k in HANDLE_FIELDS if c.get(k))):
+            return c
+    plain = _plain(q)
+    for c in contacts:  # nicknames: "Jay", "my brother", "bro"
+        if plain and plain in (_plain(n) for n in nicknames(c)):
             return c
     firsts = {c["name"].lower().split()[0]: c for c in contacts if c["name"].split()}
     if q in firsts:
@@ -125,7 +140,8 @@ def plan(app: str, to: str, text: str, subject: str = "") -> dict[str, Any]:
     if kind in ("sms", "email") and not target:
         raise MessageError(f"I don't have {'a phone number' if kind == 'sms' else 'an email address'} for {who}. "
                            f"Add it in Settings → Jarvis → Contacts, or tell me: 'add {who}'s {'number' if kind == 'sms' else 'email'}'.")
-    return {"app": kind, "label": label, "to": who, "target": target, "text": text, "subject": subject.strip()}
+    aliases = [a for a in dict.fromkeys([target, who, *nicknames(contact), *(contact.get(k, "") for k in HANDLE_FIELDS[:4])]) if a]
+    return {"app": kind, "label": label, "to": who, "target": target, "text": text, "subject": subject.strip(), "aliases": aliases}
 
 
 def describe(p: dict[str, Any]) -> str:
