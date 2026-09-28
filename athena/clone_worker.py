@@ -29,11 +29,15 @@ def main():
         reply({"error": f"Couldn't start the custom voice: {exc}"})
         return
     reply({"ready": True, "device": device})
+    current = None  # the recording the model is tuned to right now (learning a voice takes a moment; do it once)
     for line in sys.stdin:
         try:
             req = json.loads(line)
-            wav = model.generate(req["text"], audio_prompt_path=req["sample"],
-                                 exaggeration=float(req.get("exaggeration", 0.5)), cfg_weight=float(req.get("cfg", 0.5)))
+            exaggeration = float(req.get("exaggeration", 0.5))
+            if req["sample"] != current:
+                model.prepare_conditionals(req["sample"], exaggeration=exaggeration)
+                current = req["sample"]
+            wav = model.generate(req["text"], exaggeration=exaggeration, cfg_weight=float(req.get("cfg", 0.5)))
             samples = wav.squeeze().detach().cpu().numpy().clip(-1.0, 1.0)
             pcm = (samples * 32767).astype("<i2").tobytes()
             with wave.open(req["out"], "wb") as w:

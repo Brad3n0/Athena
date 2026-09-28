@@ -1145,9 +1145,11 @@ async def text_to_speech(request: Request):
     settings = store.get_settings()
     lang = str(body.get("lang") or "en")[:2]
     # Custom voice (English): used when chosen and set up; otherwise the natural Kokoro voice below.
-    if settings.get("tts_engine") == "custom" and custom_voice.ready() and lang == "en":
+    engine = str(body.get("engine") or settings.get("tts_engine") or "")
+    if engine == "custom" and custom_voice.ready() and lang == "en":
         try:
-            return Response(await run_in_threadpool(custom_voice.synthesize, text), media_type="audio/wav")
+            wav = await run_in_threadpool(custom_voice.synthesize, text, str(body.get("custom_voice") or "") or None)
+            return Response(wav, media_type="audio/wav")
         except custom_voice.VoiceError:
             pass  # fall back to Kokoro for this sentence
     if not tts.available():
@@ -1184,12 +1186,11 @@ async def custom_voice_save(file: UploadFile = File(...), name: str = Form(""), 
     return {"ok": True, "sample": meta}
 
 
-@app.delete("/api/custom-voice")
-async def custom_voice_remove():
+@app.delete("/api/custom-voice/{voice_id}")
+async def custom_voice_remove(voice_id: str):
     from . import custom_voice
 
-    await run_in_threadpool(custom_voice.remove_sample)
-    return {"ok": True}
+    return {"ok": await run_in_threadpool(custom_voice.remove, voice_id)}
 
 
 @app.post("/api/custom-voice/warm")

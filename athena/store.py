@@ -97,6 +97,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # "auto" uses Kokoro (natural offline voice) when installed, else the system voices
     "tts_engine": "auto",
     "kokoro_voice": "athena_silk",
+    "custom_voice_id": "",  # which saved custom voice to use
+    "persona_voices": {},  # personality id -> voice ("" = usual, a Kokoro voice, or "custom:<id>")
     "voice_pitch": 0.95,
     # "assistant" = helpful and professional, "companion" = playful, warm friend
     "persona": "assistant",

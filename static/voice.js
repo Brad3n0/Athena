@@ -228,7 +228,7 @@ export class Speaker {
     const audio = fetch('/api/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, voice: settings.kokoro_voice, speed: rate / pitch, lang }),
+      body: JSON.stringify({ text, voice: settings.kokoro_voice, speed: rate / pitch, lang, engine: settings.tts_engine, custom_voice: settings.custom_voice_id }),
     }).then((r) => {
       if (r.status === 422) (this.badLangs ||= new Set()).add(lang); // natural voice can't speak it: system voices from now on
       return r.ok ? r.arrayBuffer() : Promise.reject(new Error('tts failed'));

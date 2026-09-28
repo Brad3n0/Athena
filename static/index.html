@@ -283,6 +283,7 @@
         <label class="check"><input type="checkbox" id="setShooting" /> Shooting stars now and then</label>
         <label class="check"><input type="checkbox" id="setSeasonal" /> Seasonal effects (snow in December, falling leaves in fall, fireworks at New Year)</label>
         <label>Personality <select id="setPersona"></select></label>
+        <label>Voice for this personality <select id="setPersonaVoice"><option value="">Same as usual (Settings → Voice)</option></select></label>
         <details class="persona-editor" id="personaEditor">
           <summary>Create your own personality</summary>
           <ul class="memories" id="personaList"></ul>
@@ -535,10 +536,14 @@
           <summary>🎙 Custom voice</summary>
           <p class="small" id="cvStatus"></p>
           <p class="muted small">Give Athena a 10–30 second recording of one person talking calmly, with no music or other voices. She learns the voice on this PC; the recording never leaves it. English only (other languages use the natural voice).</p>
-          <label>Recording <input type="file" id="cvFile" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" /></label>
-          <label>Whose voice is it? <input id="cvName" placeholder="e.g. Sarah" maxlength="40" /></label>
-          <label class="check"><input type="checkbox" id="cvConsent" /> <span>This person has given me permission to use their voice</span></label>
-          <div class="cv-actions"><button type="button" class="primary" id="cvSave">Save voice</button><button type="button" class="ghost" id="cvTest">▶ Test</button><button type="button" class="ghost danger" id="cvRemove">Remove</button></div>
+          <ul class="cv-list" id="cvList"></ul>
+          <div class="cv-add">
+            <b class="small">Add a voice</b>
+            <label>Recording <input type="file" id="cvFile" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" /></label>
+            <label>Whose voice is it? <input id="cvName" placeholder="e.g. Sarah" maxlength="40" /></label>
+            <label class="check"><input type="checkbox" id="cvConsent" /> <span>This person has given me permission to use their voice</span></label>
+            <div class="cv-actions"><button type="button" class="primary" id="cvSave">Add voice</button></div>
+          </div>
         </details>
         <label>Language
           <select id="setLanguage">

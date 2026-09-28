@@ -84,10 +84,18 @@ const state = {
 
 const mic = new Mic();
 function voiceSettings() {
-  const custom = (state.settings.personas || []).find((p) => p.id === state.settings.persona);
-  return custom?.voice ? { ...state.settings, kokoro_voice: custom.voice } : state.settings;
+  // The voice for the current personality: its own choice (a natural voice or a custom one), else the usual voice.
+  const s = state.settings;
+  const custom = (s.personas || []).find((p) => p.id === s.persona);
+  const choice = (s.persona_voices || {})[s.persona] || custom?.voice || '';
+  if (choice.startsWith('custom:')) return { ...s, tts_engine: 'custom', custom_voice_id: choice.slice(7) };
+  if (choice) return { ...s, kokoro_voice: choice, ...(s.tts_engine === 'custom' ? { tts_engine: 'auto' } : {}) };
+  return s;
 }
-const speaker = new Speaker(() => ({ settings: voiceSettings(), kokoro: !!state.status.kokoro || (state.settings.tts_engine === 'custom' && !!state.status.custom_voice), lang: speakingLanguage() }));
+const speaker = new Speaker(() => {
+  const settings = voiceSettings();
+  return { settings, kokoro: !!state.status.kokoro || (settings.tts_engine === 'custom' && !!state.status.custom_voice), lang: speakingLanguage() };
+});
 
 /** The language she should speak: the one you chose, or (on auto) the one you last spoke. */
 function speakingLanguage() {
@@ -1670,24 +1678,57 @@ function setResearch(on) {
 }
 $('#researchBtn').onclick = () => setResearch(!state.researchNext);
 
-// ------------------------------------------------------------ custom voice (learned from a recording)
+// ------------------------------------------------------------ custom voices (learned from recordings)
+let customVoices = [];
 async function loadCustomVoice() {
   let st;
   try { st = await api('/api/custom-voice'); } catch { return; }
+  customVoices = st.voices || [];
   const el = $('#cvStatus');
   if (!st.installed) {
     el.innerHTML = '<b>Not installed yet.</b> Close Athena, double-click <b>install-custom-voice</b> (the Windows Batch File) in the Athena folder, wait for “Done”, then start Athena again. It downloads about 3–4 GB.';
-  } else if (!st.sample) {
-    el.innerHTML = '✓ Installed. Now add a recording below.';
+  } else if (!customVoices.length) {
+    el.innerHTML = '✓ Installed. Add a voice below.';
   } else {
-    el.innerHTML = `✓ Using <b>${escapeHtml(st.sample.name)}</b>’s voice.` +
-      (st.running ? ` Ready${st.device === 'cpu' ? ' (on the processor, so each sentence takes a few seconds)' : ''}.` : ' It loads when she first speaks (can take a minute).') +
-      (state.settings.tts_engine !== 'custom' ? ' Choose “Custom voice” above to use it.' : '');
-    if (st.sample.name) $('#cvName').value = st.sample.name;
+    const using = customVoices.find((v) => v.id === st.active);
+    el.innerHTML = (state.settings.tts_engine === 'custom' && using ? `✓ Speaking as <b>${escapeHtml(using.name)}</b>.` : '✓ Ready. Choose “Custom voice” above, or pick a voice per personality in Settings → General.') +
+      (st.running && st.device === 'cpu' ? ' Each sentence takes a few seconds on the processor.' : '');
   }
   if (st.error) el.innerHTML += `<br><span class="error-text">${escapeHtml(st.error)}</span>`;
-  $('#cvTest').disabled = $('#cvRemove').disabled = !st.sample;
+  $('#cvList').innerHTML = customVoices.map((v) => `<li data-cv="${escapeHtml(v.id)}" class="${v.id === st.active ? 'on' : ''}">
+      <label class="cv-pick"><input type="radio" name="cvActive" ${v.id === st.active ? 'checked' : ''} /> <b>${escapeHtml(v.name)}</b></label>
+      <button type="button" class="ghost" data-cv-act="test">▶ Test</button>
+      <button type="button" class="ghost danger" data-cv-act="remove" title="Remove this voice">${ICONS.trash}</button></li>`).join('');
+  fillPersonaVoices();
 }
+$('#cvList').onclick = async (e) => {
+  const li = e.target.closest('[data-cv]');
+  if (!li) return;
+  const id = li.dataset.cv, voice = customVoices.find((v) => v.id === id);
+  const act = e.target.closest('[data-cv-act]')?.dataset.cvAct;
+  if (act === 'test') {
+    toast(`Loading ${voice?.name || 'the voice'}… the first time can take a minute.`);
+    try {
+      const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `Hi! I'm ${voice?.name || 'your custom voice'}. This is how I sound.`, engine: 'custom', custom_voice: id, lang: 'en' }) });
+      if (!res.ok) throw new Error('The voice couldn’t speak. Check Settings → Health check.');
+      new Audio(URL.createObjectURL(await res.blob())).play();
+    } catch (err) { toast(err.message, 'error'); }
+    setTimeout(loadCustomVoice, 1000);
+  } else if (act === 'remove') {
+    if (!confirm(`Remove ${voice?.name || 'this voice'}?`)) return;
+    await api(`/api/custom-voice/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    await refreshStatus();
+    if (!state.status.custom_voice && state.settings.tts_engine === 'custom') { await saveSettings({ tts_engine: 'auto' }); $('#setTtsEngine').value = 'auto'; }
+    loadCustomVoice();
+  } else if (e.target.closest('.cv-pick')) {
+    await saveSettings({ custom_voice_id: id, tts_engine: 'custom' });
+    $('#setTtsEngine').value = 'custom';
+    fetch('/api/custom-voice/warm', { method: 'POST' }).catch(() => {});
+    toast(`Athena will now speak as ${voice?.name || 'this voice'}.`);
+    loadCustomVoice();
+  }
+};
 $('#cvSave').onclick = async () => {
   const file = $('#cvFile').files[0];
   if (!file) { toast('Pick the recording first.', 'error'); return; }
@@ -1701,28 +1742,27 @@ $('#cvSave').onclick = async () => {
     const res = await fetch('/api/custom-voice', { method: 'POST', body: form });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.detail || 'Couldn’t save the recording');
-    await saveSettings({ tts_engine: 'custom' });
-    $('#setTtsEngine').value = 'custom';
+    if (!customVoices.length) { await saveSettings({ tts_engine: 'custom' }); $('#setTtsEngine').value = 'custom'; }
+    state.settings = await api('/api/settings');
     await refreshStatus();
-    toast('Voice saved. Athena will use it from now on (the first sentence takes a moment to load).');
-    $('#cvFile').value = '';
+    toast(`Added ${body.sample?.name || 'the voice'}. Click ▶ Test to hear it.`);
+    $('#cvFile').value = ''; $('#cvName').value = ''; $('#cvConsent').checked = false;
   } catch (err) { toast(err.message, 'error'); } finally { $('#cvSave').disabled = false; loadCustomVoice(); }
 };
-$('#cvTest').onclick = async () => {
-  if (state.settings.tts_engine !== 'custom') { await saveSettings({ tts_engine: 'custom' }); $('#setTtsEngine').value = 'custom'; }
-  await refreshStatus();
-  toast('Loading the voice… the first time can take a minute.');
-  speaker.reset();
-  speaker.say('Hi! This is how I’ll sound from now on. Pretty nice, right?');
-  setTimeout(loadCustomVoice, 1500);
-};
-$('#cvRemove').onclick = async () => {
-  await api('/api/custom-voice', { method: 'DELETE' });
-  if (state.settings.tts_engine === 'custom') { await saveSettings({ tts_engine: 'auto' }); $('#setTtsEngine').value = 'auto'; }
-  await refreshStatus();
-  toast('Custom voice removed. Back to the natural voice.');
-  loadCustomVoice();
-};
+
+// A voice for each personality: "Usual", any natural voice, or any custom voice.
+function fillPersonaVoices() {
+  const natural = Object.entries(state.status.kokoro_voices || {}).map(([id, label]) => `<option value="${id}">Natural: ${escapeHtml(label)}</option>`).join('');
+  const mine = customVoices.map((v) => `<option value="custom:${escapeHtml(v.id)}">Custom: ${escapeHtml(v.name)}</option>`).join('');
+  $('#setPersonaVoice').innerHTML = '<option value="">Same as usual (Settings → Voice)</option>' + natural + mine;
+  $('#setPersonaVoice').value = (state.settings.persona_voices || {})[state.settings.persona] || '';
+  $('#personaVoice').innerHTML = '<option value="">Voice: same as usual</option>' + natural.replaceAll('Natural: ', 'Voice: ') + mine.replaceAll('Custom: ', 'Voice: ');
+}
+$('#setPersonaVoice').addEventListener('change', async (e) => {
+  await saveSettings({ persona_voices: { ...(state.settings.persona_voices || {}), [state.settings.persona || 'assistant']: e.target.value } });
+  if (e.target.value.startsWith('custom:')) fetch('/api/custom-voice/warm', { method: 'POST' }).catch(() => {});
+});
+$('#setPersona').addEventListener('change', () => setTimeout(fillPersonaVoices, 300));
 $('#setTtsEngine').addEventListener('change', (e) => { if (e.target.value === 'custom') fetch('/api/custom-voice/warm', { method: 'POST' }).catch(() => {}); });
 
 // ------------------------------------------------------------ microphone choice + mic test
@@ -2475,6 +2515,7 @@ function openSettings(tab = 'general') {
   $$('[data-alert]').forEach((el) => { el.checked = s[`alert_${el.dataset.alert}`] !== false; });
   $('#setSeasonal').checked = s.seasonal_effects !== false;
   fillPersonas();
+  loadCustomVoice(); // so each personality's voice list includes your custom voices
   renderAccents();
   $('#setTextSize').value = s.text_size || 'normal';
   $('#setCompact').checked = !!s.compact;
@@ -3301,8 +3342,7 @@ function fillPersonas() {
     custom.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} — custom</option>`).join('');
   $('#setPersona').value = state.settings.persona || 'assistant';
   $('#personaList').innerHTML = custom.map((p) => `<li><span><b>${escapeHtml(p.name)}</b> <span class="muted small">${escapeHtml(p.instructions.slice(0, 90))}</span></span><button type="button" data-persona-del="${escapeHtml(p.id)}" title="Delete">${ICONS.trash}</button></li>`).join('');
-  $('#personaVoice').innerHTML = '<option value="">Voice: same as usual</option>' +
-    Object.entries(state.status.kokoro_voices || {}).map(([id, label]) => `<option value="${id}">Voice: ${escapeHtml(label)}</option>`).join('');
+  fillPersonaVoices();
 }
 $('#personaSave').onclick = async () => {
   const name = $('#personaName').value.trim(), instructions = $('#personaText').value.trim();

@@ -192,7 +192,9 @@ Athena can speak in a voice learned from a short recording of someone who's give
 
 1. Close Athena and double-click **install-custom-voice** (the Windows Batch File). It downloads about 3–4 GB into its own folder, so it can't affect the rest of Athena.
 2. Start Athena, open **Settings → Voice → 🎙 Custom voice**, pick a 10–30 second recording of the person talking calmly (no music or other voices), type their name, tick the permission box and click **Save voice**. Click **▶ Test** to hear it.
-3. Switch between **Custom voice** and the normal voices anytime with **Voice engine**.
+3. Add as many voices as you like (up to 20), each with its own permission tick. Click a voice's circle to make it the one Athena uses, ▶ **Test** to hear it, or 🗑 to remove it.
+4. Give each personality its own voice in **Settings → General → Voice for this personality** (any natural voice or any of your custom voices). Switching personality switches the voice.
+5. Switch between **Custom voice** and the normal voices anytime with **Voice engine**.
 
 On AMD graphics cards (and PCs without NVIDIA) the voice runs on the processor, so each sentence takes a few seconds; the natural Kokoro voice is snappier for back-and-forth voice chat. The recording stays on your PC (in the `data/voices` folder).
 

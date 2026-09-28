@@ -31,22 +31,54 @@ class VoiceError(Exception):
     pass
 
 
+LIST = VOICE_DIR / "voices.json"
+
+
 def installed() -> bool:
     return VENV_PY.exists()
 
 
-def sample() -> dict[str, Any] | None:
-    meta = store._read(META, None)
-    if meta and (VOICE_DIR / meta.get("file", "")).is_file():
-        return meta
-    return None
+def voices() -> list[dict[str, Any]]:
+    """Saved voices (only ones whose recording is still there)."""
+    _migrate()
+    return [v for v in store._read(LIST, []) if (VOICE_DIR / v.get("file", "")).is_file()]
+
+
+def _migrate() -> None:
+    """The first version kept a single voice in custom.json; turn it into the first item of the list."""
+    old = store._read(META, None)
+    if old and not LIST.exists() and (VOICE_DIR / old.get("file", "")).is_file():
+        vid = store.new_id()[:8]
+        ext = Path(old["file"]).suffix
+        (VOICE_DIR / old["file"]).rename(VOICE_DIR / f"{vid}{ext}")
+        store._write(LIST, [{"id": vid, "file": f"{vid}{ext}", "name": old.get("name") or "Custom voice",
+                             "added": old.get("added", time.time()), "consent": True}])
+        if not store.get_settings().get("custom_voice_id"):
+            store.update_settings({"custom_voice_id": vid})
+    if old:
+        try:
+            META.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def get(voice_id: str | None = None) -> dict[str, Any] | None:
+    """A voice by id, else the one chosen in settings, else the first saved one."""
+    items = voices()
+    wanted = voice_id or store.get_settings().get("custom_voice_id")
+    return next((v for v in items if v["id"] == wanted), None) or (items[0] if items else None)
+
+
+def sample() -> dict[str, Any] | None:  # the voice in use (kept for older callers)
+    return get()
 
 
 def ready() -> bool:
-    return installed() and sample() is not None
+    return installed() and bool(voices())
 
 
 def save_sample(filename: str, data: bytes, name: str, consent: bool) -> dict[str, Any]:
+    """Add a voice to the list."""
     if not consent:
         raise VoiceError("Please confirm you have permission from the person whose voice this is.")
     ext = Path(filename or "").suffix.lower()
@@ -57,26 +89,38 @@ def save_sample(filename: str, data: bytes, name: str, consent: bool) -> dict[st
     if len(data) < 20_000:
         raise VoiceError("That recording is too short. Use 10 to 30 seconds of clear speech.")
     VOICE_DIR.mkdir(parents=True, exist_ok=True)
-    remove_sample()
-    target = VOICE_DIR / f"custom{ext}"
-    target.write_bytes(data)
-    meta = {"file": target.name, "name": (name or "Custom voice").strip()[:40], "added": time.time(), "consent": True}
-    store._write(META, meta)
-    _worker.stop()  # the next sentence uses the new recording
-    return meta
+    items = voices()
+    if len(items) >= 20:
+        raise VoiceError("You already have 20 voices. Remove one first.")
+    vid = store.new_id()[:8]
+    (VOICE_DIR / f"{vid}{ext}").write_bytes(data)
+    entry = {"id": vid, "file": f"{vid}{ext}", "name": (name or f"Voice {len(items) + 1}").strip()[:40],
+             "added": time.time(), "consent": True}
+    store._write(LIST, [*items, entry])
+    if not items or not get(store.get_settings().get("custom_voice_id")):
+        store.update_settings({"custom_voice_id": vid})
+    return entry
 
 
-def remove_sample() -> None:
-    meta = store._read(META, None)
-    if meta:
-        try:
-            (VOICE_DIR / meta.get("file", "")).unlink(missing_ok=True)
-        except OSError:
-            pass
-        try:
-            META.unlink(missing_ok=True)
-        except OSError:
-            pass
+def remove(voice_id: str) -> bool:
+    items = voices()
+    gone = next((v for v in items if v["id"] == voice_id), None)
+    if not gone:
+        return False
+    try:
+        (VOICE_DIR / gone["file"]).unlink(missing_ok=True)
+    except OSError:
+        pass
+    rest = [v for v in items if v["id"] != voice_id]
+    store._write(LIST, rest)
+    if store.get_settings().get("custom_voice_id") == voice_id:
+        store.update_settings({"custom_voice_id": rest[0]["id"] if rest else ""})
+    return True
+
+
+def remove_sample() -> None:  # remove all (kept for older callers)
+    for v in voices():
+        remove(v["id"])
 
 
 class _Worker:
@@ -132,8 +176,8 @@ class _Worker:
                 pass
         self.proc = None
 
-    def speak(self, text: str) -> bytes:
-        meta = sample()
+    def speak(self, text: str, voice_id: str | None = None) -> bytes:
+        meta = get(voice_id)
         if not meta:
             raise VoiceError("Add a voice recording first (Settings → Voice → Custom voice).")
         with self.lock:
@@ -169,8 +213,8 @@ class _Worker:
 _worker = _Worker()
 
 
-def synthesize(text: str) -> bytes:
-    return _worker.speak(text)
+def synthesize(text: str, voice_id: str | None = None) -> bytes:
+    return _worker.speak(text, voice_id)
 
 
 def warm() -> None:
@@ -179,5 +223,6 @@ def warm() -> None:
 
 def status() -> dict[str, Any]:
     running = bool(_worker.proc and _worker.proc.poll() is None)
-    return {"installed": installed(), "sample": sample(), "running": running, "device": _worker.device if running else "",
-            "error": _worker.error}
+    current = get()
+    return {"installed": installed(), "voices": voices(), "active": current["id"] if current else "", "running": running,
+            "device": _worker.device if running else "", "error": _worker.error}
