@@ -53,6 +53,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "image_api": "",  # optional: ComfyUI / Forge address; empty = find it automatically
     "image_model": "",  # which image model to use (empty = the best one found)
     "images_enabled": True,  # let Athena make pictures
+    "self_model": "",  # model for changing her own code ("" = a ~14B model that fits on the graphics card)
     "github_private": True,  # repositories Athena creates on your GitHub start private
     "ha_url": "",  # Home Assistant, e.g. http://homeassistant.local:8123
     "ha_token": "",

@@ -2717,6 +2717,11 @@ function fillModelSelects() {
       state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
     sel.value = modelNames().includes(state.settings.models?.[mode]) ? state.settings.models[mode] : '';
   }
+  const saved = state.settings.self_model;
+  const autoSelf = selfModel({ automatic: true });
+  $('#setSelfModel').innerHTML = `<option value="">Automatic${autoSelf ? ` (${escapeHtml(autoSelf)})` : ' (the model that\'s loaded)'}</option>` +
+    state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
+  $('#setSelfModel').value = modelNames().includes(saved) ? saved : '';
   const have = new Set(modelNames().flatMap((n) => [n, n.replace(/:latest$/, '')]));
   $('#recommend').innerHTML = RECOMMENDED.map((r) => `
     <div class="rec${have.has(r.name) ? ' have' : ''}">
@@ -2868,6 +2873,7 @@ bind('#setVoice', 'tts_voice');
 bind('#setPersona', 'persona');
 bind('#setTtsEngine', 'tts_engine');
 bind('#setKokoroVoice', 'kokoro_voice');
+bind('#setSelfModel', 'self_model');
 bind('#setPitch', 'voice_pitch', (el) => Number(el.value));
 
 for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelStudy', 'study'], ['#setModelVision', 'vision']]) {
@@ -3056,8 +3062,13 @@ async function openWorkspace(path, { quiet = false } = {}) {
     state.chat.workspace = info;
     // Working on herself: keep the model that's already loaded. Swapping to another ~19 GB model takes a while and
     // can run the graphics card out of memory.
-    const keep = path === state.status.athena_root && state.loaded.includes(currentModel());
+    const self = path === state.status.athena_root;
+    const keep = self && state.loaded.includes(currentModel());
     if (state.mode !== 'code') setMode('code', { keepModel: keep });
+    if (self) {  // changing herself: use the model picked for that (one that fits on the graphics card)
+      const m = selfModel();
+      if (m) { state.chat.model = m; renderModelButton(); }
+    }
     $('#workspaceDlg').close();
     renderWorkspaceChip();
     if (!quiet) toast(path === state.status.athena_root ? '🛠 My own code is open. Tell me what to fix or add; you approve every change.'
@@ -3066,6 +3077,19 @@ async function openWorkspace(path, { quiet = false } = {}) {
   } catch (e) { $('#wsError').textContent = e.message; if (quiet) toast(e.message, 'error'); }
 }
 $('#wsSelf').onclick = () => openWorkspace(state.status.athena_root);
+
+/** The model for changing her own code: your choice in Settings → Models, else a ~14B model that fits entirely on
+ *  the graphics card (fast, and it can't run out of memory the way two 30B models can). */
+function selfModel({ automatic = false } = {}) {
+  const names = modelNames();
+  const chosen = state.settings.self_model;
+  if (!automatic && chosen && names.includes(chosen)) return chosen;
+  for (const want of [/^qwen3:14b/, /^qwen2\.5-coder:14b/, /^qwen3:8b/, /^qwen2\.5-coder:7b/]) {
+    const hit = names.find((n) => want.test(n));
+    if (hit) return hit;
+  }
+  return '';
+}
 
 /** Athena is restarting (update or a change to herself): reload the page once she's back. */
 function waitForRestart() {
