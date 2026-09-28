@@ -102,8 +102,10 @@ def think_value(model: str, level: str) -> Any:
     """What to send as Ollama's `think` for Quick / Normal / Deep. None = leave it to the model."""
     name = (model or "").lower()
     if "gpt-oss" in name:  # gpt-oss always reasons; it takes an effort level instead
-        return {"quick": "low", "deep": "high"}.get(level)
-    return {"quick": False, "deep": True}.get(level)
+        return {"quick": "low", "voice": "low", "deep": "high"}.get(level)
+    # Voice: think, but in the separate thinking channel. With thinking switched off, some models (qwen3)
+    # still reason, just as plain text in the answer, and that would be read aloud.
+    return {"quick": False, "voice": True, "deep": True}.get(level)
 
 
 async def _ask(client, ollama: str, model: str, prompt: str, keep_alive: Any, tokens: int = 160) -> str:

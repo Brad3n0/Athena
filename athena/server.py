@@ -373,7 +373,10 @@ async def chat(request: Request):
     extra_prompt = project_context(project) + canvas_context(body.get("canvas"))
     level = body.get("think_level") if body.get("think_level") in ("quick", "normal", "deep") else "normal"
     if mode == "voice" and level == "normal":
-        level = "quick"  # reasoning models answer much faster aloud without long thinking
+        level = "voice"  # think only briefly, in the thinking channel (never spoken)
+        extra_prompt += ("\n\nKeep any thinking to a sentence or two, then answer. Speak directly to the user in the "
+                         "first person ('I', 'you'); never describe the user or yourself in the third person, and never "
+                         "mention functions or tools, just do things and say what you did.")
     if level == "deep":
         extra_prompt += ("\n\nThe user asked you to think harder about this. Take your time: work through it step by step, "
                          "consider other approaches, check your facts, maths and code for mistakes, and only then give your "

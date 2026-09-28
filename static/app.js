@@ -1006,9 +1006,25 @@ function splitThinking(m) {
       open = true;
     }
   }
+  // Plain-text reasoning at the start of the answer ("The user asked … so I need to figure out which function to
+  // call"): treat those opening paragraphs as thinking, and don't read them aloud.
+  if (!open && LEAKED_REASONING.test(content)) {
+    const paras = content.split(/\n\s*\n/);
+    let i = 0;
+    while (i < paras.length && (LEAKED_REASONING.test(paras[i]) || /\b(function|tool)s? to (call|use)\b/i.test(paras[i]))) i++;
+    if (i < paras.length) {
+      thinking += paras.slice(0, i).join('\n\n');
+      content = paras.slice(i).join('\n\n');
+    } else if (m.streaming) {
+      thinking += content; // still reasoning: wait for the real answer
+      content = '';
+      open = true;
+    }
+  }
   content = content.replace(/^\s+/, '');
   return { content, thinking, stillThinking: !!(m.streaming && (open || (!match && m.thinking && !content))) };
 }
+const LEAKED_REASONING = /^\s*(?:(?:okay|ok|alright|so|hmm|well),?\s+)*(?:(?:the\s+)?user\s+(?:just\s+)?(?:asked|asks|said|says|wants|wanted|is asking|is saying|wrote|mentioned|greeted|typed|requested)|(?:i|we)\s+(?:need|should|have)\s+to\s+(?:figure|check|decide|call|use|respond|answer|see|determine|think)|let\s+me\s+(?:think|check|figure|see|recall)|first,?\s+i\s+(?:need|should|will))\b/i;
 
 function updateAssistantEl(el, m) {
   const { content, thinking, stillThinking } = splitThinking(m);
