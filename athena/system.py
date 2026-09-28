@@ -80,12 +80,16 @@ def gpus() -> list[dict[str, Any]]:
 def recommend(vram: float, ram: float) -> dict[str, Any]:
     """The best models for this PC, by job."""
     if vram >= 20:
-        tier, picks = "24 GB+", {"assistant": "gpt-oss:20b", "study": "qwen3:14b", "code": "qwen3-coder:30b", "voice": "qwen3:14b", "vision": "qwen2.5vl:7b"}
+        tier, picks = "24 GB+", {"assistant": "qwen3:30b-a3b-instruct-2507-q4_K_M", "study": "qwen3:14b", "code": "qwen3-coder:30b",
+                                  "voice": "qwen3:30b-a3b-instruct-2507-q4_K_M", "vision": "qwen3-vl:8b"}
     elif vram >= 15:
-        # qwen3-coder:30b is a mixture-of-experts model: it spills a little past 16 GB but stays fast with 32 GB of RAM.
-        # Voice shares qwen3:14b with Study, so switching between them doesn't reload a model.
-        tier, picks = "16 GB", {"assistant": "gpt-oss:20b", "study": "qwen3:14b", "code": "qwen3-coder:30b" if ram >= 30 else "qwen2.5-coder:14b",
-                                "voice": "qwen3:14b", "vision": "qwen2.5vl:7b"}
+        # The 30B mixture-of-experts models (Qwen3 Instruct 2507, qwen3-coder) spill a little past 16 GB but stay fast
+        # with 32 GB of RAM, since only ~3B of their weights work per word. Qwen3 Instruct 2507 is the most natural
+        # talker and best at using tools; Assistant and Voice share it, so switching between them doesn't reload a model.
+        big = ram >= 30
+        tier, picks = "16 GB", {"assistant": "qwen3:30b-a3b-instruct-2507-q4_K_M" if big else "gpt-oss:20b", "study": "qwen3:14b",
+                                "code": "qwen3-coder:30b" if big else "qwen2.5-coder:14b",
+                                "voice": "qwen3:30b-a3b-instruct-2507-q4_K_M" if big else "qwen3:14b", "vision": "qwen3-vl:8b"}
     elif vram >= 11:
         tier, picks = "12 GB", {"assistant": "qwen3:14b", "study": "qwen3:14b", "code": "qwen2.5-coder:14b", "voice": "qwen3:4b", "vision": "qwen2.5vl:7b"}
     elif vram >= 7:

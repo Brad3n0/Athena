@@ -582,7 +582,7 @@ async def chat(request: Request):
     return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 
-VISION_HINTS = ("qwen2.5vl", "qwen3-vl", "qwen2.5-vl", "llava", "minicpm-v", "llama3.2-vision", "moondream",
+VISION_HINTS = ("qwen3-vl", "qwen2.5vl", "qwen2.5-vl", "llava", "minicpm-v", "llama3.2-vision", "moondream",
                 "granite3.2-vision", "mistral-small3", "gemma3:4b", "gemma3:12b", "gemma3:27b", "gemma3n", "llama4")
 
 

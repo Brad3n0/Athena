@@ -41,6 +41,8 @@ const ICONS = {
 
 // Curated picks from the Ollama library. VRAM guidance is approximate (default 4-bit quantization).
 const RECOMMENDED = [
+  { name: 'qwen3:30b-a3b-instruct-2507-q4_K_M', role: 'Assistant · Voice', desc: 'Qwen3 30B Instruct (2507): the most natural, ChatGPT-like talker you can run at home, great at Jarvis commands, and fast (only 3B of it works per word). ~19 GB · 16 GB VRAM + 32 GB RAM' },
+  { name: 'qwen3-vl:8b', role: 'Vision', desc: 'Qwen3 VL: reads screenshots, photos and worksheets much better than qwen2.5vl. ~6 GB · 8 GB VRAM' },
   { name: 'gpt-oss:20b', role: 'Assistant', desc: "OpenAI's open-weight reasoning model. Excellent all-rounder with tool use. ~14 GB · 16 GB VRAM" },
   { name: 'qwen3:14b', role: 'Study · Assistant', desc: 'Best for schoolwork: top at math & science, shows its reasoning step by step. ~9 GB · 12 GB VRAM' },
   { name: 'qwen3:8b', role: 'Study · Assistant', desc: 'Great homework helper for 8 GB graphics cards. ~5 GB' },
@@ -59,11 +61,11 @@ const RECOMMENDED = [
 
 // Preference order used when you haven't chosen a default model yet.
 const PREFERENCE = {
-  assistant: ['gpt-oss', 'qwen3:', 'qwen3', 'gemma3', 'llama3.1', 'mistral', 'llama3'],
+  assistant: ['qwen3:30b-a3b-instruct', 'gpt-oss', 'qwen3:', 'qwen3', 'gemma3', 'llama3.1', 'mistral', 'llama3'],
   code: ['qwen3-coder', 'devstral', 'qwen2.5-coder', 'deepseek-coder', 'codestral', 'codellama', 'gpt-oss', 'qwen3'],
   // Best for schoolwork: strong at math/science and step-by-step explanations.
   study: ['qwen3:14b', 'qwen3:32b', 'qwen3:30b', 'gpt-oss:20b', 'qwen3:8b', 'phi4', 'qwen3', 'gpt-oss', 'deepseek-r1', 'gemma3', 'llama3.1', 'mistral', 'llama3'],
-  voice: ['qwen3:4b', 'llama3.2', 'gemma3:4b', 'qwen3:1.7b', 'phi4-mini', 'qwen3:8b', 'gemma3', 'llama3.1', 'qwen3'],
+  voice: ['qwen3:30b-a3b-instruct', 'qwen3:4b', 'llama3.2', 'gemma3:4b', 'qwen3:1.7b', 'phi4-mini', 'qwen3:8b', 'gemma3', 'llama3.1', 'qwen3'],
 };
 
 // ------------------------------------------------------------------ state
@@ -2780,12 +2782,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ------------------------------------------------------------ vision
-const VISION_HINTS = ['qwen2.5vl', 'qwen3-vl', 'qwen2.5-vl', 'llava', 'minicpm-v', 'llama3.2-vision', 'moondream', 'granite3.2-vision', 'mistral-small3', 'gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gemma3n', 'llama4'];
+const VISION_HINTS = ['qwen3-vl', 'qwen2.5vl', 'qwen2.5-vl', 'llava', 'minicpm-v', 'llama3.2-vision', 'moondream', 'granite3.2-vision', 'mistral-small3', 'gemma3:4b', 'gemma3:12b', 'gemma3:27b', 'gemma3n', 'llama4'];
 const isVision = (name) => VISION_HINTS.some((h) => (name || '').includes(h));
 function pickVisionModel() {
   const chosen = state.settings.models?.vision;
   if (chosen && modelNames().includes(chosen)) return chosen;
-  return modelNames().find(isVision) || '';
+  const names = modelNames();
+  for (const hint of VISION_HINTS) { const hit = names.find((n) => n.includes(hint)); if (hit) return hit; } // best kind first
+  return '';
 }
 
 // ------------------------------------------------------------ screenshot
