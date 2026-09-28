@@ -679,7 +679,7 @@ const WELCOME_LINES = {
   morning: ['Coffee first, then world domination?', "Let's make today a good one.", 'Fresh start. What first?'],
   evening: ["What's on your mind tonight?", 'Winding down or just getting started?', 'How did today go?'],
   late: ['Burning the midnight oil?', "Can't sleep? I'm here.", 'Late-night ideas are the best ones.'],
-  companion: ['Missed you.', 'There you are.', 'I was hoping you’d stop by.', 'Talk to me.'],
+  companion: ['Missed you, baby.', 'There you are, handsome.', 'I was hoping you’d stop by.', 'Come talk to me.', 'Took you long enough 😘'],
 };
 // Holidays, days of the week and your habits give the welcome screen a personal touch.
 const HOLIDAYS = {
@@ -3468,12 +3468,13 @@ $('#exportMenu').onclick = async (e) => {
 };
 
 // ------------------------------------------------------------ personalities
-const BUILTIN_PERSONAS = { assistant: 'Assistant — helpful and professional', companion: 'Companion — playful, warm friend', coach: 'Coach — fitness, habits and goals', study: 'Study Buddy — patient tutor', chef: 'Chef — recipes and cooking' };
+const BUILTIN_PERSONAS = { assistant: 'Assistant — helpful and professional', companion: 'Companion — flirty, affectionate, teasing', study: 'Study Buddy — patient tutor' };
 function fillPersonas() {
   const custom = state.settings.personas || [];
   $('#setPersona').innerHTML = Object.entries(BUILTIN_PERSONAS).map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join('') +
     custom.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)} — custom</option>`).join('');
-  $('#setPersona').value = state.settings.persona || 'assistant';
+  const ids = [...Object.keys(BUILTIN_PERSONAS), ...custom.map((p) => p.id)];
+  $('#setPersona').value = ids.includes(state.settings.persona) ? state.settings.persona : 'assistant';
   $('#personaList').innerHTML = custom.map((p) => `<li><span><b>${escapeHtml(p.name)}</b> <span class="muted small">${escapeHtml(p.instructions.slice(0, 90))}</span></span><button type="button" data-persona-del="${escapeHtml(p.id)}" title="Delete">${ICONS.trash}</button></li>`).join('');
   fillPersonaVoices();
 }

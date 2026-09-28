@@ -196,7 +196,7 @@ Good to know:
 - **Python games and apps** (pygame, tkinter, turtle) open in **their own window on your PC** when you press ▶ Run, and keep running until you close them.
 - **Images:** connect Stable Diffusion WebUI Forge in **Settings → Integrations**, then say *"draw a gold owl on a night sky"*.
 - **Smart home:** connect Home Assistant in **Settings → Integrations**: *"turn off the kitchen lights"*, *"set the thermostat to 70"*.
-- **Personalities:** Assistant, Companion, Coach, Study Buddy and Chef, or create your own with its own voice (**Settings → General**).
+- **Personalities:** Assistant, Companion (flirty and affectionate) and Study Buddy, or create your own with its own voice (**Settings → General**).
 - **PIN lock, export & backup:** **Settings → Privacy & data**. To export a single chat, hover over it in the sidebar and click ⤓ to save it as Markdown, Word or PDF.
 
 ## Abilities: files, web, memory
