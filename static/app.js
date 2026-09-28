@@ -1540,7 +1540,9 @@ async function generateReply({ voice = false, model = null, route = null, think 
       body: JSON.stringify({
         spoken_language: voice && state.status.whisper ? lastLanguage : null,
         model, mode, think_level: thinkLevel, research: research || undefined, auto_approve: !!chat.autoApprove, project_id: chat.project_id || null, workspace: chat.workspace?.path || null, canvas: voice ? null : canvasForChat(),
-        messages: chat.messages.slice(0, -1).map(({ role, content, images }) => ({ role, content, images })),
+        // A long chat: the oldest part is sent as her running summary of it, not word for word.
+        summary: summaryFor(chat)?.text || undefined,
+        messages: chat.messages.slice(summaryFor(chat)?.upto || 0, -1).map(({ role, content, images }) => ({ role, content, images })),
       }),
       signal: abort.signal,
     });
@@ -1576,6 +1578,11 @@ async function generateReply({ voice = false, model = null, route = null, think 
           reply.thinking = '';
           delete reply.thinkSecs;
           thinkStart = 0;
+        } else if (ev.type === 'summary') {
+          chat.summary = { text: ev.text, upto: (summaryFor(chat)?.upto || 0) + ev.covered };
+        } else if (ev.type === 'notice') {
+          toast(ev.message);
+          if (voice) setVoiceState('thinking', ev.message);
         } else if (ev.type === 'research') {
           researchEvent(reply.research, ev);
         } else if (ev.type === 'thinking') {
@@ -1638,6 +1645,14 @@ async function generateReply({ voice = false, model = null, route = null, think 
     if (!reply.error && !abort.signal.aborted && reply.content) learnFrom(chat, reply);
   }
   return reply;
+}
+
+/** Her summary of the start of a long chat, if it still matches (editing an older message makes it stale). */
+function summaryFor(chat) {
+  const sm = chat.summary;
+  if (!sm?.text) return null;
+  if (sm.upto >= chat.messages.length - 1) { delete chat.summary; return null; }
+  return sm;
 }
 
 // ------------------------------------------------------------ Deep research (watch her work)
@@ -2537,6 +2552,9 @@ function openSettings(tab = 'general') {
   $('#setTextSize').value = s.text_size || 'normal';
   $('#setCompact').checked = !!s.compact;
   $('#setReduceMotion').checked = !!s.reduce_motion;
+  $('#setAutoRecover').checked = s.auto_recover !== false;
+  $('#setAutoBackup').checked = s.auto_backup !== false;
+  $('#setUpdateCheck').checked = s.update_check !== false;
   $('#setOllamaBoost').checked = s.ollama_boost !== false;
   $('#setSounds').checked = !!s.sound_effects;
   $('#setBirthday').value = s.birthday ? `${new Date().getFullYear()}-${s.birthday}` : '';
@@ -2620,6 +2638,7 @@ function switchTab(tab) {
   if (tab === 'stats') loadStats();
   if (tab === 'jarvis') loadJarvis();
   if (tab === 'about') loadMemories();
+  if (tab === 'privacy') loadBackups();
   if (tab === 'desktop') loadPhone();
   if (tab === 'voice') { loadMics(); loadCustomVoice(); }
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
@@ -2709,6 +2728,9 @@ bind('#setPc', 'pc_enabled', (el) => el.checked);
 bind('#setTextSize', 'text_size');
 bind('#setCompact', 'compact', (el) => el.checked);
 bind('#setReduceMotion', 'reduce_motion', (el) => el.checked);
+bind('#setAutoRecover', 'auto_recover', (el) => el.checked);
+bind('#setAutoBackup', 'auto_backup', (el) => el.checked);
+bind('#setUpdateCheck', 'update_check', (el) => el.checked);
 bind('#setOllamaBoost', 'ollama_boost', (el) => el.checked);
 bind('#setSounds', 'sound_effects', (el) => el.checked);
 bind('#setBirthday', 'birthday', (el) => el.value.slice(5));
@@ -4069,6 +4091,65 @@ $('#healthRun').onclick = runHealth;
 $('#healthCopy').onclick = async () => { await copyText(healthReport); toast('Report copied — paste it to share'); };
 
 // ------------------------------------------------------------ boot
+// ------------------------------------------------------------ automatic backups
+async function loadBackups() {
+  let r;
+  try { r = await api('/api/backups'); } catch { return; }
+  const label = { daily: 'Daily', manual: 'Made by you', 'before-update': 'Before an update', 'before-restore': 'Before a restore' };
+  $('#bkList').innerHTML = r.backups.length ? r.backups.map((b) => `<li><div><b>${new Date(b.time * 1000).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</b>
+      <span class="muted small">${label[b.kind] || b.kind} · ${b.size < 1e6 ? `${Math.max(1, Math.round(b.size / 1e3))} KB` : fmtSize(b.size)}</span></div><button type="button" class="ghost" data-restore="${escapeHtml(b.name)}">Restore</button></li>`).join('')
+    : '<li class="muted small">No backups yet. The first one is made automatically, or click “Back up now”.</li>';
+  $('#bkFolder').textContent = `Saved in ${r.folder}`;
+}
+$('#bkNow').onclick = async () => {
+  $('#bkNow').disabled = true;
+  try { await api('/api/backups', { method: 'POST' }); toast('Backed up ✓'); } catch (e) { toast(e.message, 'error'); }
+  $('#bkNow').disabled = false;
+  loadBackups();
+};
+$('#bkList').onclick = async (e) => {
+  const name = e.target.closest('[data-restore]')?.dataset.restore;
+  if (!name || !confirm('Go back to this backup? Your chats, memories and settings return to how they were then. (A copy of how things are now is saved first.)')) return;
+  try {
+    await api('/api/backups/restore', json('POST', { name }));
+    toast('Restored ✓ Reloading…');
+    setTimeout(() => location.reload(), 1200);
+  } catch (err) { toast(err.message, 'error'); }
+};
+
+// ------------------------------------------------------------ updates
+async function checkUpdate({ quiet = false } = {}) {
+  if (!quiet) { $('#updStatus').textContent = 'Checking GitHub…'; $('#updCheck').disabled = true; }
+  let r;
+  try { r = await api('/api/update'); } catch (e) { r = { available: false, reason: e.message }; }
+  $('#updCheck').disabled = false;
+  $('#updApply').hidden = !r.available;
+  $('#updChanges').hidden = !r.available;
+  $('#updChanges').innerHTML = (r.changes || []).map((c) => `<li>${escapeHtml(c)}</li>`).join('');
+  $('#updStatus').textContent = r.available ? `✨ An update is ready (${r.count} change${r.count === 1 ? '' : 's'}). What's new:` : r.reason;
+  if (r.available && quiet) toast(`✨ Athena update available: ${r.changes?.[0] || 'improvements'}`, '', { ms: 20000, action: { label: 'Update now', fn: applyUpdate } });
+  return r;
+}
+async function applyUpdate() {
+  if (state.abort) { toast('Wait for her to finish her reply, then update.', 'error'); return; }
+  $('#updApply').disabled = true;
+  toast('Updating… Athena will restart in a moment (your chats are backed up first).', '', { ms: 60000 });
+  try { await api('/api/update/apply', { method: 'POST' }); } catch (e) { toast(e.message, 'error'); $('#updApply').disabled = false; return; }
+  // Wait for the old Athena to close and the new one to answer, then reload the page.
+  const started = Date.now();
+  let wentDown = false;
+  const poll = async () => {
+    const up = await fetch('/api/settings', { cache: 'no-store' }).then((x) => x.ok).catch(() => false);
+    if (!up) wentDown = true;
+    if (up && (wentDown || Date.now() - started > 15000)) { location.reload(); return; }
+    if (Date.now() - started > 180000) { toast('Athena is taking a while to restart. If nothing happens, double-click start.bat.', 'error', { ms: 20000 }); return; }
+    setTimeout(poll, 1500);
+  };
+  setTimeout(poll, 2500);
+}
+$('#updCheck').onclick = () => checkUpdate();
+$('#updApply').onclick = applyUpdate;
+
 async function init() {
   $$('[data-logo]').forEach((el) => { el.outerHTML = logoSvg(); });
   const lock = await fetch('/api/lock').then((r) => r.json()).catch(() => ({}));
@@ -4103,6 +4184,7 @@ async function init() {
   refreshDeckBadge();
   setInterval(refreshDeckBadge, 10 * 60000);
   if (!state.settings.setup_done) openWizard();
+  else if (state.settings.update_check !== false) setTimeout(() => checkUpdate({ quiet: true }), 8000);
   $('#lockBtn').hidden = !state.settings.pin_set;
   if (new URLSearchParams(location.search).get('voice') === '1') {
     history.replaceState(null, '', location.pathname);

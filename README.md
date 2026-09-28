@@ -30,6 +30,8 @@ Linux/macOS: use `./pull-models.sh`, `./install-voice.sh` and `./start.sh` inste
 
 Double-click **`update.bat`** to get the newest version. The first time, it installs Git and asks you to sign in to GitHub once (the repo is private). After that it just downloads what changed. Your chats, settings and installed parts stay exactly as they are. Close Athena's black window and double-click `start` afterwards.
 
+- **Update button:** after running update.bat once, Athena checks GitHub when she opens and shows *Update available → Update now*. It backs up your data, downloads the new version and restarts her by itself. Also in Settings → General → Updates.
+
 ## 2. Every day
 
 Double-click **`start.bat`**. Athena opens in your browser at **http://localhost:8765**. After setup it works with your internet unplugged.
@@ -216,6 +218,9 @@ On AMD graphics cards (and PCs without NVIDIA) the voice runs on the processor, 
 - **⚡ Speed boost** (Settings → Models, on by default): turns on Ollama's flash attention and compressed chat memory (`OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`). The chat memory needs about half the graphics memory, so big models run faster. Athena restarts Ollama once when this changes.
 - **Chat memory** (Settings → Models): how much of the chat the model reads at once. 16K by default; long chats step up to 32K automatically.
 - **Reduce animations** (Settings → General) turns off the sliding and fading, e.g. while gaming.
+- **Long chats:** when a chat gets too long for the model, the oldest part is folded into a short summary she keeps, so she still remembers how the chat started.
+- **Automatic backups** (Settings → Privacy & data): once a day, the last 7 kept, in the `backups` folder next to Athena. Restore any of them in one click; a copy of how things are now is saved first.
+- **Self-repair** (Settings → Models): if Ollama crashes or freezes mid-reply, Athena restarts it and tries your message again.
 - **Ready dot:** the dot next to the model name turns gold when that model is loaded and will answer right away. A hollow dot means the first reply takes a few seconds; click it to load the model now.
 - **🔭 Deep research:** click **Research** in the message box (or type `/research …`) and ask anything. Athena plans several searches, reads up to about a dozen pages, takes notes, looks again for anything still missing, then writes a report with numbered citations and a Sources list. You can **watch her work** live: every search, every page she reads or skips, and what she found on each. It takes a few minutes on a home PC. Only the searches and pages come from the internet; the thinking and writing happen on your PC.
 - **Answer style:** in **Settings → General**, choose **Classic** (natural and conversational) or **Polished** (direct answer first, then headings, bullets and a one-line bottom line). Switch any time.

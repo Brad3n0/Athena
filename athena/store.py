@@ -76,6 +76,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "keep_alive": "30m",  # how long models stay loaded after use
     "ollama_boost": True,  # flash attention + compressed chat memory for Ollama (faster, less graphics memory)
     "reduce_motion": False,  # turn off animations
+    "auto_recover": True,  # if Ollama crashes or freezes mid-reply, restart it and try again
+    "auto_backup": True,  # a copy of your data once a day (last 7 kept)
+    "update_check": True,  # look for a new version on GitHub when Athena starts
     "context_size": 16384,  # how much of the chat the model can read at once (tokens); Ollama's own default is too small
     "preload_model": True,  # load your model in the background when Athena opens
     "seasonal_effects": True,

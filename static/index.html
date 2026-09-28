@@ -301,6 +301,12 @@
         </label>
         <label class="check"><input type="checkbox" id="setAutoPreview" /> Show websites, games and apps she builds running right away (live preview)</label>
         <label class="check"><input type="checkbox" id="setDirect" /> Direct mode — straight answers, no lecturing or unnecessary disclaimers</label>
+
+        <h3>Updates</h3>
+        <p class="small" id="updStatus">Athena checks GitHub for a newer version. Updating keeps your chats and settings, backs them up first, and restarts her.</p>
+        <ul class="upd-changes" id="updChanges" hidden></ul>
+        <div class="pull-row"><button type="button" class="ghost" id="updCheck">Check for updates</button><button type="button" class="primary" id="updApply" hidden>Update now</button></div>
+        <label class="check"><input type="checkbox" id="setUpdateCheck" /> Tell me when an update is available (checks when Athena opens)</label>
       </section>
 
       <section data-panel="models" hidden>
@@ -316,6 +322,7 @@
         </label>
         <p class="muted small" style="margin-top:-6px">A loaded model answers right away. It uses graphics card memory, so games may run slower while it's loaded; pick a shorter time if you game a lot.</p>
         <label class="check"><input type="checkbox" id="setOllamaBoost" /> <span><b>⚡ Speed boost</b>: flash attention + compressed chat memory in Ollama. Uses about half the graphics memory for the chat, so replies come out faster. Ollama restarts once when you change this.</span></label>
+        <label class="check"><input type="checkbox" id="setAutoRecover" /> <span><b>🩹 Self-repair</b>: if Ollama crashes or freezes in the middle of a reply, restart it and try again automatically</span></label>
         <label>Chat memory (how much of the chat she reads at once)
           <select id="setContextSize">
             <option value="8192">Normal (8K) — uses the least graphics memory</option>
@@ -519,11 +526,15 @@
           <select id="setAutoLock"><option value="0">Never</option><option value="5">5 minutes idle</option><option value="15">15 minutes idle</option><option value="60">1 hour idle</option></select>
         </label>
 
-        <h3>Backup</h3>
-        <p class="muted small">One file with all your chats, tasks, memories, reminders and settings.</p>
+        <h3>Backups</h3>
+        <label class="check"><input type="checkbox" id="setAutoBackup" /> Back up automatically once a day (keeps the last 7 days)</label>
+        <p class="muted small">Each backup has all your chats, tasks, memories, lessons, voices, reminders and settings. Restoring saves a copy of how things are now first, so you can always go back.</p>
+        <ul class="bk-list" id="bkList"></ul>
+        <p class="muted small" id="bkFolder"></p>
         <div class="pull-row">
-          <a class="ghost file-btn" id="backupBtn" href="/api/backup">Download backup</a>
-          <label class="ghost file-btn">Restore from backup<input type="file" id="restoreFile" accept=".zip" hidden /></label>
+          <button type="button" class="ghost" id="bkNow">Back up now</button>
+          <a class="ghost file-btn" id="backupBtn" href="/api/backup">Download a backup file</a>
+          <label class="ghost file-btn">Restore from a file<input type="file" id="restoreFile" accept=".zip" hidden /></label>
         </div>
       </section>
 

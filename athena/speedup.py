@@ -48,15 +48,23 @@ def _set_user_env(values: dict[str, str]) -> None:
     ctypes.windll.user32.SendMessageTimeoutW(0xFFFF, 0x001A, 0, "Environment", 0x0002, 2000, None)
 
 
+def restart_ollama(ollama_url: str) -> bool:
+    """Restart Ollama (it crashed or froze), then wait until it answers. False if it can't be restarted from here."""
+    if not sys.platform.startswith("win"):
+        return False
+    return _restart_ollama(ollama_url)
+
+
 def _restart_ollama(ollama_url: str) -> bool:
-    """Restart the Ollama tray app so it starts with the new settings. Only if it's the normal installed app."""
+    """Restart the Ollama tray app (with the speed settings). Only if it's the normal installed app."""
     if not APP.exists():
         return False
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
     for exe in ("ollama app.exe", "ollama.exe"):
         subprocess.run(["taskkill", "/IM", exe, "/F"], capture_output=True, creationflags=flags)
     time.sleep(1.5)
-    env = {**os.environ, **WANTED}
+    env = {**os.environ, **_user_env()}  # the speed boost settings as they are now (on or off)
+    env = {k: v for k, v in env.items() if v != ""}
     subprocess.Popen([str(APP)], env=env, creationflags=flags | getattr(subprocess, "DETACHED_PROCESS", 0))
     import httpx
 
@@ -67,7 +75,7 @@ def _restart_ollama(ollama_url: str) -> bool:
             return True
         except httpx.HTTPError:
             continue
-    return True
+    return False
 
 
 def apply(enabled: bool, ollama_url: str) -> dict[str, Any]:

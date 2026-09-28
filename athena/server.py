@@ -89,6 +89,9 @@ async def lifespan(_app: FastAPI):
 
     # Once, when it changes: set Ollama's speed options and restart it so they take effect.
     await run_in_threadpool(speedup.apply, store.get_settings().get("ollama_boost", True), OLLAMA)
+    from . import maintenance
+
+    maintenance.start_backups()  # a copy of your data once a day
     events.bind_loop(asyncio.get_running_loop())
     scheduler.start()
     from . import monitor
@@ -352,6 +355,55 @@ def project_context(project: dict[str, Any] | None) -> str:
     return "\n\n".join(parts)
 
 
+HISTORY_CHARS = 54_000  # ~18K tokens of chat: more than this and the oldest part gets summarised
+KEEP_CHARS = 24_000  # how much recent chat stays word for word after summarising
+
+
+def _msg_chars(m: dict[str, Any]) -> int:
+    return len(str(m.get("content") or "")) + 1500 * len(m.get("images") or [])
+
+
+async def fit_history(raw: list[Any], summary: str, model: str, settings: dict[str, Any]) -> tuple[list[Any], str, int]:
+    """Keep a long chat within what the model can read: fold the oldest messages into a running summary.
+    Returns (messages to send, summary text, how many of `raw` the summary now also covers)."""
+    raw = [m for m in raw if isinstance(m, dict)]
+    if sum(_msg_chars(m) for m in raw) <= HISTORY_CHARS and len(raw) <= 60:
+        return raw, summary, 0
+    k, kept = len(raw), 0
+    while k > 1 and (len(raw) - k < 4 or kept + _msg_chars(raw[k - 1]) <= KEEP_CHARS) and len(raw) - k < 40:
+        k -= 1
+        kept += _msg_chars(raw[k])
+    while k < len(raw) - 1 and raw[k].get("role") != "user":  # start the kept part at one of your messages
+        k += 1
+    old = "\n\n".join(f"{'User' if m.get('role') == 'user' else 'Assistant'}: {str(m.get('content') or '')[:2500]}"
+                       for m in raw[:k] if m.get("role") in ("user", "assistant"))[-36_000:]  # fits the usual chat memory: no reload
+    prompt = ("Update the running summary of a conversation between a user and their AI assistant, Athena.\n\n"
+              + (f"Summary so far:\n{summary}\n\n" if summary else "")
+              + f"Next part of the conversation:\n{old}\n\n"
+              "Write the updated summary in under 250 words: what was discussed, decisions made, facts about the user, "
+              "anything promised or still to do, and names, numbers and details that may matter later. Plain sentences, "
+              "no preamble.")
+    try:
+        payload: dict[str, Any] = {"model": model, "stream": False, "keep_alive": keep_alive(settings),
+                                   "options": {"temperature": 0.2, "num_predict": 600},
+                                   "messages": [{"role": "user", "content": prompt}]}
+        if (t := learning.think_value(model, "quick")) is not None:
+            payload["think"] = t
+        resp = await client.post(f"{OLLAMA}/api/chat", json=payload, timeout=httpx.Timeout(10, read=240))
+        if resp.status_code != 200 and "think" in payload:
+            payload.pop("think")
+            resp = await client.post(f"{OLLAMA}/api/chat", json=payload, timeout=httpx.Timeout(10, read=240))
+        text = re.sub(r"<think>.*?</think>", "", (resp.json().get("message") or {}).get("content", ""), flags=re.S).strip()
+    except (httpx.HTTPError, ValueError):
+        text = ""
+    return raw[k:], (text or summary), k
+
+
+def summary_prompt(summary: str) -> str:
+    return ("\n\nEarlier in this conversation (older messages are summarised to save memory; treat this as things you "
+            f"remember):\n{summary.strip()}") if summary and summary.strip() else ""
+
+
 def _clean_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     cleaned = []
     for msg in messages[-60:]:  # keep the context window reasonable
@@ -404,7 +456,12 @@ async def chat(request: Request):
     no_tools = bool(body.get("no_tools"))  # side-by-side model comparisons answer without tools
     use_tools = model not in _no_tool_models and bool(enabled_tools(settings)) and not no_tools
     auto_approve = bool(body.get("auto_approve"))
-    history = _clean_messages(body.get("messages") or [])
+    raw_history = body.get("messages") if isinstance(body.get("messages"), list) else []
+    chat_summary = str(body.get("summary") or "")[:6000]
+    covered = 0
+    if len(raw_history) > 8:  # a long chat: fold the oldest part into a summary if it no longer fits
+        raw_history, chat_summary, covered = await fit_history(raw_history, chat_summary, model, settings)
+    history = _clean_messages(raw_history)
     project = store.get_project(body.get("project_id"))
     if mode == "study":
         await run_in_threadpool(decks.record_study_day)
@@ -418,7 +475,7 @@ async def chat(request: Request):
     builder = mode == "code" and not no_tools and model not in _no_tool_models and settings.get("code_enabled", True)
     if builder:
         use_tools = True
-    extra_prompt = project_context(project) + canvas_context(body.get("canvas"))
+    extra_prompt = project_context(project) + canvas_context(body.get("canvas")) + summary_prompt(chat_summary)
     level = body.get("think_level") if body.get("think_level") in ("quick", "normal", "deep") else "normal"
     if mode == "voice" and level == "normal":
         level = "voice"  # think only briefly, in the thinking channel (never spoken)
@@ -467,6 +524,8 @@ async def chat(request: Request):
 
     async def generate() -> AsyncIterator[bytes]:
         nonlocal use_tools, auto_approve, code_root
+        if covered:
+            yield _event("summary", text=chat_summary, covered=covered)
         if routine:
             async for chunk in _routine_stream(routine, settings):
                 yield chunk
@@ -480,6 +539,7 @@ async def chat(request: Request):
         messages: list[dict[str, Any]] = [system, *history]
 
         empty_retries = 0
+        recovered = False
         for _round in range(MAX_TOOL_ROUNDS):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
             if use_tools:
@@ -493,6 +553,8 @@ async def chat(request: Request):
                 async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload) as resp:
                     if resp.status_code != 200:
                         text = (await resp.aread()).decode(errors="replace")
+                        if _ollama_crashed(text) and not recovered:
+                            raise OllamaStalled(text)
                         if "think" in payload and "think" in text.lower():
                             send_think = False  # this model can't change how much it thinks
                             continue
@@ -512,11 +574,24 @@ async def chat(request: Request):
                             continue
                         yield _event("error", message=_ollama_error(text, resp.status_code))
                         return
-                    async for line in resp.aiter_lines():
+                    lines = resp.aiter_lines()
+                    started = False
+                    while True:
+                        # A frozen Ollama sends nothing forever. Loading a big model can take minutes, but once
+                        # words are flowing, a long silence means it's stuck.
+                        try:
+                            line = await asyncio.wait_for(anext(lines), 90 if started else 600)
+                        except StopAsyncIteration:
+                            break
+                        except asyncio.TimeoutError:
+                            raise OllamaStalled("no reply") from None
                         if not line.strip():
                             continue
+                        started = True
                         chunk = json.loads(line)
                         if chunk.get("error"):
+                            if _ollama_crashed(str(chunk["error"])) and not recovered:
+                                raise OllamaStalled(str(chunk["error"]))
                             yield _event("error", message=_ollama_error(json.dumps(chunk), 200))
                             return
                         msg = chunk.get("message") or {}
@@ -533,9 +608,20 @@ async def chat(request: Request):
                                 "eval_duration": chunk.get("eval_duration"),
                                 "total_duration": chunk.get("total_duration"),
                             }
-            except httpx.ConnectError:
-                yield _event("error", message=f"Can't reach Ollama at {OLLAMA}. Is the Ollama app running?")
-                return
+            except (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError, OllamaStalled) as exc:
+                if recovered or not settings.get("auto_recover", True):
+                    yield _event("error", message=f"Can't reach Ollama at {OLLAMA}. Is the Ollama app running?"
+                                 if isinstance(exc, httpx.ConnectError) else "Ollama stopped responding. Try again in a moment.")
+                    return
+                recovered = True
+                yield _event("notice", message="Ollama stopped responding, so I'm restarting it and trying again…")
+                yield _event("retry")
+                from . import speedup
+
+                if not await run_in_threadpool(speedup.restart_ollama, OLLAMA):
+                    yield _event("error", message="Ollama stopped responding and I couldn't restart it. Open the Ollama app, then try again.")
+                    return
+                continue
 
             if not calls and not content.strip() and empty_retries < 3:
                 # The model stopped without answering (it happens now and then, mostly with lots of tools loaded).
@@ -1047,6 +1133,16 @@ async def feedback(request: Request):
 @app.get("/api/folders")
 async def default_folders():
     return {"defaults": files.default_roots(), "active": [str(r) for r in files.roots()]}
+
+
+class OllamaStalled(Exception):
+    """Ollama crashed, dropped the connection or froze in the middle of a reply."""
+
+
+def _ollama_crashed(text: str) -> bool:
+    low = text.lower()
+    return any(k in low for k in ("runner process has terminated", "runner process no longer running", "llama runner",
+                                  "connection refused", "unexpected eof", "connection reset", "exit status"))
 
 
 def _ollama_error(text: str, status: int) -> str:
@@ -2152,8 +2248,8 @@ async def phone_access(request: Request, call_next):
             return Response(f"<!doctype html><meta name=viewport content='width=device-width'><body style='font:17px system-ui;"
                             f"padding:24px;background:#10151f;color:#eceff5'><h2 style='color:#f5c542'>Athena</h2><p>{msg}</p>",
                             status_code=403, media_type="text/html")
-        if request.url.path in ("/api/pin", "/api/backup/restore", "/api/restore"):
-            return JSONResponse({"detail": "Change the PIN and restore backups from the PC itself."}, status_code=403)
+        if request.url.path in ("/api/pin", "/api/backup/restore", "/api/restore", "/api/backups/restore", "/api/update/apply"):
+            return JSONResponse({"detail": "Change the PIN, restore backups and update from the PC itself."}, status_code=403)
     return await call_next(request)
 
 
@@ -2212,6 +2308,51 @@ async def restore(file: UploadFile = File(...)):
     except exporter.ExportError as exc:
         raise HTTPException(400, str(exc)) from exc
     return {"ok": True, "files": count}
+
+
+@app.get("/api/backups")
+async def backups_list():
+    from . import maintenance
+
+    return {"backups": await run_in_threadpool(maintenance.list_backups), "folder": str(maintenance.BACKUP_DIR)}
+
+
+@app.post("/api/backups")
+async def backups_make():
+    from . import maintenance
+
+    return await run_in_threadpool(maintenance.make_backup, "manual")
+
+
+@app.post("/api/backups/restore")
+async def backups_restore(request: Request):
+    from . import exporter, maintenance
+
+    name = str((await request.json()).get("name") or "")
+    try:
+        count = await run_in_threadpool(maintenance.restore, name)
+    except exporter.ExportError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True, "files": count}
+
+
+# ------------------------------------------------------------ updates
+
+@app.get("/api/update")
+async def update_check():
+    from . import maintenance
+
+    return await run_in_threadpool(maintenance.check_update)
+
+
+@app.post("/api/update/apply")
+async def update_apply():
+    from . import maintenance
+
+    try:
+        return await run_in_threadpool(maintenance.apply_update)
+    except (RuntimeError, OSError) as exc:
+        raise HTTPException(502, str(exc)) from exc
 
 
 # ------------------------------------------------------ wake word/desktop
