@@ -1,6 +1,7 @@
 // Marble theme: white marble with soft grey clouds and thin gold veins, drawn once on this PC (no image files).
 
 let cached = '';
+let cachedVeins = '';
 
 function makeNoise(seed) {
   const perm = new Uint8Array(512);
@@ -40,6 +41,12 @@ export function marbleTexture(width = 720, height = 450) {
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   const img = ctx.createImageData(width, height);
+  // A second image with only the veins (white where the gold is), used as a mask for the moving glow.
+  const veinCanvas = document.createElement('canvas');
+  veinCanvas.width = width;
+  veinCanvas.height = height;
+  const veinCtx = veinCanvas.getContext('2d');
+  const veins = veinCtx.createImageData(width, height);
   const n1 = makeNoise(7), n2 = makeNoise(42);
   const gold = [214, 184, 118]; // pale gold, so the veins stay in the background
   for (let y = 0; y < height; y++) {
@@ -58,9 +65,21 @@ export function marbleTexture(width = 720, height = 450) {
       r += (gold[0] - r) * k; g += (gold[1] - g) * k; b += (gold[2] - b) * k;
       const i = (y * width + x) * 4;
       img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = 255;
+      // Veins a little wider than drawn, so the light blooms softly around them
+      const glow = Math.min(1, Math.pow(Math.max(0, 1 - vein / 0.07), 1.4) + Math.pow(Math.max(0, 1 - fine / 0.035), 1.6) * 0.45);
+      veins.data[i] = veins.data[i + 1] = veins.data[i + 2] = 255;
+      veins.data[i + 3] = Math.round(glow * 255);
     }
   }
   ctx.putImageData(img, 0, 0);
   cached = canvas.toDataURL('image/jpeg', 0.9);
+  veinCtx.putImageData(veins, 0, 0);
+  cachedVeins = veinCanvas.toDataURL('image/png');
   return cached;
+}
+
+/** The veins only (for the glow that drifts along them). Call marbleTexture() first. */
+export function marbleVeins() {
+  if (!cachedVeins) marbleTexture();
+  return cachedVeins;
 }

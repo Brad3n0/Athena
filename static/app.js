@@ -3,7 +3,7 @@ import { renderMarkdown, toSpeech } from './markdown.js';
 import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices, lastLanguage } from './voice.js';
 import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
-import { marbleTexture } from './marble.js';
+import { marbleTexture, marbleVeins } from './marble.js';
 import qrcode from './vendor/qrcode/qrcode.mjs';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf, mistakePrompt } from './study.js';
@@ -130,7 +130,10 @@ function applyTheme() {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   // Marble: the light theme on white-and-gold marble
   document.documentElement.dataset.skin = t === 'marble' ? 'marble' : '';
-  if (t === 'marble') document.documentElement.style.setProperty('--marble', `url(${marbleTexture()})`);
+  if (t === 'marble') {
+    document.documentElement.style.setProperty('--marble', `url(${marbleTexture()})`);
+    document.documentElement.style.setProperty('--marble-veins', `url(${marbleVeins()})`);
+  }
   applyAccent(state.settings.accent || 'gold');
   document.documentElement.dataset.size = state.settings.text_size || 'normal';
   document.documentElement.dataset.compact = state.settings.compact ? 'true' : 'false';

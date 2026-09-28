@@ -1066,3 +1066,20 @@ a.side-link { color: inherit; text-decoration: none; }
 .mic-meter { width: 140px; height: 8px; border-radius: 99px; background: var(--bg-input); overflow: hidden; border: 1px solid var(--border); }
 .mic-meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .08s linear; }
 .mic-test .muted { flex-basis: 100%; }
+
+/* Marble: a soft golden light slowly drifts along the veins, like light moving over polished stone */
+:root[data-skin="marble"] body::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    linear-gradient(115deg, transparent 0%, transparent 30%, rgba(240, 178, 60, .85) 42%, rgba(255, 222, 130, 1) 50%, rgba(240, 178, 60, .85) 58%, transparent 70%, transparent 100%),
+    radial-gradient(ellipse at 30% 40%, rgba(226, 170, 70, .55), transparent 65%);
+  background-size: 260% 100%, 100% 100%;
+  -webkit-mask: var(--marble-veins) center / cover no-repeat; mask: var(--marble-veins) center / cover no-repeat;
+  animation: veinShine 12s ease-in-out infinite alternate, veinBreathe 6s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(255, 200, 90, .8));
+}
+:root[data-skin="marble"] .app { position: relative; z-index: 1; }
+:root[data-skin="marble"] .main { background: rgba(252, 250, 246, .3); }
+@keyframes veinShine { 0% { background-position: 100% 0, 0 0; } 100% { background-position: 0% 0, 0 0; } }
+@keyframes veinBreathe { 0%, 100% { opacity: .7; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { :root[data-skin="marble"] body::before { animation: none; opacity: .5; } }
