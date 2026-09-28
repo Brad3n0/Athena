@@ -235,15 +235,36 @@ def _pc(fn):
 
 
 def _find_installed(a):
+    """Find where a game/app is installed and open that folder. If it isn't an installed game or app, look
+    through the user's files and folders instead, and open File Explorer right at the best match."""
     from . import locate
-    out = locate.find_installed(str(a.get("name", "")))
+    name = str(a.get("name", ""))
+    out = locate.find_installed(name)
+    want_open = a.get("open", True) is not False  # opening it is the point, unless asked not to
     best = out.get("best")
-    if a.get("open") and best and best.get("exists"):
-        try:
-            locate.open_folder(best["folder"])
-            out["opened"] = best["folder"]
-        except OSError as exc:
-            out["open_error"] = str(exc)
+    if best and best.get("exists"):
+        if want_open:
+            try:
+                locate.open_folder(best["folder"])
+                out["opened"] = best["folder"]
+            except OSError as exc:
+                out["open_error"] = str(exc)
+        return out
+    try:  # not installed software: search the user's own folders
+        found = files.find_files(query=name, limit=8)
+    except files.FileError:
+        found = {"results": []}
+    hits = found.get("results") or []
+    if hits:
+        hits.sort(key=lambda h: (h.get("type") != "folder", len(h["path"])))  # folders and short paths first
+        out = {"results": hits[:6], "best": {"name": hits[0]["path"].rsplit("/", 1)[-1], "folder": hits[0]["path"], "found_with": "your files"}}
+        if want_open:
+            try:
+                real = str(files.resolve(hits[0]["path"]))
+                locate.reveal(real)
+                out["opened"] = real
+            except (files.FileError, OSError) as exc:
+                out["open_error"] = str(exc)
     return out
 
 
@@ -273,13 +294,15 @@ TOOLS: list[Tool] = [
 
     Tool("list_folder", "files", "List what's inside a folder. Call with no path to see which folders you may use.",
          {"path": S("Folder, e.g. 'Downloads' or 'Documents/Taxes'"), "show_hidden": {"type": "boolean"}}, run=lambda a: files.list_folder(**a)),
-    Tool("find_installed", "files", "Find where a game or app is installed on this PC (Steam, Epic, Xbox/Game Pass, installed "
-         "programs, game folders on every drive). Use for 'where is X installed', 'find the folder my game X is in', "
-         "'open X's folder'. Understands loose names (spaces, capitals, ™ don't matter).",
-         {"name": S("The game or app, as the user said it (e.g. 'crimson desert')"),
-          "open": {"type": "boolean", "description": "Open the best match in File Explorer"}}, ["name"], run=_find_installed),
-    Tool("find_files", "files", "Search the user's allowed folders for files AND folders by name, type or contents. Loose names "
-         "work ('crimson desert' finds 'CrimsonDesert'). For where a game or app is installed, use find_installed instead.",
+    Tool("find_installed", "files", "Find a game's, app's or file's location on this PC AND open it in File Explorer (Steam, Epic, "
+         "Xbox/Game Pass, installed programs, game folders on every drive, then the user's own files and folders). Use for "
+         "'find my game X', 'where is X installed', 'open the folder X is in', 'take me to X'. Loose names work.",
+         {"name": S("The game, app, file or folder, as the user said it (e.g. 'crimson desert')"),
+          "open": {"type": "boolean", "description": "Open it in File Explorer (default true; false only if they just asked where it is)"}},
+         ["name"], run=_find_installed),
+    Tool("find_files", "files", "List files AND folders in the user's allowed folders by name, type or contents (loose names "
+         "work). It only lists them: when the user wants to find something and go to it / open it / see where it is, use "
+         "find_installed instead, which also searches their files and opens File Explorer right at it.",
          {"query": S("Part of the file name, or a pattern like '*.pdf'"), "folder": S("Only search inside this folder"),
           "kind": S("Type of file", enum=["images", "videos", "music", "documents", "spreadsheets", "presentations", "archives", "installers", "code"]),
           "contains": S("Text that must appear inside the file (text files only)")},

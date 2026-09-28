@@ -72,6 +72,21 @@ def match(text: str) -> list[Call] | None:
     if m and _site(m.group("site")) in SEARCHABLE:
         return [("open_website", {"site": _site(m.group("site")), "search": t[m.start("q"):m.end("q")]})]
 
+    # ---- find a game/app/file and open its folder: "find the folder my game crimson desert is in",
+    #      "where is crimson desert installed", "open the crimson desert folder", "take me to my minecraft folder"
+    for pattern in (
+        r"(?:find|open|show(?: me)?|take me to|go to|pull up|bring up|locate)\s+(?:the\s+)?(?:folder|location|files?|install(?:ation)?(?: folder)?|directory)\s+(?:that\s+|where\s+)?(?:my\s+)?(?:game\s+|app\s+)?(?P<n>.+?)\s+(?:is|are)(?:\s+(?:in|installed|at|saved))?",
+        r"(?:find|open|show(?: me)?|take me to|go to|locate)\s+(?:the\s+)?(?:folder|location|files?|install(?:ation)?(?: folder)?|directory)\s+(?:for|of)\s+(?:my\s+)?(?:game\s+|app\s+)?(?P<n>.+?)",
+        r"(?:find|open|show(?: me)?|take me to|go to|locate)\s+(?:my\s+|the\s+)?(?P<n>.+?)\s+(?:game\s+)?(?:folder|files|install(?:ation)? folder|directory|location)",
+        r"where(?:'s| is| are)\s+(?:my\s+)?(?:game\s+|app\s+)?(?P<n>.+?)\s+(?:installed|saved|located|at|on my (?:pc|computer))",
+        r"(?:find|locate)\s+(?:my\s+)?(?:game|app)\s+(?P<n>.+?)",
+        r"(?:show me|tell me|find|find out)\s+where\s+(?:my\s+)?(?:game\s+|app\s+)?(?P<n>.+?)\s+(?:is|are)(?:\s+(?:installed|saved|located|at))?",
+    ):
+        m = re.match(LEAD + pattern + TAIL, low)
+        if m and 0 < len(m.group("n").split()) <= 5:
+            n = t[m.start("n"):m.end("n")].strip(" '\"")
+            return [("find_installed", {"name": n, "open": True})]
+
     # ---- open an app or site: "open youtube", "launch spotify", "pull up netflix", "open discord and spotify"
     m = re.match(LEAD + r"(?:open|launch|start|run|load|go to|pull up|bring up|fire up|boot up)\s+(?:up\s+)?(?P<what>.+?)" + TAIL, low)
     if m:
@@ -151,6 +166,15 @@ def confirm(results: list[tuple[str, dict[str, Any], Any]]) -> str:
                          "Muted." if r.get("mute_toggled") and args.get("mute") else "Done.")
         elif name == "window_control":
             lines.append("Done.")
+        elif name == "find_installed":
+            best = r.get("best") or {}
+            if r.get("opened"):
+                where = f" ({best.get('found_with')})" if best.get("found_with") and best.get("found_with") != "your files" else ""
+                lines.append(f"Found {best.get('name') or args.get('name')}{where}. Opening its folder.")
+            elif best:
+                lines.append(f"{best.get('name')} is in {best.get('folder')}.")
+            else:
+                lines.append(f"I couldn't find {args.get('name')} on this PC.")
         elif name == "lock_computer":
             lines.append("Locking your PC.")
         elif name == "pc_status":

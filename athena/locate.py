@@ -214,3 +214,15 @@ def find_installed(query: str, limit: int = 6) -> dict[str, Any]:
 def open_folder(folder: str) -> None:
     if sys.platform.startswith("win"):
         os.startfile(folder)  # type: ignore[attr-defined]
+
+
+def reveal(path: str) -> None:
+    """Open File Explorer at a file (with it selected) or inside a folder."""
+    if not sys.platform.startswith("win"):
+        return
+    import subprocess
+
+    if os.path.isdir(path):
+        os.startfile(path)  # type: ignore[attr-defined]
+    else:
+        subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
