@@ -181,10 +181,13 @@ svg.fill { fill: currentColor; stroke: none; }
 .thinking-box summary { cursor: pointer; user-select: none; }
 .thinking-box .think-text { border-left: 2px solid var(--border); padding-left: 12px; margin-top: 6px; white-space: pre-wrap; }
 .error-text { color: var(--danger); }
-.typing::after {
-  content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--text);
-  vertical-align: middle; margin-left: 2px; animation: pulse 1s infinite ease-in-out;
-}
+/* Waiting for her reply: three softly glowing gold dots */
+.typing { display: inline-flex; gap: 6px; align-items: center; height: 22px; vertical-align: middle; }
+.typing i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px rgba(var(--accent-rgb), .7);
+  animation: typingDot 1.3s ease-in-out infinite; }
+.typing i:nth-child(2) { animation-delay: .18s; }
+.typing i:nth-child(3) { animation-delay: .36s; }
+@keyframes typingDot { 0%, 70%, 100% { transform: translateY(0) scale(.7); opacity: .35; } 35% { transform: translateY(-4px) scale(1); opacity: 1; } }
 @keyframes pulse { 0%, 100% { transform: scale(.6); opacity: .5 } 50% { transform: scale(1); opacity: 1 } }
 
 /* markdown */
@@ -1100,3 +1103,33 @@ a.side-link { color: inherit; text-decoration: none; }
 .cv-add { border-top: 1px solid var(--border); padding-top: 10px; }
 .settings .cv-list .cv-pick { display: flex; flex-direction: row; justify-content: flex-start; align-items: center; gap: 10px; }
 .settings .cv-list input[type="radio"] { width: auto; flex: none; padding: 0; border: 0; background: none; accent-color: var(--accent); }
+
+/* ---------------- Smooth panels, dialogs and lists ---------------- */
+/* Dialogs (Settings, shortcuts, projects…) glide in and out */
+dialog { transition: opacity .22s ease, transform .22s cubic-bezier(.2,.8,.3,1), overlay .22s allow-discrete, display .22s allow-discrete; }
+dialog:not([open]) { opacity: 0; transform: translateY(10px) scale(.98); }
+dialog[open] { opacity: 1; transform: none; }
+@starting-style { dialog[open] { opacity: 0; transform: translateY(10px) scale(.98); } }
+dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s ease, overlay .22s allow-discrete, display .22s allow-discrete; }
+@starting-style { dialog[open]::backdrop { background-color: transparent; backdrop-filter: none; } }
+/* Side panels (canvas, saved, flashcards, tasks) slide in */
+.canvas:not([hidden]), .drawer:not([hidden]) { animation: panelIn .28s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes panelIn { from { opacity: 0; transform: translateX(24px); } }
+/* Voice chat fades up */
+.voice-overlay:not([hidden]) { animation: overlayIn .35s ease both; }
+.voice-overlay:not([hidden]) .orb-canvas { animation: orbIn .6s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes overlayIn { from { opacity: 0; } }
+@keyframes orbIn { from { opacity: 0; transform: scale(.85); } }
+/* Sidebar: new chats slide in, deleted ones fold away */
+.chat-item.arrive { animation: chatArrive .32s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes chatArrive { from { opacity: 0; transform: translateX(-12px); } }
+.chat-item.leave { transition: opacity .2s ease, transform .2s ease, max-height .2s ease; opacity: 0; transform: translateX(-16px); max-height: 0; overflow: hidden; }
+.chat-item { max-height: 60px; }
+/* Menus pop softly */
+.model-menu:not([hidden]) { animation: fadeUp .16s ease both; }
+
+/* Reduce animations (Settings → General, or the same choice in Windows) */
+:root[data-motion="reduce"] *, :root[data-motion="reduce"] *::before, :root[data-motion="reduce"] *::after,
+:root[data-motion="reduce"] dialog, :root[data-motion="reduce"] dialog::backdrop {
+  animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important;
+}

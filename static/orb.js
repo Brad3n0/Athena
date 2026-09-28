@@ -91,6 +91,7 @@ export class VoiceOrb {
     this.level = lerp(this.level, voice, voice > this.level ? 0.5 : 0.12);
     this.mic = lerp(this.mic, mic, mic > this.mic ? 0.4 : 0.1);
     this.think = lerp(this.think, this.state === 'thinking' ? 1 : 0, 0.06);
+    this.listen = lerp(this.listen || 0, this.state === 'listening' ? 1 : 0, 0.05); // rings fade in and out, not pop
     this.flash = Math.max(0, (this.flash || 0) - dt * 1.5);
     const energy = Math.min(1, this.level + this.mic * 0.7);
     this.spin += dt * (0.35 + this.think * 2.2 + energy * 1.2) * this.tone.speed;
@@ -109,12 +110,12 @@ export class VoiceOrb {
     ctx.fillRect(0, 0, size, size);
 
     // Listening: soft ripple rings expanding with your voice
-    if (this.state === 'listening') {
+    if (this.listen > 0.01) {
       for (let i = 0; i < 3; i++) {
         const k = ((t * 0.6 + i / 3) % 1);
         ctx.beginPath();
         ctx.arc(cx, cy, R * (1.05 + k * 0.55 + this.mic * 0.25), 0, TAU);
-        ctx.strokeStyle = `rgba(${L}, ${(1 - k) * (0.12 + this.mic * 0.5)})`;
+        ctx.strokeStyle = `rgba(${L}, ${(1 - k) * (0.12 + this.mic * 0.5) * this.listen})`;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }

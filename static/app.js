@@ -136,7 +136,10 @@ function applyTheme() {
   applyAccent(state.settings.accent || 'gold');
   document.documentElement.dataset.size = state.settings.text_size || 'normal';
   document.documentElement.dataset.compact = state.settings.compact ? 'true' : 'false';
+  document.documentElement.dataset.motion = motionOff() ? 'reduce' : 'full';
 }
+/** "Reduce animations" in Settings, or the same choice in Windows. */
+function motionOff() { return !!state.settings?.reduce_motion || matchMedia('(prefers-reduced-motion: reduce)').matches; }
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 
 // --------------------------------------------------------------- status
@@ -248,6 +251,7 @@ function preloadCurrentModel() {
   if (state.settings.preload_model === false || state.abort) return;
   setTimeout(() => warmModel(currentModel(), { quiet: true }), 300);
 }
+$('#input').addEventListener('focus', preloadCurrentModel); // you're about to type: get her ready
 
 function openModelMenu() {
   const menu = $('#modelMenu');
@@ -377,8 +381,10 @@ function groupLabel(ts) {
   return d.toLocaleString(undefined, { month: 'long', year: 'numeric' });
 }
 
+const seenChats = new Set();
 function renderSidebar() {
   const q = $('#searchChats').value.trim().toLowerCase();
+  const firstRender = !seenChats.size;
   const list = $('#chatList');
   list.innerHTML = '';
   let group = '';
@@ -390,8 +396,9 @@ function renderSidebar() {
     const g = c.pinned ? 'Pinned' : groupLabel(c.updated || c.created || Date.now() / 1000);
     if (g !== group) { group = g; list.insertAdjacentHTML('beforeend', `<div class="chat-group">${g}</div>`); }
     const item = document.createElement('div');
-    item.className = 'chat-item' + (state.chat?.id === c.id ? ' active' : '');
+    item.className = 'chat-item' + (state.chat?.id === c.id ? ' active' : '') + (!firstRender && !seenChats.has(c.id) ? ' arrive' : '');
     item.dataset.id = c.id;
+    seenChats.add(c.id);
     const icon = c.icon ? `<span class="chat-icon">${escapeHtml(c.icon)}</span>` : c.mode === 'code' ? '<span class="chat-icon mode-tag">&lt;/&gt;</span>' : c.mode === 'study' ? '<span class="chat-icon">📘</span>' : '';
     item.innerHTML = `${icon}<span class="title">${escapeHtml(c.title || 'New chat')}</span>
       <span class="actions"><button data-act="pin" title="${c.pinned ? 'Unpin' : 'Pin to top'}">${ICONS.pin}</button><button data-act="move" title="Move to project">${ICONS.folder}</button><button data-act="export" title="Export">${ICONS.download}</button><button data-act="rename" title="Rename">${ICONS.edit}</button><button data-act="delete" title="Delete">${ICONS.trash}</button></span>`;
@@ -466,6 +473,8 @@ $('#chatList').onclick = async (e) => {
   if (act === 'delete') {
     // Hide it right away; really delete after a few seconds unless you press Undo.
     const removed = state.chats.find((c) => c.id === id);
+    if (!motionOff()) { item.classList.add('leave'); await new Promise((r) => setTimeout(r, 200)); }
+    seenChats.delete(id);
     deletedChats.add(id);
     state.chats = state.chats.filter((c) => c.id !== id);
     if (state.chat?.id === id) newChat();
@@ -567,7 +576,16 @@ async function saveChat() {
 const messagesEl = $('#messages');
 
 function nearBottom() { return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 120; }
-function scrollBottom(force = false) { if (force || nearBottom()) messagesEl.scrollTop = messagesEl.scrollHeight; }
+// Follow her reply as it's written, unless you've scrolled up to read; back at the bottom, it follows again.
+let follow = true;
+function scrollBottom(force = false) {
+  if (force) follow = true;
+  if (follow) messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+const stopFollowing = () => { if (!nearBottom()) follow = false; };
+messagesEl.addEventListener('wheel', (e) => { if (e.deltaY < 0) follow = false; else requestAnimationFrame(() => { if (nearBottom()) follow = true; }); }, { passive: true });
+messagesEl.addEventListener('touchmove', () => requestAnimationFrame(stopFollowing), { passive: true });
+messagesEl.addEventListener('scroll', () => { if (messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 40) follow = true; }, { passive: true });
 
 function renderWelcome() {
   const name = state.settings.user_name ? `, ${escapeHtml(state.settings.user_name)}` : '';
@@ -1042,8 +1060,8 @@ function updateAssistantEl(el, m) {
   if (m.error) html += `<p class="error-text">⚠ ${escapeHtml(m.error)}</p>`;
   if (m.streaming && !content && !m.error && !stillThinking && !(m.tools || []).length && m.warming) {
     html += `<span class="warming"><span class="spin"></span>Waking up ${escapeHtml(m.model || 'the model')}… the first reply takes a moment</span>`;
-  } else if (m.streaming && !content && !m.error && !stillThinking) html += '<span class="typing"></span>';
-  if (m.streaming && stillThinking && !thinking.trim()) html += '<span class="typing"></span>';
+  } else if (m.streaming && !content && !m.error && !stillThinking) html += '<span class="typing"><i></i><i></i><i></i></span>';
+  if (m.streaming && stillThinking && !thinking.trim()) html += '<span class="typing"><i></i><i></i><i></i></span>';
   el.querySelector('.content').innerHTML = html;
   if (html.includes('study-widget')) hydrateStudy(el, !!m.streaming);
   if (html.includes('graph-widget')) hydrateGraphs(el, !!m.streaming);
@@ -1495,11 +1513,19 @@ async function generateReply({ voice = false, model = null, route = null, think 
   const speakThis = voice || state.settings.auto_speak;
   if (speakThis) speaker.reset();
 
+  // Smooth writing: the model sends words in uneven bursts; show them at a steady pace that keeps up with it.
   let raf = 0;
-  const paint = () => {
-    if (raf) return;
-    raf = requestAnimationFrame(() => { raf = 0; updateAssistantEl(el, reply); scrollBottom(); });
+  let shown = 0;
+  const frame = () => {
+    raf = 0;
+    const target = reply.content.length;
+    if (shown > target || motionOff()) shown = target;
+    else if (shown < target) shown = Math.min(target, shown + Math.max(2, Math.ceil((target - shown) / 7)));
+    updateAssistantEl(el, shown < target ? { ...reply, content: reply.content.slice(0, shown) } : reply);
+    scrollBottom();
+    if (shown < target) raf = requestAnimationFrame(frame);
   };
+  const paint = () => { if (!raf) raf = requestAnimationFrame(frame); };
   let thinkStart = 0;
   // Let you know when the model has to load into memory first (can take a while on the first message).
   const warmTimer = setTimeout(() => { if (!reply.content && !reply.thinking && !reply.tools.length) { reply.warming = true; paint(); } }, 2500);
@@ -2302,6 +2328,7 @@ async function startVoice(firstCommand = '') {
   if (!state.status.ollama) { toast('Ollama is not running.', 'error'); return; }
   const model = pickDefaultModel('voice');
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); return; }
+  warmModel(model, { quiet: true }); // start loading it while the microphone starts
   state.voice.active = true;
   state.voice.chimeNext = true;
   state.voice.barge = { hits: 0 };
@@ -2509,6 +2536,8 @@ function openSettings(tab = 'general') {
   renderAccents();
   $('#setTextSize').value = s.text_size || 'normal';
   $('#setCompact').checked = !!s.compact;
+  $('#setReduceMotion').checked = !!s.reduce_motion;
+  $('#setOllamaBoost').checked = s.ollama_boost !== false;
   $('#setSounds').checked = !!s.sound_effects;
   $('#setBirthday').value = s.birthday ? `${new Date().getFullYear()}-${s.birthday}` : '';
   $('#setBargeIn').checked = s.voice_barge_in !== false;
@@ -2679,6 +2708,8 @@ bind('#setScreen', 'show_on_screen', (el) => el.checked);
 bind('#setPc', 'pc_enabled', (el) => el.checked);
 bind('#setTextSize', 'text_size');
 bind('#setCompact', 'compact', (el) => el.checked);
+bind('#setReduceMotion', 'reduce_motion', (el) => el.checked);
+bind('#setOllamaBoost', 'ollama_boost', (el) => el.checked);
 bind('#setSounds', 'sound_effects', (el) => el.checked);
 bind('#setBirthday', 'birthday', (el) => el.value.slice(5));
 bind('#setBargeIn', 'voice_barge_in', (el) => el.checked);

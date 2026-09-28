@@ -85,6 +85,10 @@ settings_hooks: list = []  # called with the new settings after every change
 async def lifespan(_app: FastAPI):
     global client
     client = OllamaClient(timeout=httpx.Timeout(10.0, read=None))
+    from . import speedup
+
+    # Once, when it changes: set Ollama's speed options and restart it so they take effect.
+    await run_in_threadpool(speedup.apply, store.get_settings().get("ollama_boost", True), OLLAMA)
     events.bind_loop(asyncio.get_running_loop())
     scheduler.start()
     from . import monitor
@@ -1271,6 +1275,10 @@ async def put_settings(request: Request):
     if "ha_token" in patch and not str(patch["ha_token"]).strip():
         patch.pop("ha_token")  # empty field = keep the saved token
     result = store.update_settings(patch)
+    if "ollama_boost" in patch:  # switched in Settings: apply now (restarts Ollama once, in the background)
+        from . import speedup
+
+        asyncio.get_running_loop().run_in_executor(None, speedup.apply, bool(patch["ollama_boost"]), OLLAMA)
     for hook in settings_hooks:
         hook(result)
     return _public_settings(result)
@@ -1698,6 +1706,12 @@ async def selftest():
         where = {"cuda": "graphics card", "cpu": "processor"}.get(st["device"], "")
         return "ok", f"{len(st['voices'])} voice(s)" + (f" · running on the {where}" if where else " · loads the first time she speaks")
     await check("Custom voice", custom_voice_check())
+
+    async def boost_check():
+        from . import speedup
+
+        return speedup.status(settings.get("ollama_boost", True))
+    await check("Ollama speed boost", boost_check())
 
     checks += await run_in_threadpool(system.local_checks)
     return {"checks": checks, "platform": sys.platform, "time": datetime.now().isoformat(timespec="seconds")}
