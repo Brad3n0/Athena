@@ -42,21 +42,10 @@ const ICONS = {
 // Curated picks from the Ollama library. VRAM guidance is approximate (default 4-bit quantization).
 const RECOMMENDED = [
   { name: 'qwen3:30b-a3b-instruct-2507-q4_K_M', role: 'Assistant · Voice', desc: 'Qwen3 30B Instruct (2507): the most natural, ChatGPT-like talker you can run at home, great at Jarvis commands, and fast (only 3B of it works per word). ~19 GB · 16 GB VRAM + 32 GB RAM' },
-  { name: 'qwen3-vl:8b', role: 'Vision', desc: 'Qwen3 VL: reads screenshots, photos and worksheets much better than qwen2.5vl. ~6 GB · 8 GB VRAM' },
-  { name: 'gpt-oss:20b', role: 'Assistant', desc: "OpenAI's open-weight reasoning model. Excellent all-rounder with tool use. ~14 GB · 16 GB VRAM" },
-  { name: 'qwen3:14b', role: 'Study · Assistant', desc: 'Best for schoolwork: top at math & science, shows its reasoning step by step. ~9 GB · 12 GB VRAM' },
-  { name: 'qwen3:8b', role: 'Study · Assistant', desc: 'Great homework helper for 8 GB graphics cards. ~5 GB' },
-  { name: 'qwen3-coder:30b', role: 'Code', desc: 'Top local coding model (fast MoE). ~19 GB · 24 GB VRAM, or 32 GB system RAM' },
-  { name: 'qwen2.5-coder:14b', role: 'Code', desc: 'Strong coder for 12–16 GB cards. ~9 GB' },
-  { name: 'qwen2.5-coder:7b', role: 'Code', desc: 'Good coder for 8 GB cards. ~4.7 GB' },
-  { name: 'qwen3:4b', role: 'Voice', desc: 'Quick, snappy replies for voice chat, supports tasks. ~2.5 GB' },
-  { name: 'llama3.2:3b', role: 'Voice', desc: 'Very fast and light. ~2 GB' },
-  { name: 'gemma3:12b', role: 'Vision', desc: 'Understands images you attach. ~8 GB · 12 GB VRAM' },
-  { name: 'qwen2.5vl:7b', role: 'Study · Vision', desc: 'Reads photos of worksheets, handwriting, charts and diagrams. ~6 GB · 8 GB VRAM' },
-  // Community versions with the refusal behaviour removed. Slightly less polished than the originals.
-  { name: 'huihui_ai/qwen3-abliterated:14b', role: 'Fewer refusals', desc: 'Community Qwen3 14B with refusals removed. ~9 GB · 12 GB VRAM' },
-  { name: 'huihui_ai/qwen3-abliterated:8b', role: 'Fewer refusals', desc: 'Community Qwen3 8B with refusals removed. ~5 GB · 8 GB VRAM' },
-  { name: 'dolphin3', role: 'Fewer refusals', desc: 'Dolphin 3 (Llama 3.1 8B), tuned to follow instructions without refusing. ~4.9 GB' },
+  { name: 'qwen3-coder:30b', role: 'Code', desc: 'Top local coding model, also fast. Builds sites, games and apps. ~19 GB · 16 GB VRAM + 32 GB RAM' },
+  { name: 'qwen3:14b', role: 'Study', desc: 'Best for schoolwork: top at math & science, shows its reasoning step by step. ~9 GB' },
+  { name: 'qwen3-vl:8b', role: 'Vision', desc: 'Reads screenshots, photos, worksheets and handwriting; powers "what\'s on my screen" and clicking by sight. ~6 GB' },
+  { name: 'nomic-embed-text', role: 'Documents', desc: 'Lets Athena search your documents in Knowledge. Tiny. ~0.3 GB' },
 ];
 
 // Preference order used when you haven't chosen a default model yet.
