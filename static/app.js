@@ -3051,7 +3051,10 @@ async function openWorkspace(path, { quiet = false } = {}) {
   try {
     const info = await api('/api/workspace/open', json('POST', { path }));
     state.chat.workspace = info;
-    if (state.mode !== 'code') setMode('code', { keepModel: false });
+    // Working on herself: keep the model that's already loaded. Swapping to another ~19 GB model takes a while and
+    // can run the graphics card out of memory.
+    const keep = path === state.status.athena_root && state.loaded.includes(currentModel());
+    if (state.mode !== 'code') setMode('code', { keepModel: keep });
     $('#workspaceDlg').close();
     renderWorkspaceChip();
     if (!quiet) toast(path === state.status.athena_root ? '🛠 My own code is open. Tell me what to fix or add; you approve every change.'

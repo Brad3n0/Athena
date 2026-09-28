@@ -63,17 +63,51 @@ def context_size(payload: dict[str, Any]) -> int:
     return min(ctx, CTX_MAX)
 
 
+_ctx_used: dict[str, int] = {}  # model -> context size it's loaded with (changing it reloads the whole model)
+_ctx_cap: dict[str, int] = {}  # model -> smaller limit after it ran out of graphics memory
+
+
 class OllamaClient(httpx.AsyncClient):
-    """Every request to Ollama asks for a big enough context (unless the caller already chose one)."""
+    """Every request to Ollama asks for a big enough context (unless the caller already chose one). Once a model is
+    loaded with a size, later requests keep that size, so the model isn't reloaded between the steps of one task."""
 
     def build_request(self, method, url, **kw):  # type: ignore[override]
         body = kw.get("json")
         if isinstance(body, dict) and str(url).startswith(OLLAMA) and str(url).endswith(("/api/chat", "/api/generate")):
+            model = str(body.get("model") or "")
+            if body.get("keep_alive") == 0:  # unloading it
+                _ctx_used.pop(model, None)
+                return super().build_request(method, url, **kw)
             options = dict(body.get("options") or {})
             if "num_ctx" not in options:
-                options["num_ctx"] = context_size(body)
+                ctx = max(context_size(body), _ctx_used.get(model, 0))
+                if model in _ctx_cap:
+                    ctx = min(ctx, _ctx_cap[model])
+                options["num_ctx"] = _ctx_used[model] = ctx
                 kw["json"] = {**body, "options": options}
         return super().build_request(method, url, **kw)
+
+
+async def make_room(model: str) -> None:
+    """Before loading a big model, unload the others. Two ~19 GB models don't fit on the graphics card together, and
+    on some cards (AMD especially) Ollama tries anyway and runs out of memory."""
+    try:
+        loaded = [m.get("name") or m.get("model") for m in (await client.get(f"{OLLAMA}/api/ps", timeout=4)).json().get("models", [])]
+    except (httpx.HTTPError, ValueError):
+        return
+    if not loaded or model in loaded or f"{model}:latest" in loaded:
+        return
+    for other in loaded:
+        if other and not re.search(r"embed", other):
+            try:
+                await client.post(f"{OLLAMA}/api/generate", json={"model": other, "keep_alive": 0}, timeout=20)
+            except httpx.HTTPError:
+                pass
+
+
+def _out_of_memory(text: str) -> bool:
+    low = text.lower()
+    return any(k in low for k in ("out of memory", "unable to allocate", "failed to allocate", "cudamalloc failed", "insufficient memory"))
 
 
 client: httpx.AsyncClient
@@ -555,8 +589,13 @@ async def chat(request: Request):
         empty_retries = 0
         recovered = False
         self_pushed = False
+        oom_tries = 0
+        payload_extra: dict[str, Any] = {}  # extra model options after running out of graphics memory
+        await make_room(model)  # switching models: unload the other big one first so both don't try to fit
         for _round in range(MAX_TOOL_ROUNDS):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
+            if payload_extra:
+                payload["options"] = dict(payload_extra)
             if use_tools:
                 payload["tools"] = [t.spec() for t in enabled_tools(settings) if not (self_open and t.name == "work_on_myself")] \
                     + (workspace.specs(code_root) if code_root else [])
@@ -569,7 +608,7 @@ async def chat(request: Request):
                 async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload) as resp:
                     if resp.status_code != 200:
                         text = (await resp.aread()).decode(errors="replace")
-                        if _ollama_crashed(text) and not recovered:
+                        if (_ollama_crashed(text) and not recovered) or (_out_of_memory(text) and oom_tries < 2):
                             raise OllamaStalled(text)
                         if "think" in payload and "think" in text.lower():
                             send_think = False  # this model can't change how much it thinks
@@ -606,7 +645,7 @@ async def chat(request: Request):
                         started = True
                         chunk = json.loads(line)
                         if chunk.get("error"):
-                            if _ollama_crashed(str(chunk["error"])) and not recovered:
+                            if (_ollama_crashed(str(chunk["error"])) and not recovered) or (_out_of_memory(str(chunk["error"])) and oom_tries < 2):
                                 raise OllamaStalled(str(chunk["error"]))
                             yield _event("error", message=_ollama_error(json.dumps(chunk), 200))
                             return
@@ -625,6 +664,18 @@ async def chat(request: Request):
                                 "total_duration": chunk.get("total_duration"),
                             }
             except (httpx.ConnectError, httpx.RemoteProtocolError, httpx.ReadError, OllamaStalled) as exc:
+                if _out_of_memory(str(exc)) and oom_tries < 2 and settings.get("auto_recover", True):
+                    # The graphics card ran out of memory loading the model. First: unload everything else and use a
+                    # smaller chat memory. If that's still too much: keep part of the model on the processor.
+                    oom_tries += 1
+                    yield _event("notice", message="My graphics card ran out of memory, so I'm freeing some and trying again…")
+                    yield _event("retry")
+                    await make_room("")
+                    _ctx_cap[model] = 16384
+                    _ctx_used.pop(model, None)
+                    if oom_tries == 2:
+                        payload_extra["num_gpu"] = 24  # about half the layers on the graphics card, the rest on the CPU
+                    continue
                 if recovered or not settings.get("auto_recover", True):
                     yield _event("error", message=f"Can't reach Ollama at {OLLAMA}. Is the Ollama app running?"
                                  if isinstance(exc, httpx.ConnectError) else "Ollama stopped responding. Try again in a moment.")
@@ -1170,8 +1221,9 @@ class OllamaStalled(Exception):
 
 def _ollama_crashed(text: str) -> bool:
     low = text.lower()
-    return any(k in low for k in ("runner process has terminated", "runner process no longer running", "llama runner",
-                                  "connection refused", "unexpected eof", "connection reset", "exit status"))
+    return _out_of_memory(text) or any(k in low for k in (
+        "runner process has terminated", "runner process no longer running", "llama runner", "llama-server process",
+        "server process has terminated", "connection refused", "unexpected eof", "connection reset", "exit status"))
 
 
 def _ollama_error(text: str, status: int) -> str:
@@ -1182,6 +1234,9 @@ def _ollama_error(text: str, status: int) -> str:
     if isinstance(msg, dict):  # {"error": {"message": ...}} style
         msg = str(msg.get("message") or msg)
     msg = str(msg)
+    if _out_of_memory(msg):
+        return ("My graphics card ran out of memory loading the model. Close games or other heavy apps and try again, or "
+                "lower Settings → Models → Chat memory to Normal (8K).")
     if "context size" in msg.lower() or "context length" in msg.lower():
         return ("This chat is longer than the model can read at once. Start a new chat, or raise "
                 "Settings → Models → Chat memory, then try again.")

@@ -26,7 +26,8 @@ BINARY_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".bmp", ".pdf", 
               ".so", ".dylib", ".bin", ".class", ".jar", ".pyc", ".o", ".obj", ".woff", ".woff2", ".ttf", ".otf", ".mp3",
               ".mp4", ".mov", ".wav", ".db", ".sqlite", ".lock", ".psd", ".onnx", ".gguf", ".safetensors", ".pt"}
 MAX_FILES = 5000
-MAX_READ_CHARS = 60_000
+MAX_READ_CHARS = 24_000  # per read: big enough for a real chunk, small enough to keep a local model fast
+READ_WINDOW = 250  # lines read when no range is given (search_code first, then read around the hit)
 BACKUPS = store.DATA_DIR / "code_backups"
 JOURNAL = store.DATA_DIR / "code_journal.json"
 
@@ -136,7 +137,7 @@ def read_code(root: Path, a: dict[str, Any]) -> dict[str, Any]:
     text = _read(p)
     lines = text.splitlines()
     start = max(1, int(a.get("start_line") or 1))
-    end = min(len(lines), int(a.get("end_line") or len(lines)))
+    end = min(len(lines), int(a.get("end_line") or (start + READ_WINDOW - 1)))
     numbered, size = [], 0
     for i in range(start, end + 1):
         row = f"{i:>5}  {lines[i - 1]}"
@@ -147,7 +148,8 @@ def read_code(root: Path, a: dict[str, Any]) -> dict[str, Any]:
         numbered.append(row)
     out = {"path": _rel(root, p), "lines": f"{start}-{end} of {len(lines)}", "content": "\n".join(numbered)}
     if end < len(lines):
-        out["note"] = f"File continues. Call read_code again with start_line={end + 1}."
+        out["note"] = (f"File continues ({len(lines)} lines). To find a specific part, search_code is faster than reading on; "
+                       f"otherwise call read_code with start_line={end + 1}.")
     return out
 
 
