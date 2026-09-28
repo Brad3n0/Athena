@@ -74,6 +74,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "auto_preview": True,
     "auto_route": True,  # Assistant tab picks the best model per message
     "keep_alive": "30m",  # how long models stay loaded after use
+    "context_size": 16384,  # how much of the chat the model can read at once (tokens); Ollama's own default is too small
     "preload_model": True,  # load your model in the background when Athena opens
     "seasonal_effects": True,
     "phone_access": False,

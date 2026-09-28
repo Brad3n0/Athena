@@ -43,6 +43,39 @@ APPROVAL_TIMEOUT = 300
 _approvals: dict[str, asyncio.Future] = {}
 _no_tool_models: set[str] = set()
 
+CTX_MAX = 32768
+
+
+def context_size(payload: dict[str, Any]) -> int:
+    """How much the model reads at once. Ollama defaults to 4096 tokens, less than Athena's instructions and tools
+    need, so ask for more; a long chat steps it up (changing the size reloads the model, so it only changes in steps)."""
+    try:
+        base = int(store.get_settings().get("context_size") or 16384)
+    except (TypeError, ValueError):
+        base = 16384
+    base = max(4096, min(base, CTX_MAX))
+    size = len(json.dumps(payload.get("messages") or payload.get("prompt") or "", ensure_ascii=False))
+    size += len(json.dumps(payload.get("tools") or []))
+    need = size // 3 + 2048  # roughly 3 characters a token, plus room for the reply
+    ctx = base
+    while ctx < need and ctx < CTX_MAX:
+        ctx *= 2
+    return min(ctx, CTX_MAX)
+
+
+class OllamaClient(httpx.AsyncClient):
+    """Every request to Ollama asks for a big enough context (unless the caller already chose one)."""
+
+    def build_request(self, method, url, **kw):  # type: ignore[override]
+        body = kw.get("json")
+        if isinstance(body, dict) and str(url).startswith(OLLAMA) and str(url).endswith(("/api/chat", "/api/generate")):
+            options = dict(body.get("options") or {})
+            if "num_ctx" not in options:
+                options["num_ctx"] = context_size(body)
+                kw["json"] = {**body, "options": options}
+        return super().build_request(method, url, **kw)
+
+
 client: httpx.AsyncClient
 startup_hooks: list = []  # the desktop app / wake word register themselves here
 settings_hooks: list = []  # called with the new settings after every change
@@ -51,7 +84,7 @@ settings_hooks: list = []  # called with the new settings after every change
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     global client
-    client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
+    client = OllamaClient(timeout=httpx.Timeout(10.0, read=None))
     events.bind_loop(asyncio.get_running_loop())
     scheduler.start()
     from . import monitor
@@ -480,7 +513,7 @@ async def chat(request: Request):
                             continue
                         chunk = json.loads(line)
                         if chunk.get("error"):
-                            yield _event("error", message=chunk["error"])
+                            yield _event("error", message=_ollama_error(json.dumps(chunk), 200))
                             return
                         msg = chunk.get("message") or {}
                         if msg.get("thinking"):
@@ -1020,6 +1053,9 @@ def _ollama_error(text: str, status: int) -> str:
     if isinstance(msg, dict):  # {"error": {"message": ...}} style
         msg = str(msg.get("message") or msg)
     msg = str(msg)
+    if "context size" in msg.lower() or "context length" in msg.lower():
+        return ("This chat is longer than the model can read at once. Start a new chat, or raise "
+                "Settings → Models → Chat memory, then try again.")
     if status == 404 and "not found" in msg.lower():
         msg += " — download it in Settings → Models."
     return msg or f"Ollama returned HTTP {status}"

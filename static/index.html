@@ -313,6 +313,13 @@
             <option value="-1">Always (until you restart the PC or quit Ollama)</option>
           </select>
         </label>
+        <label>Chat memory (how much of the chat she reads at once)
+          <select id="setContextSize">
+            <option value="8192">Normal (8K) — uses the least graphics memory</option>
+            <option value="16384">Long (16K) — recommended</option>
+            <option value="32768">Very long (32K) — for big documents; needs more memory</option>
+          </select>
+        </label>
         <p class="muted small" style="margin-top:-6px">A loaded model answers right away. It uses graphics card memory, so games may run slower while it's loaded; pick a shorter time if you game a lot.</p>
         <button type="button" class="ghost" id="bestModels">✨ Use the best models for my PC</button>
         <p class="muted small" id="bestModelsNote"></p>

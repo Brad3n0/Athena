@@ -2508,6 +2508,7 @@ function openSettings(tab = 'general') {
   $('#setShooting').checked = s.shooting_stars !== false;
   $('#setAutoPreview').checked = s.auto_preview !== false;
   $('#setKeepAlive').value = s.keep_alive || '30m';
+  $('#setContextSize').value = String(s.context_size || 16384);
   $('#setAutoRoute').checked = s.auto_route !== false;
   $('#setPreload').checked = s.preload_model !== false;
   $('#setAlerts').checked = s.alerts_enabled !== false;
@@ -2677,6 +2678,7 @@ $('#setThinkLevel').addEventListener('change', () => setTimeout(renderThinkBtn, 
 bind('#setShooting', 'shooting_stars', (el) => el.checked);
 bind('#setAutoPreview', 'auto_preview', (el) => el.checked);
 bind('#setKeepAlive', 'keep_alive');
+bind('#setContextSize', 'context_size', (el) => Number(el.value));
 $('#setAutoRoute').addEventListener('change', async (e) => { await saveSettings({ auto_route: e.target.checked }); renderModelButton(); });
 bind('#setPreload', 'preload_model', (el) => el.checked);
 bind('#setSeasonal', 'seasonal_effects', (el) => el.checked);
