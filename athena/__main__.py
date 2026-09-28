@@ -19,6 +19,22 @@ def main() -> None:
     parser.add_argument("--hidden", action="store_true", help="With --desktop: start in the tray without opening a window")
     args = parser.parse_args()
 
+    # Load the server first: if a change Athena made to her own code broke it, say so clearly, and exit with
+    # code 3 so start.bat can offer to undo those changes.
+    try:
+        import athena.server  # noqa: F401
+    except Exception as exc:  # SyntaxError, ImportError, NameError…
+        import sys
+        import traceback
+
+        traceback.print_exc()
+        print(f"\n  Athena couldn't start: {exc.__class__.__name__}: {exc}")
+        from . import selfedit
+
+        if selfedit.changed_files():
+            print("  This is probably from a change she made to her own code.")
+        sys.exit(3)
+
     host = args.host or _default_host()
     os.environ["ATHENA_LISTEN"] = host
 

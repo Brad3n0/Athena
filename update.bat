@@ -29,7 +29,18 @@ echo.
 echo Checking GitHub for updates...
 echo If a GitHub sign-in window opens, sign in. Your repo is private, and it only asks once.
 git fetch origin %BRANCH% || goto :fail
+rem Keep any changes Athena made to her own code ("fix yourself"): set them aside, update, then put them back.
+set "SELFCHANGES="
+git rev-parse -q --verify HEAD >nul 2>nul && (git diff --quiet HEAD || set "SELFCHANGES=1")
+if defined SELFCHANGES git stash push --include-untracked -q -m "Athena's own changes (before update.bat)"
 git reset -q --hard FETCH_HEAD || goto :fail
+if defined SELFCHANGES (
+  git stash apply -q >nul 2>nul && git stash drop -q >nul 2>nul && echo Athena's changes to her own code were kept.
+  if errorlevel 1 (
+    git reset -q --hard FETCH_HEAD
+    echo The update changed the same code Athena had changed herself, so her changes were set aside.
+  )
+)
 echo.
 echo Updated! Newest change:
 git log -1 --format="   %%s  (%%cr)"

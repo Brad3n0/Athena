@@ -140,6 +140,25 @@ With PC control on (Settings → Abilities), just ask, typed or out loud:
 
 She works your real apps with the keyboard and mouse like you would, so keep the PC unlocked while she's doing things, and keep your hands off the keyboard for those few seconds.
 
+## She can fix and improve herself
+
+Say *"fix yourself, the send button doesn't work on my phone"*, *"add a dark red theme to yourself"* or *"improve your code so YouTube opens faster"*. Athena opens her own code in Code mode (also: 📂 → **🛠 Athena's own code**) and works like a careful developer:
+
+1. She finds the right place and shows you each change as a diff. Nothing changes until you press **Allow**.
+2. She checks her code still loads (**check_athena**) and only then asks to **restart** herself. The page reloads by itself.
+3. If something's worse, say *"undo your changes"*: her code goes back to the downloaded version (the changes are kept aside in Git, not deleted).
+
+Safety nets: she never edits your `data` folder (chats, settings) or backups; she won't restart with code that doesn't load; if she ever can't start, **start.bat** offers to undo her changes and start again; and updates keep her changes when they fit (if an update changed the same code, the update wins and her changes are set aside). This works best with a strong coding model like **qwen3-coder:30b**; bigger changes are safer to ask for in small steps.
+
+## Put things on your GitHub
+
+Connect once in **Settings → Integrations → GitHub → Connect GitHub** (a GitHub sign-in window opens; it's the same sign-in Git uses for update.bat). Then:
+
+- *"Upload my portfolio-site folder to GitHub"*: she creates a new repository on your account (private by default; say *"public"* if you want it public), uploads the folder and gives you the link. Later, *"upload my portfolio-site folder to GitHub again"* sends the changes.
+- In **Code mode**, *"put this on my GitHub"* does the same for the project she's building.
+
+You see exactly which folder goes where and press **Allow** first. Files over 100 MB are left out (GitHub doesn't accept them), and whole personal or system folders are refused.
+
 ## Pictures: make and edit
 
 - **Edit photos:** attach a photo and say what you want: *"crop it square and make it brighter"*, *"black and white with a vignette"*, *"remove the background"*, *"add the caption 'Summer vibes' at the bottom"*, *"make it warmer"*. Or hover any picture in the chat and click **✏️ Edit** for the photo editor: sliders for brightness, contrast, saturation, warmth and blur, filters, crop and rotate, captions and background removal. Everything happens on your PC. The first background removal downloads a small tool (~170 MB) once. Edited pictures are saved in **Pictures → Athena**.

@@ -606,6 +606,70 @@ async def _click(a, ctx):
     return {**done, "target": target, "found_by": "screenshot"}
 
 
+def _github_folder(folder: str) -> Path:
+    """The folder to upload: a full path, or a folder name in the usual places. Never a whole drive or system folder."""
+    raw = (folder or "").strip().strip('"')
+    if not raw:
+        raise ValueError("Which folder should I upload?")
+    home = Path.home()
+    candidates = [Path(raw).expanduser()] if Path(raw).expanduser().is_absolute() else \
+        [base / raw for base in (home / "Documents" / "Athena Projects", home / "Documents", home / "Desktop", home / "Downloads", home)]
+    path = next((c.resolve() for c in candidates if c.is_dir()), None)
+    if not path:
+        raise ValueError(f"I couldn't find a folder called {raw}. Tell me where it is, or ask me to find it first.")
+    blocked = {home.resolve(), (home / "Documents").resolve(), (home / "Desktop").resolve(), (home / "Downloads").resolve()}
+    low = str(path).lower()
+    if path in blocked or path.parent == path or any(k in low for k in ("\\windows", "program files", "appdata", "/etc", "/usr")):
+        raise ValueError(f"I won't upload {path} (it's a whole personal or system folder). Pick the project folder inside it.")
+    return path
+
+
+def _upload_folder(a):
+    from . import workspace
+    try:
+        root = _github_folder(str(a.get("folder", "")))
+        files_, big, total = 0, [], 0
+        for p in root.rglob("*"):
+            if any(part in workspace.SKIP_DIRS for part in p.relative_to(root).parts):
+                continue
+            if p.is_file():
+                files_ += 1
+                size = p.stat().st_size
+                total += size
+                if size > 95 * 1024 * 1024:  # GitHub refuses files over 100 MB: leave them out
+                    big.append(p.relative_to(root).as_posix())
+            if files_ > 20000:
+                return {"error": "That folder has over 20,000 files, too many for one upload. Pick a smaller project folder."}
+        if total - sum((root / b).stat().st_size for b in big) > 1024 ** 3:
+            return {"error": "That folder is over 1 GB, too big for GitHub. Pick the project folder without videos or builds."}
+        if big:
+            ignore = root / ".gitignore"
+            existing = ignore.read_text(encoding="utf-8", errors="replace") if ignore.exists() else ""
+            ignore.write_text(existing + ("\n" if existing and not existing.endswith("\n") else "") + "\n".join(big) + "\n", encoding="utf-8")
+        result = workspace.git_publish(root, {k: a[k] for k in ("message", "repo_name", "private", "description") if k in a})
+        if big:
+            result["left_out_big_files"] = big
+        return result
+    except (ValueError, OSError, workspace.WorkspaceError) as exc:
+        return {"error": str(exc)}
+
+
+def _approve_upload(a):
+    import subprocess
+
+    root = _github_folder(str(a.get("folder", "")))
+    remote = ""
+    if (root / ".git").exists():
+        r = subprocess.run(["git", "remote", "get-url", "origin"], cwd=root, capture_output=True, text=True, timeout=10,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        remote = r.stdout.strip().removesuffix(".git") if r.returncode == 0 else ""
+    if remote:
+        return f"Upload the folder {root} to {remote}"
+    kind = "public" if a.get("private") is False else ("private" if a.get("private") or store.get_settings().get("github_private", True) else "public")
+    name = a.get("repo_name") or root.name
+    return f"Upload the folder {root} to your GitHub as a new {kind} repository called “{name}”"
+
+
 def _discord_search(a):
     from . import automation, messaging
     try:
@@ -732,6 +796,14 @@ TOOLS += [
          "'search my dms with Jake for that link'.",
          {"query": S("What to search for"), "where": S("Server, channel, group chat or person to search in (optional)")},
          ["query"], run=_discord_search),
+    Tool("upload_folder_to_github", "pc", "Upload a folder on this PC (a project, mod, website, notes…) to the user's GitHub: "
+         "creates a new repository on their account (private unless they ask for public) or updates the one it's already "
+         "connected to, and returns the link. The user approves first. For Code-mode projects use upload_to_github instead.",
+         {"folder": S("Full path of the folder, or its name if it's in Documents / Desktop / Downloads"),
+          "repo_name": S("Repository name (optional; default: the folder name)"),
+          "private": {"type": "boolean", "description": "Private (default) or public"},
+          "description": S("One-line description (optional)"), "message": S("What changed, for an update (optional)")},
+         ["folder"], run=_upload_folder, approve=_safe(_approve_upload)),
     Tool("watch_youtube", "pc", "Play or open something on YouTube in the browser. what='auto' plays a YouTuber's newest video "
          "(or the top video for a topic), 'latest' = a creator's newest upload, 'channel' = open a creator's channel, "
          "'video' = the top video for a search. Use for 'watch MrBeast', 'put on some Markiplier', 'play lofi on YouTube'.",

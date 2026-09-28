@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+import httpx
+
 from . import store
 
 SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv", "env", ".env", "dist", "build",
@@ -218,6 +220,10 @@ def plan_edit(root: Path, a: dict[str, Any]) -> tuple[Path, str, str]:
 
 
 def approval(root: Path, name: str, a: dict[str, Any]) -> dict[str, Any] | None:
+    from . import selfedit
+
+    if name in selfedit.RUNNERS:
+        return selfedit.approval(name)
     if name in ("edit_code", "write_code"):
         p, old, new = plan_edit(root, a)
         rel = _rel(root, p)
@@ -227,7 +233,9 @@ def approval(root: Path, name: str, a: dict[str, Any]) -> dict[str, Any] | None:
         added = sum(1 for ln in new.splitlines() if ln) if not p.exists() else None
         return {"summary": f"{verb} {rel} in {root.name}" + (f" ({added} lines)" if added else ""), "diff": _diff(rel, old, new)[:40_000]}
     if name == "upload_to_github":
-        where = a.get("repo_url") or "its GitHub repository"
+        remote = _git(root, "remote").stdout.split() if (root / ".git").exists() else []
+        where = a.get("repo_url") or ("its GitHub repository" if "origin" in remote else
+                                      f"a new {'public' if a.get('private') is False else 'private'} GitHub repository")
         return {"summary": f"Upload {root.name} to {where}:\ncommit \"{a.get('message') or 'Update from Athena'}\" and push"}
     if name == "run_in_project":
         return {"summary": f"Run this command in {root.name}:\n{a.get('command', '')}"}
@@ -427,20 +435,41 @@ def git_publish(root: Path, a: dict[str, Any]) -> dict[str, Any]:
     commit = _git(root, "commit", "-m", message)
     committed = commit.returncode == 0
     if "Please tell me who you are" in commit.stderr or "user.email" in commit.stderr:
-        _git(root, "config", "user.name", "Athena User")
-        _git(root, "config", "user.email", "athena@localhost")
+        # Git doesn't know your name yet: use your GitHub account (its private no-reply address), so the
+        # commits show up as yours on GitHub.
+        from . import github
+
+        try:
+            acc = github.account() or {}
+        except github.GitHubError:
+            acc = {}
+        login = acc.get("login")
+        _git(root, "config", "user.name", acc.get("name") or login or "Athena User")
+        _git(root, "config", "user.email", f"{acc['id']}+{login}@users.noreply.github.com" if login and acc.get("id") else "athena@localhost")
         committed = _git(root, "commit", "-m", message).returncode == 0
+    created = None
     if "origin" not in remotes:
-        return {"saved_locally": committed, "uploaded": False,
-                "next_step": "To upload it, create an empty repository at https://github.com/new (no README), then tell me its address, "
-                             "e.g. 'upload it to https://github.com/you/" + root.name + "'."}
+        # No GitHub repository yet: make one on your account (private unless you say otherwise) and connect it.
+        from . import github, store
+
+        private = a.get("private")
+        private = store.get_settings().get("github_private", True) if private is None else bool(private)
+        try:
+            created = github.create_repo(str(a.get("repo_name") or root.name), private, str(a.get("description") or ""))
+        except (github.GitHubError, httpx.HTTPError) as exc:
+            return {"saved_locally": committed, "uploaded": False, "next_step": str(exc)}
+        _git(root, "remote", "add", "origin", created["clone_url"])
+        remotes = ["origin"]
     branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() or "main"
     push = _git(root, "push", "-u", "origin", branch, timeout=300)
     if push.returncode != 0:
         err = (push.stderr or push.stdout).strip().splitlines()[-3:]
         raise WorkspaceError("GitHub didn't accept the upload: " + " ".join(err) + " (If a GitHub sign-in window appeared, sign in and try again.)")
     url = _git(root, "remote", "get-url", "origin").stdout.strip().removesuffix(".git")
-    return {"saved_locally": committed, "uploaded": True, "url": url, "branch": branch, "commit_message": message}
+    out = {"saved_locally": committed, "uploaded": True, "url": url, "branch": branch, "commit_message": message}
+    if created:
+        out.update(new_repository=created["full_name"], private=created.get("private"), url=created["html_url"])
+    return out
 
 
 RUNNERS = {"project_tree": project_tree, "read_code": read_code, "search_code": search_code,
@@ -449,7 +478,19 @@ RUNNERS = {"project_tree": project_tree, "read_code": read_code, "search_code": 
 
 
 def run(root: Path, name: str, args: dict[str, Any]) -> dict[str, Any]:
+    from . import selfedit
+
     try:
+        if name in selfedit.RUNNERS:
+            if not selfedit.is_self(root):
+                return {"error": f"{name} only works when Athena's own code is open."}
+            return selfedit.RUNNERS[name](root, args)
+        if name == "upload_to_github" and selfedit.is_self(root):
+            return {"error": "Athena's own code isn't uploaded from here; it updates from GitHub instead."}
+        if name in ("edit_code", "write_code") and selfedit.is_self(root):
+            first = Path(str(args.get("path") or "")).parts[:1]
+            if first and first[0].lower() in ("data", "backups", ".git", ".venv", ".venv-voiceclone"):
+                return {"error": "That folder holds the user's own data (chats, settings, backups); I don't edit it."}
         return RUNNERS[name](root, args)
     except WorkspaceError as exc:
         return {"error": str(exc)}
@@ -458,8 +499,13 @@ def run(root: Path, name: str, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def prompt(root: Path) -> str:
+    from . import selfedit
+
     info = summary(root)
     langs = ", ".join(info["languages"]) or "unknown"
+    if selfedit.is_self(root):
+        return (f"\n\nAthena's own code is open ({info['files']} files) at {root}. Use project_tree, search_code and read_code "
+                "to look, and edit_code for small changes." + selfedit.SELF_PROMPT)
     return (
         f"\n\nThe user opened their code project \"{info['name']}\" ({info['files']} files, mostly {langs}) at {root}. "
         "Work like a careful senior engineer: look before you change anything. Use project_tree to see the layout, "
@@ -498,9 +544,12 @@ SPECS = [
      "Use it after building or changing anything visual; set phone=true to check the phone layout too.",
      {"page": S("File in the project (e.g. index.html) or http://localhost:PORT"), "phone": {"type": "boolean", "description": "Phone-size view"},
       "check": S("What to look for, e.g. 'is the score visible and the layout centered?'")}, []),
-    ("upload_to_github", "Save the project with Git and upload it to GitHub (the user approves). If it has no GitHub repository yet, "
-     "the result explains how to make one; then call again with repo_url.",
-     {"message": S("Short description of the changes"), "repo_url": S("https://github.com/user/repo, only when connecting a new repository")}, []),
+    ("upload_to_github", "Save the project with Git and upload it to the user's GitHub (the user approves). If it has no "
+     "repository yet, Athena creates one on their account (private unless they ask for public) and gives the link.",
+     {"message": S("Short description of the changes"), "repo_name": S("Name for a new repository (optional; default: the folder name)"),
+      "private": {"type": "boolean", "description": "New repository private (default) or public"},
+      "description": S("One-line description for a new repository (optional)"),
+      "repo_url": S("An existing repository address, only if the user gives one")}, []),
     ("undo_code_edit", "Undo the most recent code edit in this project (restores the previous version of the file).", {}, []),
     ("run_in_project", "Run a shell command in the project folder, e.g. tests or a build (the user approves it first).",
      {"command": S("The command, e.g. npm test or python -m pytest"), "timeout": {"type": "integer", "description": "Seconds (default 120)"}},
@@ -508,12 +557,17 @@ SPECS = [
 ]
 
 
-def specs() -> list[dict[str, Any]]:
+def specs(root: Path | None = None) -> list[dict[str, Any]]:
+    from . import selfedit
+
+    items = SPECS
+    if selfedit.is_self(root):  # working on Athena herself: check/restart/undo, and no uploading her code anywhere
+        items = [s for s in SPECS if s[0] != "upload_to_github"] + selfedit.SPECS
     return [{"type": "function", "function": {"name": n, "description": d,
-             "parameters": {"type": "object", "properties": p, "required": r}}} for n, d, p, r in SPECS]
+             "parameters": {"type": "object", "properties": p, "required": r}}} for n, d, p, r in items]
 
 
-NAMES = {n for n, *_ in SPECS}
+NAMES = {n for n, *_ in SPECS} | {"check_athena", "restart_athena", "undo_self_changes"}
 NEW_PROJECT_SPEC = {"type": "function", "function": {
     "name": "new_project", "description": "Create a new project folder (in Documents/Athena Projects) to build something real in: "
     "multiple files, running it, screenshots, uploading to GitHub. Gives you the project tools.",

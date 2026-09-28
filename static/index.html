@@ -429,6 +429,12 @@
         <button type="button" class="ghost" id="testImages">Find my image generator</button>
         <p class="muted small" id="imagesStatus"></p>
 
+        <h3>GitHub</h3>
+        <p class="muted small">Athena can put your projects on your GitHub: <i>“upload my portfolio site folder to GitHub”</i>, or in Code mode <i>“put this on my GitHub”</i>. She creates the repository on your account, uploads it and gives you the link. You approve each upload first.</p>
+        <p class="small" id="ghStatus">Checking…</p>
+        <div class="pull-row"><button type="button" class="ghost" id="ghConnect">Connect GitHub</button></div>
+        <label class="check"><input type="checkbox" id="setGithubPrivate" /> Make new repositories private (only you can see them)</label>
+
         <h3>Smart home</h3>
         <p class="muted small">Connect <b>Home Assistant</b> to control lights, thermostats, locks and more. Create a token in Home Assistant → your profile → Security → Long-lived access tokens.</p>
         <label>Home Assistant address <input id="setHaUrl" placeholder="http://homeassistant.local:8123" /></label>
@@ -633,6 +639,7 @@
       <div class="pull-row ws-row"><input id="wsPath" placeholder="C:\Users\you\Projects\my-app" spellcheck="false" /><button type="button" class="ghost" id="wsBrowse">Browse…</button></div>
       <div class="ws-error" id="wsError"></div>
       <div id="wsRecent"></div>
+      <button type="button" class="ws-recent ws-self" id="wsSelf">🛠 Athena's own code <span class="muted small">— fix or improve herself (you approve every change)</span></button>
       <div class="pull-row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="primary" id="wsOpen">Open folder</button></div>
     </div>
   </form>

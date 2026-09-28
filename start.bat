@@ -37,8 +37,28 @@ if not exist ".venv\athena-ready" (
 where ollama >nul 2>nul
 if errorlevel 1 echo [!] Ollama was not found. Install it from https://ollama.com/download
 
+:run
 ".venv\Scripts\python.exe" -m athena %*
+if errorlevel 3 goto :broken
 exit /b 0
+
+:broken
+rem Athena couldn't load her own code, most likely after a change she made to herself ("fix yourself").
+echo.
+echo Athena couldn't start. It's most likely because of a change she made to her own code.
+choice /c YN /m "Undo her changes to her own code and start again (they're kept aside, not deleted)"
+if errorlevel 2 (
+  pause
+  exit /b 1
+)
+git stash push --include-untracked -q -m "Athena's own changes (undone after she couldn't start)"
+if errorlevel 1 (
+  echo Couldn't undo automatically. Run update.bat to get a fresh copy; your chats and settings are kept.
+  pause
+  exit /b 1
+)
+echo Undone. Starting Athena again...
+goto :run
 
 :venvfail
 echo Couldn't set up Athena's Python environment with: %PY%

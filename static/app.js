@@ -1166,6 +1166,10 @@ const STEP_TEXT = {
   run_python: [() => 'Running Python code', (a, r) => r.opened_window ? 'Opened it in a window on your PC' : r.timed_out ? `Code stopped after ${r.seconds}s` : r.exit_code === 0 ? 'Ran the code' : 'The code hit an error'],
   search_documents: [(a) => `Searching your documents for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} passages in your documents`],
   generate_image: [() => 'Creating an image', () => 'Created an image'],
+  check_athena: [() => 'Checking my code still works', (a, r) => r.ok ? 'Checked: my code loads fine' : 'Found problems in my code'],
+  restart_athena: [() => 'Restarting myself', (a, r) => r.restarting ? 'Restarting with my changes' : 'Not restarting: my code has problems'],
+  undo_self_changes: [() => 'Undoing my changes to myself', (a, r) => r.undone ? `Undid my changes (${(r.files || []).length} file${(r.files || []).length === 1 ? '' : 's'})` : (r.note || 'Nothing to undo')],
+  upload_folder_to_github: [(a) => `Uploading ${a.folder} to GitHub`, (a, r) => r.uploaded ? `Uploaded to ${r.url}` : r.next_step || 'Saved locally'],
   edit_image: [() => 'Editing the photo', (a, r) => `Edited the photo${r.edits?.length ? `: ${r.edits.join(', ')}` : ''}`],
   watch_youtube: [(a) => `Finding ${a.query} on YouTube`, (a, r) => r.title ? `Playing ${r.title}` : r.channel ? `Opened ${r.channel}'s channel` : 'Opened YouTube'],
   discord_search: [(a) => `Searching Discord for “${a.query}”`, (a) => `Searched Discord for “${a.query}”${a.where ? ` in ${a.where}` : ''}`],
@@ -1363,7 +1367,14 @@ function stopGenerating() {
   updateComposerButtons();
 }
 
+// "Fix yourself", "improve your code", "add a dark mode button to yourself": open Athena's own code in Code mode first.
+const SELF_EDIT = /\b(?:fix|upgrade|improve|change|edit|modify|debug|repair|rewrite|work on)\s+(?:yourself|your\s*self|your\s+(?:own\s+)?(?:code|app|source)|athena'?s\s+(?:own\s+)?code)\b|\badd\b.{3,80}\bto\s+(?:yourself|your\s+(?:own\s+)?(?:code|app))\b/i;
+
 async function sendMessage(text, { voice = false, display = null, research = false } = {}) {
+  if (!voice && state.chat && SELF_EDIT.test(text) && state.status.athena_root && state.chat.workspace?.path !== state.status.athena_root) {
+    await openWorkspace(state.status.athena_root, { quiet: true });
+    if (state.chat.workspace?.path) toast('🛠 Opened my own code. You approve every change I make, and I can undo them.');
+  }
   research = !voice && (research || state.researchNext);
   if (research) setResearch(false);
   if (!state.status.ollama) { await refreshStatus(); }
@@ -2121,6 +2132,10 @@ function handleToolEvent(ev) {
   if (['write_code', 'edit_code', 'undo_code_edit'].includes(ev.name) && state.chat.workspace?.path && !ev.result?.error) {
     api('/api/workspace/open', json('POST', { path: state.chat.workspace.path })).then((info) => { state.chat.workspace = info; renderWorkspaceChip(); }).catch(() => {});
   }
+  if (ev.name === 'restart_athena' && ev.result?.restarting) {
+    toast('Restarting so my changes take effect… the page reloads by itself.', '', { ms: 15000 });
+    setTimeout(waitForRestart, 500);
+  }
   if (ev.name === 'new_project' && ev.result?.workspace) {
     state.chat.workspace = ev.result.workspace;
     renderWorkspaceChip();
@@ -2556,6 +2571,7 @@ function openSettings(tab = 'general') {
   $('#setCompact').checked = !!s.compact;
   $('#setReduceMotion').checked = !!s.reduce_motion;
   $('#setImagesEnabled').checked = s.images_enabled !== false;
+  $('#setGithubPrivate').checked = s.github_private !== false;
   $('#setAutoRecover').checked = s.auto_recover !== false;
   $('#setAutoBackup').checked = s.auto_backup !== false;
   $('#setUpdateCheck').checked = s.update_check !== false;
@@ -2643,7 +2659,7 @@ function switchTab(tab) {
   if (tab === 'jarvis') loadJarvis();
   if (tab === 'about') loadMemories();
   if (tab === 'privacy') loadBackups();
-  if (tab === 'integrations') findImageGenerator();
+  if (tab === 'integrations') { findImageGenerator(); loadGithub(); }
   if (tab === 'desktop') loadPhone();
   if (tab === 'voice') { loadMics(); loadCustomVoice(); }
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
@@ -2734,6 +2750,7 @@ bind('#setTextSize', 'text_size');
 bind('#setCompact', 'compact', (el) => el.checked);
 bind('#setReduceMotion', 'reduce_motion', (el) => el.checked);
 bind('#setImagesEnabled', 'images_enabled', (el) => el.checked);
+bind('#setGithubPrivate', 'github_private', (el) => el.checked);
 bind('#setImageModel', 'image_model');
 bind('#setAutoRecover', 'auto_recover', (el) => el.checked);
 bind('#setAutoBackup', 'auto_backup', (el) => el.checked);
@@ -3011,7 +3028,7 @@ async function openWorkspaceDialog() {
   $('#wsPath').focus();
 }
 
-async function openWorkspace(path) {
+async function openWorkspace(path, { quiet = false } = {}) {
   $('#wsError').textContent = '';
   try {
     const info = await api('/api/workspace/open', json('POST', { path }));
@@ -3019,9 +3036,25 @@ async function openWorkspace(path) {
     if (state.mode !== 'code') setMode('code', { keepModel: false });
     $('#workspaceDlg').close();
     renderWorkspaceChip();
-    toast(`📂 Opened ${info.name} (${info.files} files). Ask away, e.g. “explain how this project works”`);
+    if (!quiet) toast(path === state.status.athena_root ? '🛠 My own code is open. Tell me what to fix or add; you approve every change.'
+      : `📂 Opened ${info.name} (${info.files} files). Ask away, e.g. “explain how this project works”`);
     if (state.chat.messages.length) saveChat();
-  } catch (e) { $('#wsError').textContent = e.message; }
+  } catch (e) { $('#wsError').textContent = e.message; if (quiet) toast(e.message, 'error'); }
+}
+$('#wsSelf').onclick = () => openWorkspace(state.status.athena_root);
+
+/** Athena is restarting (update or a change to herself): reload the page once she's back. */
+function waitForRestart() {
+  const started = Date.now();
+  let wentDown = false;
+  const poll = async () => {
+    const up = await fetch('/api/settings', { cache: 'no-store' }).then((x) => x.ok).catch(() => false);
+    if (!up) wentDown = true;
+    if (up && (wentDown || Date.now() - started > 15000)) { location.reload(); return; }
+    if (Date.now() - started > 180000) { toast('Athena is taking a while to restart. If nothing happens, double-click start.bat.', 'error', { ms: 20000 }); return; }
+    setTimeout(poll, 1500);
+  };
+  setTimeout(poll, 2500);
 }
 
 $('#folderBtn').onclick = openWorkspaceDialog;
@@ -3453,6 +3486,22 @@ async function findImageGenerator() {
   $('#setImageModel').value = models.includes(state.settings.image_model) ? state.settings.image_model : '';
 }
 $('#testImages').onclick = findImageGenerator;
+
+async function loadGithub() {
+  const r = await api('/api/github').catch((e) => ({ connected: false, message: e.message }));
+  $('#ghStatus').innerHTML = `<span class="${r.connected ? 'status-ok' : 'status-bad'}">${r.connected ? '✓' : '○'} ${escapeHtml(r.message)}</span>`;
+  $('#ghConnect').textContent = r.connected ? 'Reconnect' : 'Connect GitHub';
+}
+$('#ghConnect').onclick = async () => {
+  $('#ghConnect').disabled = true;
+  $('#ghStatus').textContent = 'A GitHub sign-in window is opening… sign in there, then come back here.';
+  try {
+    const r = await api('/api/github/connect', { method: 'POST' });
+    toast(`GitHub connected as @${r.login} ✓`);
+  } catch (e) { toast(e.message, 'error'); }
+  $('#ghConnect').disabled = false;
+  loadGithub();
+};
 $('#testHome').onclick = () => testIntegration('home', '#homeStatus');
 
 // ------------------------------------------------------------ wake word + desktop
@@ -4243,18 +4292,10 @@ async function applyUpdate() {
   if (state.abort) { toast('Wait for her to finish her reply, then update.', 'error'); return; }
   $('#updApply').disabled = true;
   toast('Updating… Athena will restart in a moment (your chats are backed up first).', '', { ms: 60000 });
-  try { await api('/api/update/apply', { method: 'POST' }); } catch (e) { toast(e.message, 'error'); $('#updApply').disabled = false; return; }
-  // Wait for the old Athena to close and the new one to answer, then reload the page.
-  const started = Date.now();
-  let wentDown = false;
-  const poll = async () => {
-    const up = await fetch('/api/settings', { cache: 'no-store' }).then((x) => x.ok).catch(() => false);
-    if (!up) wentDown = true;
-    if (up && (wentDown || Date.now() - started > 15000)) { location.reload(); return; }
-    if (Date.now() - started > 180000) { toast('Athena is taking a while to restart. If nothing happens, double-click start.bat.', 'error', { ms: 20000 }); return; }
-    setTimeout(poll, 1500);
-  };
-  setTimeout(poll, 2500);
+  let r;
+  try { r = await api('/api/update/apply', { method: 'POST' }); } catch (e) { toast(e.message, 'error'); $('#updApply').disabled = false; return; }
+  if (r.note) { try { sessionStorage.setItem('athena-update-note', r.note); } catch { /* ignore */ } }
+  waitForRestart(); // the old Athena closes, the new one starts, then the page reloads
 }
 $('#updCheck').onclick = () => checkUpdate();
 $('#updApply').onclick = applyUpdate;
@@ -4292,6 +4333,10 @@ async function init() {
   resumeFocus();
   refreshDeckBadge();
   setInterval(refreshDeckBadge, 10 * 60000);
+  try {  // something to tell you after an update restarted Athena
+    const note = sessionStorage.getItem('athena-update-note');
+    if (note) { sessionStorage.removeItem('athena-update-note'); toast(note, '', { ms: 12000 }); }
+  } catch { /* ignore */ }
   if (!state.settings.setup_done) openWizard();
   else if (state.settings.update_check !== false) setTimeout(() => checkUpdate({ quiet: true }), 8000);
   $('#lockBtn').hidden = !state.settings.pin_set;

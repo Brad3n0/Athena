@@ -139,9 +139,12 @@ def check_update() -> dict[str, Any]:
 def apply_update() -> dict[str, Any]:
     """Back up, download the new version, then restart Athena in a few seconds."""
     make_backup("before-update")
+    from . import selfedit
+
     try:
         _git("fetch", "-q", "origin", _branch())
-        _git("reset", "-q", "--hard", "FETCH_HEAD")
+        # Changes Athena made to her own code are carried over to the new version when they fit.
+        note = selfedit.keep_through_update(lambda: _git("reset", "-q", "--hard", "FETCH_HEAD"))
         subject = _git("log", "-1", "--format=%s")
     except (RuntimeError, subprocess.TimeoutExpired, FileNotFoundError) as exc:
         raise RuntimeError(f"The update didn't download: {exc}") from exc
@@ -150,7 +153,7 @@ def apply_update() -> dict[str, Any]:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r", str(store.ROOT / "requirements.txt")],
                    cwd=store.ROOT, capture_output=True, timeout=900, creationflags=flags)
     threading.Timer(1.0, _restart).start()
-    return {"ok": True, "version": subject}
+    return {"ok": True, "version": subject, **({"note": note} if note else {})}
 
 
 def _restart() -> None:

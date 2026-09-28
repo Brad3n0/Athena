@@ -543,7 +543,7 @@ async def chat(request: Request):
         for _round in range(MAX_TOOL_ROUNDS):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
             if use_tools:
-                payload["tools"] = [t.spec() for t in enabled_tools(settings)] + (workspace.specs() if code_root else [])
+                payload["tools"] = [t.spec() for t in enabled_tools(settings)] + (workspace.specs(code_root) if code_root else [])
                 if builder and not code_root:
                     payload["tools"].append(workspace.NEW_PROJECT_SPEC)
             if send_think:
@@ -1173,6 +1173,7 @@ async def status():
         "kokoro": tts.available(),
         "custom_voice": _custom_voice_ready(),
         "kokoro_voices": tts.VOICES,
+        "athena_root": str(store.ROOT),  # "fix yourself" opens this folder in Code mode
     }
     try:
         resp = await client.get(f"{OLLAMA}/api/version", timeout=3)
@@ -2119,6 +2120,23 @@ async def get_image(name: str):
     return FileResponse(path, media_type=kind)
 
 
+@app.get("/api/github")
+async def github_status():
+    from . import github
+
+    return await run_in_threadpool(github.status)
+
+
+@app.post("/api/github/connect")
+async def github_connect():
+    from . import github
+
+    try:
+        return await run_in_threadpool(github.connect)
+    except github.GitHubError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.post("/api/integrations/test")
 async def test_integration(request: Request):
     from . import integrations
@@ -2258,7 +2276,8 @@ async def phone_access(request: Request, call_next):
             return Response(f"<!doctype html><meta name=viewport content='width=device-width'><body style='font:17px system-ui;"
                             f"padding:24px;background:#10151f;color:#eceff5'><h2 style='color:#f5c542'>Athena</h2><p>{msg}</p>",
                             status_code=403, media_type="text/html")
-        if request.url.path in ("/api/pin", "/api/backup/restore", "/api/restore", "/api/backups/restore", "/api/update/apply"):
+        if request.url.path in ("/api/pin", "/api/backup/restore", "/api/restore", "/api/backups/restore", "/api/update/apply",
+                                "/api/github/connect"):
             return JSONResponse({"detail": "Change the PIN, restore backups and update from the PC itself."}, status_code=403)
     return await call_next(request)
 
