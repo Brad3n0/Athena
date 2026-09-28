@@ -20,6 +20,14 @@ def reply(data):
 def main():
     try:
         import torch
+
+        try:  # some installs are missing the watermark model; speak without the watermark rather than not at all
+            import perth
+
+            if getattr(perth, "PerthImplicitWatermarker", None) is None:
+                perth.PerthImplicitWatermarker = perth.DummyWatermarker
+        except ImportError:
+            pass
         from chatterbox.tts import ChatterboxTTS
 
         torch.set_num_threads(max(1, (os.cpu_count() or 4) - 1))
@@ -35,7 +43,12 @@ def main():
             req = json.loads(line)
             exaggeration = float(req.get("exaggeration", 0.5))
             if req["sample"] != current:
-                model.prepare_conditionals(req["sample"], exaggeration=exaggeration)
+                if not os.path.isfile(req["sample"]):
+                    raise FileNotFoundError("The recording for this voice is missing. Remove the voice and add it again.")
+                try:
+                    model.prepare_conditionals(req["sample"], exaggeration=exaggeration)
+                except Exception as exc:
+                    raise RuntimeError(f"Couldn't read the recording ({exc}). Save it as a WAV file in Audacity and add it again.") from exc
                 current = req["sample"]
             wav = model.generate(req["text"], exaggeration=exaggeration, cfg_weight=float(req.get("cfg", 0.5)))
             samples = wav.squeeze().detach().cpu().numpy().clip(-1.0, 1.0)

@@ -38,6 +38,17 @@ def installed() -> bool:
     return VENV_PY.exists()
 
 
+def log_hint() -> str:
+    """The last useful line the voice helper wrote (the real reason, when something breaks)."""
+    try:
+        lines = (VOICE_DIR / "helper.log").read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    last = next((ln.strip() for ln in reversed(lines) if ln.strip() and not ln.lstrip().startswith(("File ", "^", "~"))
+                 and "%|" not in ln), "")
+    return f" (details: {last[:220]})" if last else ""
+
+
 def voices() -> list[dict[str, Any]]:
     """Saved voices (only ones whose recording is still there)."""
     _migrate()
@@ -190,7 +201,9 @@ class _Worker:
                 self.proc.stdin.flush()
                 res = self._read(timeout=240)
                 if res.get("error"):
+                    self.error = res["error"]
                     raise VoiceError(res["error"])
+                self.error = ""
                 return Path(out).read_bytes()
             finally:
                 try:

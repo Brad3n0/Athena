@@ -1710,8 +1710,8 @@ $('#cvList').onclick = async (e) => {
     toast(`Loading ${voice?.name || 'the voice'}… the first time can take a minute.`);
     try {
       const res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: `Hi! I'm ${voice?.name || 'your custom voice'}. This is how I sound.`, engine: 'custom', custom_voice: id, lang: 'en' }) });
-      if (!res.ok) throw new Error('The voice couldn’t speak. Check Settings → Health check.');
+        body: JSON.stringify({ text: `Hi! I'm ${voice?.name || 'your custom voice'}. This is how I sound.`, engine: 'custom', custom_voice: id, lang: 'en', strict: true }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'The voice couldn’t speak.');
       new Audio(URL.createObjectURL(await res.blob())).play();
     } catch (err) { toast(err.message, 'error'); }
     setTimeout(loadCustomVoice, 1000);

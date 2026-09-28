@@ -1146,12 +1146,17 @@ async def text_to_speech(request: Request):
     lang = str(body.get("lang") or "en")[:2]
     # Custom voice (English): used when chosen and set up; otherwise the natural Kokoro voice below.
     engine = str(body.get("engine") or settings.get("tts_engine") or "")
-    if engine == "custom" and custom_voice.ready() and lang == "en":
+    strict = bool(body.get("strict"))  # the ▶ Test button: say what went wrong instead of quietly using another voice
+    if engine == "custom" and strict and not custom_voice.installed():
+        raise HTTPException(400, "The custom voice isn't installed yet. Close Athena, run install-custom-voice, then start Athena again.")
+    if engine == "custom" and custom_voice.ready() and (lang == "en" or strict):
         try:
             wav = await run_in_threadpool(custom_voice.synthesize, text, str(body.get("custom_voice") or "") or None)
             return Response(wav, media_type="audio/wav")
-        except custom_voice.VoiceError:
-            pass  # fall back to Kokoro for this sentence
+        except custom_voice.VoiceError as exc:
+            if strict:
+                raise HTTPException(502, f"{exc}{custom_voice.log_hint()}") from exc
+            # otherwise fall back to Kokoro for this sentence
     if not tts.available():
         raise HTTPException(501, "Natural voice not installed. Run install-voice.")
     voice = str(body.get("voice") or settings.get("kokoro_voice") or "athena_silk")
@@ -1643,6 +1648,20 @@ async def selftest():
         r = await integrations.list_devices(client)
         return ("ok", f"{r['count']} devices") if "error" not in r else ("fail", r["error"])
     await check("Smart home", home_check())
+
+    async def custom_voice_check():
+        from . import custom_voice
+
+        st = custom_voice.status()
+        if not st["installed"]:
+            return "skip", "Not installed (optional) · run install-custom-voice to use one"
+        if not st["voices"]:
+            return "warn", "Installed, but no voice added yet · Settings → Voice → Custom voice"
+        if st["error"]:
+            return "fail", st["error"] + custom_voice.log_hint()
+        where = {"cuda": "graphics card", "cpu": "processor"}.get(st["device"], "")
+        return "ok", f"{len(st['voices'])} voice(s)" + (f" · running on the {where}" if where else " · loads the first time she speaks")
+    await check("Custom voice", custom_voice_check())
 
     checks += await run_in_threadpool(system.local_checks)
     return {"checks": checks, "platform": sys.platform, "time": datetime.now().isoformat(timespec="seconds")}
