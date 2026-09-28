@@ -195,7 +195,7 @@ def language_line(settings: dict[str, Any], spoken: str | None = None) -> str:
     return ""
 
 
-def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> str:
+def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool, self_open: bool = False) -> str:
     now = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p")
     name = (settings.get("user_name") or "").strip()
     intro = persona_intro(settings) if mode != "code" else PERSONAS["assistant"]
@@ -268,6 +268,11 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
             )
         if "tasks" in groups:
             abilities.append("- Reminders: set_reminder pops up and speaks at the exact time (compute the ISO date/time from now).")
+        if "pc" in groups and not self_open:
+            abilities.append("- Yourself: you CAN change your own code (you're the Athena app on this PC). Whenever the user wants you "
+                             "to change, fix, upgrade or add something to yourself or your own app/code ('implement it in your code', "
+                             "'upgrade yourself', 'add that feature to you'), call work_on_myself right away. Never say you can't "
+                             "modify yourself, and never just show a mock-up of the change.")
         if "pc" in groups:
             abilities.append("- PC: open apps (open_app) and websites (open_website: 'open YouTube', 'play X on YouTube'), control volume and media, lock/shutdown the PC, and read or set the clipboard "
                              "(e.g. 'rewrite what I copied' → get_clipboard, rewrite, set_clipboard).")
@@ -535,7 +540,10 @@ async def chat(request: Request):
                 yield chunk
             return
         send_think = think is not None
-        system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + extra_prompt}
+        from . import selfedit
+
+        self_open = selfedit.is_self(code_root)  # her own code is already open in this chat
+        system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools, self_open) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
 
         empty_retries = 0
@@ -543,7 +551,8 @@ async def chat(request: Request):
         for _round in range(MAX_TOOL_ROUNDS):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
             if use_tools:
-                payload["tools"] = [t.spec() for t in enabled_tools(settings)] + (workspace.specs(code_root) if code_root else [])
+                payload["tools"] = [t.spec() for t in enabled_tools(settings) if not (self_open and t.name == "work_on_myself")] \
+                    + (workspace.specs(code_root) if code_root else [])
                 if builder and not code_root:
                     payload["tools"].append(workspace.NEW_PROJECT_SPEC)
             if send_think:
@@ -701,6 +710,11 @@ async def chat(request: Request):
                 else:
                     result = await run_in_threadpool(run_tool, name, args)
                 yield _event("tool", id=step, name=name, args=args, result=result)
+                if name == "work_on_myself" and isinstance(result, dict) and result.get("open_self"):
+                    # The app opens her own code and asks again in Code mode, with the tools to really change it.
+                    yield _event("token", content="Opening my own code to do that…")
+                    yield _event("done", stats={})
+                    return
                 for_model = result
                 if isinstance(result, dict) and result.get("images"):  # charts are for the user's eyes; the model just hears about them
                     for_model = {**result, "images": f"{len(result['images'])} image(s) shown to the user"}

@@ -1166,6 +1166,7 @@ const STEP_TEXT = {
   run_python: [() => 'Running Python code', (a, r) => r.opened_window ? 'Opened it in a window on your PC' : r.timed_out ? `Code stopped after ${r.seconds}s` : r.exit_code === 0 ? 'Ran the code' : 'The code hit an error'],
   search_documents: [(a) => `Searching your documents for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} passages in your documents`],
   generate_image: [() => 'Creating an image', () => 'Created an image'],
+  work_on_myself: [() => 'Opening my own code', () => 'Opened my own code'],
   check_athena: [() => 'Checking my code still works', (a, r) => r.ok ? 'Checked: my code loads fine' : 'Found problems in my code'],
   restart_athena: [() => 'Restarting myself', (a, r) => r.restarting ? 'Restarting with my changes' : 'Not restarting: my code has problems'],
   undo_self_changes: [() => 'Undoing my changes to myself', (a, r) => r.undone ? `Undid my changes (${(r.files || []).length} file${(r.files || []).length === 1 ? '' : 's'})` : (r.note || 'Nothing to undo')],
@@ -1369,7 +1370,12 @@ function stopGenerating() {
 }
 
 // "Fix yourself", "improve your code", "add a dark mode button to yourself": open Athena's own code in Code mode first.
-const SELF_EDIT = /\b(?:fix|upgrade|improve|change|edit|modify|debug|repair|rewrite|work on)\s+(?:yourself|your\s*self|your\s+(?:own\s+)?(?:code|app|source)|athena'?s\s+(?:own\s+)?code)\b|\badd\b.{3,80}\bto\s+(?:yourself|your\s+(?:own\s+)?(?:code|app))\b/i;
+const SELF_EDIT = new RegExp([
+  // "fix yourself", "upgrade your code", "improve athena's code"
+  String.raw`\b(?:fix|upgrade|improve|change|edit|modify|debug|repair|rewrite|work on)\s+(?:yourself|your\s*self|your\s+(?:own\s+)?(?:code|app|source|system|files|ui|design|interface)|athena'?s\s+(?:own\s+)?code)\b`,
+  // "add a dark mode to yourself", "implement it in your code", "put that into your own app", "build it into yourself"
+  String.raw`\b(?:add|implement|implament|apply|put|build|install|code|program|integrate|make)\b.{0,80}?\b(?:to|in|into|on)\s+(?:yourself|your\s*self|your\s+(?:own\s+)?(?:code|app|source|system|files|ui|design|interface))\b`,
+].join('|'), 'i');
 
 async function sendMessage(text, { voice = false, display = null, research = false } = {}) {
   if (!voice && state.chat && SELF_EDIT.test(text) && state.status.athena_root && state.chat.workspace?.path !== state.status.athena_root) {
@@ -1658,6 +1664,16 @@ async function generateReply({ voice = false, model = null, route = null, think 
     if (mode === 'study' && !state.streak?.today) refreshDeckBadge(); // first study of the day extends the streak
     if (!reply.error && chat.autoTitle !== false && chat.messages.filter((m) => m.role === 'assistant').length === 1) smartTitle(chat, reply);
     if (!reply.error && !abort.signal.aborted && reply.content) learnFrom(chat, reply);
+  }
+  // She decided the request means changing herself: open her own code and carry on there, with the real tools.
+  const selfRequest = state.openSelfAfter;
+  state.openSelfAfter = null;
+  if (selfRequest && !abort.signal.aborted && chat === state.chat && state.status.athena_root) {
+    await openWorkspace(state.status.athena_root, { quiet: true });
+    if (state.chat.workspace?.path === state.status.athena_root) {
+      toast('🛠 Opened my own code. You approve every change I make, and I can undo them.');
+      setTimeout(() => sendMessage(`Make this change to yourself now, in your real code: ${selfRequest}`, { display: `🛠 ${selfRequest}` }), 300);
+    }
   }
   return reply;
 }
@@ -2133,6 +2149,7 @@ function handleToolEvent(ev) {
   if (['write_code', 'edit_code', 'undo_code_edit'].includes(ev.name) && state.chat.workspace?.path && !ev.result?.error) {
     api('/api/workspace/open', json('POST', { path: state.chat.workspace.path })).then((info) => { state.chat.workspace = info; renderWorkspaceChip(); }).catch(() => {});
   }
+  if (ev.name === 'work_on_myself' && ev.result?.open_self) state.openSelfAfter = ev.result.request || 'Go ahead and make that change to yourself.';
   if (ev.name === 'restart_athena' && ev.result?.restarting) {
     toast('Restarting so my changes take effect… the page reloads by itself.', '', { ms: 15000 });
     setTimeout(waitForRestart, 500);

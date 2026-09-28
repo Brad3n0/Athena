@@ -814,6 +814,10 @@ TOOLS += [
           "private": {"type": "boolean", "description": "Private (default) or public"},
           "description": S("One-line description (optional)"), "message": S("What changed, for an update (optional)")},
          ["folder"], run=_upload_folder, approve=_safe(_approve_upload)),
+    Tool("work_on_myself", "pc", "Open Athena's own code so you can really change yourself: call this whenever the user "
+         "wants something changed, fixed, upgraded or added in Athena herself (the app, her features, her look). The app "
+         "then opens her code in Code mode and continues with the user's request there.",
+         {"request": S("What the user wants changed, in a sentence")}, [], run=lambda a: {"open_self": True, "request": str(a.get("request") or "")}),
     Tool("save_self_changes", "pc", "Back up the changes Athena made to her own code ('fix yourself') to the user's GitHub, on "
          "a separate branch (athena-self-changes) that updates never touch. Use for 'save your changes to GitHub'. The user approves.",
          {"message": S("Short description of the changes (optional)")}, [], run=_save_self, approve=_safe(_approve_save_self)),
