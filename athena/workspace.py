@@ -567,7 +567,7 @@ def specs(root: Path | None = None) -> list[dict[str, Any]]:
              "parameters": {"type": "object", "properties": p, "required": r}}} for n, d, p, r in items]
 
 
-NAMES = {n for n, *_ in SPECS} | {"check_athena", "restart_athena", "undo_self_changes"}
+NAMES = {n for n, *_ in SPECS} | {"check_athena", "restart_athena", "undo_self_changes", "save_self_changes"}
 NEW_PROJECT_SPEC = {"type": "function", "function": {
     "name": "new_project", "description": "Create a new project folder (in Documents/Athena Projects) to build something real in: "
     "multiple files, running it, screenshots, uploading to GitHub. Gives you the project tools.",

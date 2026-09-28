@@ -146,7 +146,8 @@ Say *"fix yourself, the send button doesn't work on my phone"*, *"add a dark red
 
 1. She finds the right place and shows you each change as a diff. Nothing changes until you press **Allow**.
 2. She checks her code still loads (**check_athena**) and only then asks to **restart** herself. The page reloads by itself.
-3. If something's worse, say *"undo your changes"*: her code goes back to the downloaded version (the changes are kept aside in Git, not deleted).
+3. Say *"save your changes to GitHub"* to back them up: she uploads them to their own branch of your Athena repository (`athena-self-changes`), which updates never touch, and gives you the link.
+4. If something's worse, say *"undo your changes"*: her code goes back to the downloaded version (the changes are kept aside in Git, not deleted).
 
 Safety nets: she never edits your `data` folder (chats, settings) or backups; she won't restart with code that doesn't load; if she ever can't start, **start.bat** offers to undo her changes and start again; and updates keep her changes when they fit (if an update changed the same code, the update wins and her changes are set aside). This works best with a strong coding model like **qwen3-coder:30b**; bigger changes are safer to ask for in small steps.
 

@@ -670,6 +670,16 @@ def _approve_upload(a):
     return f"Upload the folder {root} to your GitHub as a new {kind} repository called “{name}”"
 
 
+def _save_self(a):
+    from . import selfedit
+    return selfedit.save_to_github(None, a)
+
+
+def _approve_save_self(a):
+    from . import selfedit
+    return selfedit.approval("save_self_changes")["summary"]
+
+
 def _discord_search(a):
     from . import automation, messaging
     try:
@@ -804,6 +814,9 @@ TOOLS += [
           "private": {"type": "boolean", "description": "Private (default) or public"},
           "description": S("One-line description (optional)"), "message": S("What changed, for an update (optional)")},
          ["folder"], run=_upload_folder, approve=_safe(_approve_upload)),
+    Tool("save_self_changes", "pc", "Back up the changes Athena made to her own code ('fix yourself') to the user's GitHub, on "
+         "a separate branch (athena-self-changes) that updates never touch. Use for 'save your changes to GitHub'. The user approves.",
+         {"message": S("Short description of the changes (optional)")}, [], run=_save_self, approve=_safe(_approve_save_self)),
     Tool("watch_youtube", "pc", "Play or open something on YouTube in the browser. what='auto' plays a YouTuber's newest video "
          "(or the top video for a topic), 'latest' = a creator's newest upload, 'channel' = open a creator's channel, "
          "'video' = the top video for a search. Use for 'watch MrBeast', 'put on some Markiplier', 'play lofi on YouTube'.",

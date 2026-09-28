@@ -99,6 +99,67 @@ def undo(_root: Path | None = None, _args: dict[str, Any] | None = None) -> dict
             "next_step": "Call restart_athena (or tell the user to restart) so the original code runs again."}
 
 
+SELF_BRANCH = "athena-self-changes"
+
+
+def save_to_github(_root: Path | None = None, args: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Back up Athena's own changes to GitHub, on their own branch of her repository ('athena-self-changes').
+    Updates come from a different branch, so this never gets in their way. Her files on the PC don't change."""
+    import os
+    import tempfile
+
+    if not has_git():
+        return {"error": "Athena isn't connected to GitHub yet. Run update.bat once, then ask again."}
+    files = changed_files()
+    if not files:
+        return {"saved": False, "note": "I haven't changed my own code, so there's nothing to save."}
+    message = str((args or {}).get("message") or "").strip()[:200] or f"Athena's own changes ({', '.join(files[:4])})"
+    from . import github
+
+    try:
+        acc = github.account() or {}
+    except github.GitHubError:
+        acc = {}
+    login = acc.get("login")
+    who = {"GIT_AUTHOR_NAME": acc.get("name") or login or "Athena", "GIT_COMMITTER_NAME": acc.get("name") or login or "Athena",
+           "GIT_AUTHOR_EMAIL": f"{acc['id']}+{login}@users.noreply.github.com" if login and acc.get("id") else "athena@localhost"}
+    who["GIT_COMMITTER_EMAIL"] = who["GIT_AUTHOR_EMAIL"]
+    fd, index = tempfile.mkstemp(prefix="athena-index-")
+    os.close(fd)
+    os.unlink(index)  # git makes it
+    env = {**os.environ, **who, "GIT_INDEX_FILE": index, "GIT_TERMINAL_PROMPT": "0"}
+
+    def g(*a: str, timeout: int = 120) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", *a], cwd=store.ROOT, capture_output=True, text=True, timeout=timeout, env=env,
+                              encoding="utf-8", errors="replace", creationflags=FLAGS)
+    try:
+        # A snapshot of her code as it is now (her changes included), made on the side: the files, the normal
+        # Git index and the current branch on this PC are left exactly as they are.
+        g("read-tree", "HEAD")
+        g("add", "-A", "--", ".")
+        tree = g("write-tree").stdout.strip()
+        # Keep the branch's history: build on the last save if there is one, else on this version of Athena.
+        parent = "HEAD"
+        if g("fetch", "-q", "origin", SELF_BRANCH, timeout=120).returncode == 0:
+            parent = g("rev-parse", "FETCH_HEAD").stdout.strip() or "HEAD"
+        commit = g("commit-tree", tree, "-p", parent, "-m", message).stdout.strip()
+        if not commit:
+            return {"error": "Couldn't prepare the save."}
+        push = g("push", "origin", f"{commit}:refs/heads/{SELF_BRANCH}", timeout=300)
+        if push.returncode != 0:
+            err = " ".join((push.stderr or push.stdout).strip().splitlines()[-2:])
+            return {"error": f"GitHub didn't accept it: {err} (If a GitHub sign-in window appeared, sign in and try again.)"}
+    finally:
+        try:
+            os.unlink(index)
+        except OSError:
+            pass
+    remote = _git("remote", "get-url", "origin").stdout.strip().removesuffix(".git")
+    url = f"{remote}/tree/{SELF_BRANCH}" if remote.startswith("https://github.com/") else remote
+    return {"saved": True, "branch": SELF_BRANCH, "url": url, "files": files, "message": message,
+            "note": "Saved on its own branch, so updates aren't affected. My changes on this PC stay as they are."}
+
+
 def keep_through_update(pull) -> str:
     """Run an update (`pull` does the download + reset) without losing Athena's self-made changes.
     Returns a note for the user ('' if nothing special happened)."""
@@ -140,7 +201,10 @@ SPECS = [
     ("undo_self_changes", "Put Athena's code back to the downloaded version (the user approves). Her changes are kept aside, "
      "not deleted. Use it if a self-edit broke something.", {}, []),
 ]
-RUNNERS = {"check_athena": check, "restart_athena": restart, "undo_self_changes": undo}
+SPECS.append(("save_self_changes", "Back up Athena's changes to her own code to the user's GitHub, on a separate branch "
+                                   "(athena-self-changes) that updates never touch (the user approves). Returns the link.",
+               {"message": {"type": "string", "description": "Short description of the changes (optional)"}}, []))
+RUNNERS = {"check_athena": check, "restart_athena": restart, "undo_self_changes": undo, "save_self_changes": save_to_github}
 
 
 def approval(name: str) -> dict[str, Any] | None:
@@ -148,6 +212,9 @@ def approval(name: str) -> dict[str, Any] | None:
     listed = ", ".join(files[:6]) + ("…" if len(files) > 6 else "")
     if name == "restart_athena":
         return {"summary": "Restart Athena so her changes take effect" + (f" ({listed})" if files else "")}
+    if name == "save_self_changes":
+        return {"summary": "Save Athena's changes to her own code to your GitHub (branch athena-self-changes)"
+                           + (f": {listed}" if files else "")}
     if name == "undo_self_changes":
         return {"summary": "Undo Athena's changes to her own code" + (f": {listed}" if files else "") + " (kept aside, not deleted)"}
     return None

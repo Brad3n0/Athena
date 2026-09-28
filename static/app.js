@@ -1169,6 +1169,7 @@ const STEP_TEXT = {
   check_athena: [() => 'Checking my code still works', (a, r) => r.ok ? 'Checked: my code loads fine' : 'Found problems in my code'],
   restart_athena: [() => 'Restarting myself', (a, r) => r.restarting ? 'Restarting with my changes' : 'Not restarting: my code has problems'],
   undo_self_changes: [() => 'Undoing my changes to myself', (a, r) => r.undone ? `Undid my changes (${(r.files || []).length} file${(r.files || []).length === 1 ? '' : 's'})` : (r.note || 'Nothing to undo')],
+  save_self_changes: [() => 'Saving my changes to GitHub', (a, r) => r.saved ? `Saved my changes to GitHub (${r.branch})` : (r.note || 'Nothing to save')],
   upload_folder_to_github: [(a) => `Uploading ${a.folder} to GitHub`, (a, r) => r.uploaded ? `Uploaded to ${r.url}` : r.next_step || 'Saved locally'],
   edit_image: [() => 'Editing the photo', (a, r) => `Edited the photo${r.edits?.length ? `: ${r.edits.join(', ')}` : ''}`],
   watch_youtube: [(a) => `Finding ${a.query} on YouTube`, (a, r) => r.title ? `Playing ${r.title}` : r.channel ? `Opened ${r.channel}'s channel` : 'Opened YouTube'],
