@@ -516,6 +516,10 @@
 
       <section data-panel="voice" hidden>
         <h3 style="margin-top:0">Voice</h3>
+        <label>Microphone
+          <select id="setMic"><option value="">Windows default</option></select>
+        </label>
+        <div class="mic-test"><button type="button" class="ghost" id="micTest">🎙 Test my mic</button><div class="mic-meter"><i id="micMeter"></i></div><span class="muted small" id="micTestNote"></span></div>
         <label>Voice engine
           <select id="setTtsEngine">
             <option value="auto">Natural voice (Kokoro, offline) — recommended</option>

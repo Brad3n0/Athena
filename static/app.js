@@ -1628,6 +1628,54 @@ function setResearch(on) {
 }
 $('#researchBtn').onclick = () => setResearch(!state.researchNext);
 
+// ------------------------------------------------------------ microphone choice + mic test
+async function loadMics() {
+  const sel = $('#setMic');
+  let inputs = [];
+  try { inputs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications'); } catch { /* no mic access here */ }
+  const chosen = state.settings.mic_device || '';
+  sel.innerHTML = '<option value="">Windows default</option>' + inputs.map((d, i) =>
+    `<option value="${escapeHtml(d.deviceId)}">${escapeHtml(d.label || `Microphone ${i + 1} (click Test to see names)`)}</option>`).join('');
+  sel.value = inputs.some((d) => d.deviceId === chosen) ? chosen : '';
+}
+$('#setMic').addEventListener('change', async (e) => {
+  await saveSettings({ mic_device: e.target.value });
+  mic.setDevice(e.target.value);
+  $('#micTestNote').textContent = 'Saved. Click Test to try it.';
+});
+$('#micTest').onclick = async () => {
+  const btn = $('#micTest'), note = $('#micTestNote'), meter = $('#micMeter');
+  if (state.voice?.active) { note.textContent = 'Close voice chat first.'; return; }
+  btn.disabled = true;
+  let loudest = 0;
+  try {
+    await mic.open();
+    loadMics(); // names show up once the mic is allowed
+    note.textContent = 'Say something like "Hey Athena, what time is it?"';
+    const blob = await mic.record({ waitMs: 7000, maxMs: 10000, onLevel: (l) => { loudest = Math.max(loudest, l); meter.style.width = `${Math.round(l * 100)}%`; } });
+    meter.style.width = '0';
+    if (!blob) {
+      note.textContent = loudest < 0.08
+        ? "I couldn't hear anything. Pick a different microphone above, or check it isn't muted (Windows Settings → System → Sound → Input)."
+        : "I heard sound, but not clearly enough to count as speech. Move closer to the mic, or pick a different one above.";
+      return;
+    }
+    if (!state.status.whisper) { note.textContent = '✓ The mic works. Speech recognition isn\'t installed yet: close Athena, run install-voice.bat, then start Athena again.'; return; }
+    note.textContent = 'Got it, working out what you said…';
+    let text;
+    try { text = await transcribe(blob); } catch (err) {
+      note.textContent = `✓ The mic works. Speech recognition had a problem, though: ${err.message}. Check Settings → Health check.`;
+      return;
+    }
+    note.textContent = text ? `✓ I heard: “${text}”` : 'The mic works, but I couldn\'t make out any words. Try speaking a bit louder or closer.';
+  } catch (err) {
+    note.textContent = micHelp(err);
+  } finally {
+    btn.disabled = false;
+    if (!state.voice?.active) mic.close();
+  }
+};
+
 // ------------------------------------------------------------ use Athena on your phone
 async function loadPhone() {
   const box = $('#phoneBox');
@@ -2379,6 +2427,7 @@ function switchTab(tab) {
   if (tab === 'jarvis') loadJarvis();
   if (tab === 'about') loadMemories();
   if (tab === 'desktop') loadPhone();
+  if (tab === 'voice') loadMics();
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('[data-panel]', dlg).forEach((p) => (p.hidden = p.dataset.panel !== tab));
 }
@@ -3829,6 +3878,7 @@ async function init() {
   state.settings = await api('/api/settings').catch(() => ({}));
   applyTheme();
   renderThinkBtn();
+  mic.setDevice(state.settings.mic_device || '');
   // Start the sky straight away (the opening constellation plays while Athena connects).
   const stars = startStars($('#stars'), () => ({ shooting: state.settings.shooting_stars !== false, seasonal: state.settings.seasonal_effects !== false }));
   new MutationObserver(() => stars.redraw()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });

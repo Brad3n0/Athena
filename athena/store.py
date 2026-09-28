@@ -83,6 +83,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "sound_effects": False,
     "birthday": "",  # "MM-DD"
     "accent": "gold",  # gold, rose, silver, cyan, emerald, aurora, sunset, violet, sakura, ice, lime
+    "mic_device": "",  # microphone to use (browser device id); empty = Windows default
     "voice_barge_in": True,  # interrupt Athena just by talking
     "voice_sleep": True,  # dim after a minute of silence in voice chat
     # Speech-to-text (runs locally with faster-whisper)

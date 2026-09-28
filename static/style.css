@@ -1060,3 +1060,9 @@ a.side-link { color: inherit; text-decoration: none; }
   .mode-switch button svg { display: none; }
   #canvasBtn { display: none; }
 }
+
+/* ---- Mic test */
+.mic-test { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: -4px 0 14px; }
+.mic-meter { width: 140px; height: 8px; border-radius: 99px; background: var(--bg-input); overflow: hidden; border: 1px solid var(--border); }
+.mic-meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .08s linear; }
+.mic-test .muted { flex-basis: 100%; }

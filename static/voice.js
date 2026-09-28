@@ -4,16 +4,27 @@ import { toSpeech } from './markdown.js';
 
 // ------------------------------------------------------------------ input
 export class Mic {
-  constructor() { this.stream = null; this.ctx = null; this.analyser = null; this.muted = false; }
+  constructor() { this.stream = null; this.ctx = null; this.analyser = null; this.muted = false; this.deviceId = ''; }
+
+  /** Use a specific microphone ('' = the Windows default). Takes effect the next time it opens. */
+  setDevice(id) {
+    if ((id || '') === this.deviceId) return;
+    this.deviceId = id || '';
+    if (this.stream) this.close();
+  }
 
   async open() {
     if (this.stream) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error('Microphone needs a secure page. Open Athena at http://localhost:8765 on this PC.');
     }
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    });
+    const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio: this.deviceId ? { ...audio, deviceId: { exact: this.deviceId } } : audio });
+    } catch (e) {
+      if (!this.deviceId || e.name !== 'OverconstrainedError') throw e;
+      this.stream = await navigator.mediaDevices.getUserMedia({ audio }); // the chosen mic was unplugged: use the default
+    }
     this.ctx = new AudioContext();
     const src = this.ctx.createMediaStreamSource(this.stream);
     this.analyser = this.ctx.createAnalyser();
@@ -64,8 +75,10 @@ export class Mic {
         const lvl = this.muted ? 0 : this.level();
         onLevel?.(Math.min(1, lvl * 12));
         if (now - t0 < 350) { calib.push(lvl); return; }
-        if (calib.length) { noise = Math.max(0.006, calib.reduce((a, b) => a + b, 0) / calib.length); calib = []; }
-        const threshold = Math.max(0.018, noise * 2.6);
+        // Background noise = the quietest moments of the first third of a second. (Using the average meant that
+        // talking straight away was mistaken for noise, and then nothing quieter than a shout counted as speech.)
+        if (calib.length) { noise = Math.min(0.02, Math.max(0.004, Math.min(...calib))); calib = []; }
+        const threshold = Math.min(0.045, Math.max(0.011, noise * 2.4));
         if (lvl > threshold) { spoke = true; lastVoice = now; }
         if ((spoke && now - lastVoice > silenceMs) || now - t0 > maxMs || (!spoke && now - t0 > waitMs)) stop();
       }, 50);
