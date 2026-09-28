@@ -3468,7 +3468,7 @@ $('#exportMenu').onclick = async (e) => {
 };
 
 // ------------------------------------------------------------ personalities
-const BUILTIN_PERSONAS = { assistant: 'Assistant — helpful and professional', companion: 'Companion — flirty, affectionate, teasing', study: 'Study Buddy — patient tutor' };
+const BUILTIN_PERSONAS = { assistant: 'Assistant — clear, direct, straight to the point', companion: 'Companion — flirty, savage, foul-mouthed', study: 'Study Buddy — patient tutor' };
 function fillPersonas() {
   const custom = state.settings.personas || [];
   $('#setPersona').innerHTML = Object.entries(BUILTIN_PERSONAS).map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join('') +
