@@ -545,9 +545,16 @@ async def chat(request: Request):
         self_open = selfedit.is_self(code_root)  # her own code is already open in this chat
         system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools, self_open) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
+        if self_open and use_tools:
+            # Models copy their own earlier answers: hide any old "I can't change my own code" replies, and remind her
+            # right before the request that she has the tools and should start.
+            messages = [{**m, "content": "(An earlier reply here wrongly said I couldn't edit my own code. I can, with my code tools.)"}
+                        if m.get("role") == "assistant" and selfedit.REFUSAL.search(m.get("content") or "") else m for m in messages]
+            messages.insert(len(messages) - 1, {"role": "system", "content": selfedit.NUDGE})
 
         empty_retries = 0
         recovered = False
+        self_pushed = False
         for _round in range(MAX_TOOL_ROUNDS):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
             if use_tools:
@@ -640,6 +647,13 @@ async def chat(request: Request):
                     use_tools = False
                     messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + extra_prompt}
                 yield _event("retry")
+                continue
+            if self_open and use_tools and not calls and not self_pushed and selfedit.REFUSAL.search(content):
+                # She said she can't change her own code (she can) or only showed a mock-up: throw that answer away
+                # and have her start for real.
+                self_pushed = True
+                yield _event("retry")
+                messages.append({"role": "system", "content": selfedit.FORCE})
                 continue
             if not calls:
                 yield _event("done", stats=stats)

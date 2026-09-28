@@ -9,6 +9,7 @@ Updates keep her self-made changes when they can; start.bat offers to undo them 
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -192,6 +193,21 @@ SELF_PROMPT = (
     "restart_athena so the change takes effect, then tell the user in plain words what you changed. If the user says "
     "something you changed broke things, call undo_self_changes."
 )
+
+# "I don't have the ability to modify my own code", "I can't access my source files", "here's how it would look"
+REFUSAL = re.compile(
+    r"(?:(?:don'?t|do not|doesn'?t|can'?t|cannot|can not|unable to|not able to|no way to|isn'?t possible|not possible)"
+    r"[^.!?\n]{0,90}(?:modify|change|edit|access|update|alter|implement|rewrite|touch)[^.!?\n]{0,60}"
+    r"(?:my own|my|its own)\s+(?:core\s+|own\s+|source\s+)*(?:code|source|files|system|architecture|codebase))"
+    r"|(?:if I (?:could|had access)|would need to be made to my (?:code|codebase)|show you (?:exactly )?what changes would)", re.I)
+
+NUDGE = ("Reminder: Athena's own code is open and you have real tools for it: search_code, read_code, edit_code, write_code, "
+         "check_athena, restart_athena. You CAN and SHOULD change your own code directly. Don't explain what you would do or "
+         "show a mock-up: start now by finding the right file (search_code or project_tree), then make the change with "
+         "edit_code. The user approves each change.")
+FORCE = ("Stop: that answer was wrong. You DO have direct access to your own code through your tools, and the user wants the "
+         "change made for real. Call search_code or project_tree now to find where it belongs, then edit_code. If the "
+         "request is vague, pick the first concrete improvement from the conversation and implement just that.")
 
 SPECS = [
     ("check_athena", "Check that Athena's own code still loads after your edits (Python imports, JavaScript syntax). "
