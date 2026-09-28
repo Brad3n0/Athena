@@ -85,6 +85,12 @@ const speaker = new Speaker(() => {
   const settings = voiceSettings();
   return { settings, kokoro: !!state.status.kokoro || (settings.tts_engine === 'custom' && !!state.status.custom_voice), lang: speakingLanguage() };
 });
+let lastVoiceFail = 0;
+speaker.onFail = (why) => {  // nothing could play: say so instead of staying silent
+  if (Date.now() - lastVoiceFail < 15000) return;
+  lastVoiceFail = Date.now();
+  toast(`I couldn't play my voice (${why}). Check your speakers and volume, or run Settings → Health check.`, 'error', { ms: 8000 });
+};
 
 /** The language she should speak: the one you chose, or (on auto) the one you last spoke. */
 function speakingLanguage() {
@@ -859,8 +865,12 @@ messagesEl.addEventListener('click', async (e) => {
       break;
     }
     case 'speak':
-      if (speaker.speaking) speaker.stop();
-      else { speaker.reset(); speaker.say(msg.content); }
+      // A second click while she's reading stops her; otherwise always start fresh (even if an earlier read got stuck).
+      if (speaker.audible()) { speaker.stop(); break; }
+      speaker.stop();
+      speaker.unlock(); // start the audio right on the click, so the browser doesn't block it
+      speaker.reset();
+      speaker.say(splitThinking(msg).content || msg.content);
       break;
     case 'up':
     case 'down':

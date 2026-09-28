@@ -173,6 +173,15 @@ export class Speaker {
 
   get speaking() { return this.pending > 0; }
 
+  /** Is sound actually coming out right now (not just waiting on a voice that may never arrive)? */
+  audible() { return !!(this.playing?.src || (this.sysSpeaking && window.speechSynthesis?.speaking)); }
+
+  /** Call from a click: browsers only let audio start from something the user did. */
+  unlock() {
+    try { this._ctx(); } catch { /* no Web Audio: system voices still work */ }
+    try { window.speechSynthesis?.resume(); } catch { /* ignore */ }
+  }
+
   /** Feed the full text so far; complete sentences get queued. */
   feed(fullText, final = false) {
     const text = toSpeech(fullText);
@@ -229,6 +238,8 @@ export class Speaker {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, voice: settings.kokoro_voice, speed: rate / pitch, lang, engine: settings.tts_engine, custom_voice: settings.custom_voice_id }),
+      // If the natural voice doesn't answer in time, this sentence falls back to the Windows voice instead of silence.
+      signal: AbortSignal.timeout?.(settings.tts_engine === 'custom' ? 120000 : 25000),
     }).then((r) => {
       if (r.status === 422) (this.badLangs ||= new Set()).add(lang); // natural voice can't speak it: system voices from now on
       return r.ok ? r.arrayBuffer() : Promise.reject(new Error('tts failed'));
@@ -269,7 +280,7 @@ export class Speaker {
 
   // ---- system voices (Windows / browser, offline voices only if chosen) ----
   _speakSystem(text) {
-    if (!window.speechSynthesis) { this._finishOne(); return; }
+    if (!window.speechSynthesis) { this.onFail?.('no-voices'); this._finishOne(); return; }
     const { settings, lang } = this.getConfig();
     const u = new SpeechSynthesisUtterance(text);
     const v = pickVoice(settings.tts_voice, lang);
@@ -278,7 +289,11 @@ export class Speaker {
     u.pitch = Math.min(2, Number(settings.voice_pitch) || 1);
     u.onstart = () => { this.current = { text, charIndex: 0 }; this.onStart?.(); };
     u.onboundary = (e) => { this._pulse = performance.now(); if (this.current) this.current.charIndex = e.charIndex; };
-    u.onend = u.onerror = () => this._finishOne();
+    u.onend = () => this._finishOne();
+    u.onerror = (e) => {
+      if (!['interrupted', 'canceled'].includes(e.error)) this.onFail?.(e.error);
+      this._finishOne();
+    };
     this.sysSpeaking = true;
     speechSynthesis.speak(u);
   }
