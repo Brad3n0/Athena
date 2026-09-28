@@ -949,7 +949,7 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 .rt-step button:hover { background: var(--bg-hover); color: var(--text); }
 .rt-step button svg { width: 14px; height: 14px; }
 .rt-grip { color: var(--text-3); }
-.jv-contact-form { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 6px; margin-bottom: 8px; }
+.jv-contact-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px; }
 @media (max-width: 700px) { .jv-contact-form { grid-template-columns: 1fr 1fr; } }
 .jv-alerts { padding-left: 22px; }
 .pc-status { margin-top: 6px; }

@@ -211,7 +211,8 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
                              "(e.g. 'rewrite what I copied' → get_clipboard, rewrite, set_clipboard).")
             abilities.append("- Like Jarvis: pc_status for 'how's my PC doing'; window_control to focus, minimize, maximize, close or move "
                              "windows between monitors; type_text and press_keys to operate apps; click_on_screen to click things you "
-                             "can see; send_message to message people on Discord (default), WhatsApp, text or email (look up "
+                             "can see; send_message to message people or group chats on Discord (default), WhatsApp, Instagram, Messenger, "
+                             "Telegram, text, email or any other app or site the user names (look up "
                              "list_contacts when unsure who someone is); routines (list/run/create_routine) chain several of these. "
                              "For multi-step app tasks, work step by step: open or focus the app, then type/press keys/click, and "
                              "use look_at_screen to check the result when it matters. Keep spoken confirmations short, like Jarvis.")

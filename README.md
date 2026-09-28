@@ -123,6 +123,9 @@ With PC control on (Settings → Abilities), just ask, typed or out loud:
 - **Windows:** *"put Discord on my second monitor"*, *"snap Chrome to the left"*, *"minimize everything"*, *"close Spotify"*.
 - **Typing and clicking:** *"type my address into Notepad"*, *"press ctrl+s"*, *"click the Join button"*. Clicking uses a screenshot, so it needs a vision model like `qwen2.5vl:7b`.
 - **Messages:** *"message Jake on Discord that I'm running 10 minutes late"*. She opens Discord, jumps to Jake with Ctrl+K, checks the right chat opened (with a vision model), and sends it. You see exactly who and what first and press **Allow**. WhatsApp works the same way (most reliable with a saved phone number). Texts (through Phone Link) and emails open as a ready draft for you to send. Add people in **Settings → Jarvis → Contacts** with their exact Discord username.
+  - **Group chats:** say the group's name, like *"message the Squad group chat on Discord: game at 8"*.
+  - **Instagram, Messenger and Telegram:** *"message @jake.23 on Instagram: you up?"* opens your chat with them in your browser (be logged in there) and types it.
+  - **Any other app or website** (Snapchat, Slack, Teams, X, Reddit…): *"message Mia on Snapchat: omw"*. She opens it, finds the search box, the person and the message box on screen with your vision model, checks it's the right chat, then sends. This needs a vision model like qwen2.5vl:7b, and works best with the app already signed in.
 - **Routines:** one phrase, many steps. Make them in **Settings → Jarvis → Routines** or just ask: *"make a goodnight routine that closes Chrome and Discord, sets volume to 20 and locks my PC"*. Then say *"goodnight"* (or *"Hey Athena, game time"*) and it all happens instantly.
 - **Heads-ups:** she speaks up when a download finishes, the CPU is maxed or memory is almost full (and says which app), a drive is nearly full, a laptop battery is low, or a reminder is 5 minutes away. Choose which ones in **Settings → Jarvis**.
 
@@ -211,7 +214,7 @@ athena/          Python server (FastAPI)
   pc.py          Apps, volume/media keys, power, clipboard, screenshots, running code
   knowledge.py   Document indexing and search (Ollama embeddings)
   automation.py  Windows, monitors, typing, keys and clicks (Windows API)
-  messaging.py   Discord / WhatsApp / text / email, and contacts
+  messaging.py   Discord / WhatsApp / Instagram / Messenger / Telegram / text / email / any app, and contacts
   routines.py    One phrase, many steps
   monitor.py     Heads-ups: downloads, PC health, reminders
   pcstatus.py    "How's my PC doing?"

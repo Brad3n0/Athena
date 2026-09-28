@@ -2821,7 +2821,7 @@ async function loadJarvis() {
     </div>`).join('') : '<p class="muted small">No routines yet. Make one here, or just ask: <i>"make a goodnight routine that closes Chrome and Discord and locks my PC"</i>.</p>';
   $('#contactList').innerHTML = contacts.length ? contacts.map((c) => `
     <div class="jv-item" data-cid="${c.id}"><div class="jv-main"><b>${escapeHtml(c.name)}</b>
-      <span class="muted small">${[c.discord && `Discord: ${escapeHtml(c.discord)}`, c.phone && `📱 ${escapeHtml(c.phone)}`, c.email && `✉ ${escapeHtml(c.email)}`].filter(Boolean).join(' · ') || 'No details yet'}</span></div>
+      <span class="muted small">${[c.discord && `Discord: ${escapeHtml(c.discord)}`, c.instagram && `Instagram: @${escapeHtml(c.instagram)}`, c.snapchat && `Snapchat: ${escapeHtml(c.snapchat)}`, c.telegram && `Telegram: @${escapeHtml(c.telegram)}`, c.phone && `📱 ${escapeHtml(c.phone)}`, c.email && `✉ ${escapeHtml(c.email)}`].filter(Boolean).join(' · ') || 'No details yet'}</span></div>
       <div class="jv-actions"><button type="button" data-ct="delete" title="Delete">${ICONS.trash}</button></div></div>`).join('') : '<p class="muted small">No contacts yet.</p>';
 }
 
@@ -2883,10 +2883,10 @@ $('#routineList').onclick = async (e) => {
   }
 };
 $('#ctSave').onclick = async () => {
-  const data = { name: $('#ctName').value, discord: $('#ctDiscord').value, phone: $('#ctPhone').value, email: $('#ctEmail').value };
+  const data = { name: $('#ctName').value, discord: $('#ctDiscord').value, instagram: $('#ctInstagram').value, snapchat: $('#ctSnapchat').value, telegram: $('#ctTelegram').value, phone: $('#ctPhone').value, email: $('#ctEmail').value };
   try {
     await api('/api/contacts', json('POST', data));
-    ['#ctName', '#ctDiscord', '#ctPhone', '#ctEmail'].forEach((id) => { $(id).value = ''; });
+    ['#ctName', '#ctDiscord', '#ctInstagram', '#ctSnapchat', '#ctTelegram', '#ctPhone', '#ctEmail'].forEach((id) => { $(id).value = ''; });
     loadJarvis();
   } catch (err) { toast(err.message, 'error'); }
 };

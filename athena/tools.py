@@ -397,6 +397,8 @@ async def _send_message(a, ctx):
         p = messaging.plan(str(a.get("app") or "discord"), str(a.get("to", "")), str(a.get("text", "")), str(a.get("subject") or ""))
         if p["app"] in ("sms", "email"):
             return await run_in_threadpool(messaging.open_draft, p)
+        if p["app"] in ("screen", *messaging.CHAT_LINKS):
+            return await _send_on_screen(p, ctx)
         if p["app"] == "discord":
             await run_in_threadpool(messaging.discord_open_chat, p["target"])
             ready = False
@@ -415,6 +417,54 @@ async def _send_message(a, ctx):
         return {"sent": True, "app": p["app"], "to": p["to"], "text": p["text"], "checked_chat": ready or ok is True}
     except (messaging.MessageError, automation.ControlError) as exc:
         return {"error": str(exc)}
+
+
+async def _click_spot(ctx, what: str) -> dict:
+    from starlette.concurrency import run_in_threadpool
+
+    from . import automation
+    spot = await ctx["locate_on_screen"](what)
+    if not spot.get("error"):
+        await run_in_threadpool(automation.click, spot["x"], spot["y"])
+    return spot
+
+
+async def _send_on_screen(p, ctx):
+    """Instagram, Messenger, Telegram (opened from a link) and any other app or site: find the chat on screen,
+    check it's the right one, then type the message. Uses the vision model to see the screen."""
+    import asyncio
+
+    from starlette.concurrency import run_in_threadpool
+
+    from . import automation, messaging
+    app, who, target = p["label"], p["to"], p["target"]
+    if p["app"] in messaging.CHAT_LINKS:
+        await run_in_threadpool(messaging.open_link_chat, p)
+    else:
+        await run_in_threadpool(messaging.open_any_app, app)
+        # Search for the person, like you would: the search box (or "new message"), their name, then their chat.
+        spot = await _click_spot(ctx, f"the search box, or the button to search people or start a new message, in {app}")
+        if spot.get("error"):
+            return {"error": f"I opened {app} but couldn't find where to search for {who}. {spot['error']}"}
+        await asyncio.sleep(1)
+        await run_in_threadpool(automation.type_text, target)
+        await asyncio.sleep(2.5)
+        spot = await _click_spot(ctx, f"the search result, person, group or conversation named '{target}'")
+        if spot.get("error"):
+            await run_in_threadpool(automation.press_keys, "esc")
+            return {"error": f"I searched {app} for {target} but couldn't see them in the results, so I didn't send anything."}
+        await asyncio.sleep(2.5)
+    # Never type into the wrong chat: check the open conversation is with the right person first.
+    ok = await ctx["verify_chat"](target, app)
+    if ok is False:
+        return {"error": f"The chat that opened in {app} doesn't look like {who}'s, so I didn't send anything. "
+                         f"Try their exact username, or save it in Settings → Jarvis → Contacts."}
+    spot = await _click_spot(ctx, f"the text box for typing a message in the open {app} conversation")
+    if spot.get("error"):
+        return {"error": f"I opened the chat with {who} but couldn't find the message box, so I didn't send anything."}
+    await asyncio.sleep(0.4)
+    await run_in_threadpool(messaging.type_and_send, p["text"])
+    return {"sent": True, "app": app, "to": who, "text": p["text"], "checked_chat": ok is True}
 
 
 async def _click(a, ctx):
@@ -530,14 +580,18 @@ TOOLS += [
          {"target": S("What to click, described clearly"), "double": {"type": "boolean", "description": "Double-click"},
           "button": S("left or right", enum=["left", "right"])}, ["target"], arun=_click,
          approve=_safe(lambda a: f"Click \"{a.get('target')}\" on your screen")),
-    Tool("send_message", "pc", "Send a message to a person with Discord (default), WhatsApp, a text (Phone Link) or email. Athena opens "
-         "the app and sends it like the user would; the user approves first. Texts and emails open as a ready draft.",
-         {"to": S("Person's name (or Discord username / phone / email)"), "text": S("The message"),
-          "app": S("discord, whatsapp, text or email", enum=["discord", "whatsapp", "text", "email"]), "subject": S("Email subject")},
+    Tool("send_message", "pc", "Send a message to a person or group chat on any app or website: Discord (default), WhatsApp, "
+         "Instagram, Messenger, Telegram, texts (Phone Link), email, or any other app or site (Snapchat, Slack, Teams, X, "
+         "Reddit…). Athena opens it and sends it like the user would; the user approves first. Texts and emails open as a "
+         "ready draft.",
+         {"to": S("Person's name, username or group chat name (or phone / email)"), "text": S("The message"),
+          "app": S("The app or website, e.g. discord, whatsapp, instagram, messenger, telegram, text, email, snapchat, slack"),
+          "subject": S("Email subject")},
          ["to", "text"], arun=_send_message, approve=_safe(_approve_message)),
     Tool("list_contacts", "pc", "List the user's saved contacts (names with their Discord username, phone and email).", run=_contacts),
     Tool("add_contact", "pc", "Save or update a contact so messages reach the right person.",
-         {"name": S("Name"), "discord": S("Discord username"), "phone": S("Phone number"), "email": S("Email address")}, ["name"],
+         {"name": S("Name"), "discord": S("Discord username"), "instagram": S("Instagram username"), "snapchat": S("Snapchat username"),
+          "telegram": S("Telegram username"), "phone": S("Phone number"), "email": S("Email address")}, ["name"],
          run=_ctl(lambda **a: _add_contact(a))),
     Tool("list_routines", "pc", "List the user's routines (one phrase that runs several steps).", run=_routines),
     Tool("run_routine", "pc", "Run one of the user's routines by name (e.g. 'gaming', 'goodnight').", {"name": S("Routine name")}, ["name"],
