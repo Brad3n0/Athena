@@ -65,6 +65,16 @@ def open_app(name: str) -> dict[str, Any]:
         key = (name or "").strip().lower().removesuffix(".com")
         if key in SITES:  # "open YouTube": it's a website, not an app
             return open_website(name)
+        # "pull up MrBeast": not an app or a site, but maybe a YouTuber
+        from . import youtube
+
+        try:
+            channel = youtube.find_channel(name) if 0 < len(key.split()) <= 4 else None
+        except Exception:  # offline, YouTube changed its page... just say the app wasn't found
+            channel = None
+        if channel:
+            webbrowser.open(channel["url"])
+            return {"opened": channel["url"], "youtube_channel": channel["title"]}
         raise
 
 

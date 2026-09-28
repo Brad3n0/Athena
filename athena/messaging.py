@@ -180,6 +180,29 @@ def discord_open_chat(target: str) -> None:
     time.sleep(1.6)
 
 
+def discord_search(query: str, where: str = "") -> dict[str, Any]:
+    """Search Discord like you would: jump to the server, channel or person first (if named), then Ctrl+F and search.
+    Discord searches the server or DM that's open, so naming where to look gives the best results."""
+    query = re.sub(r"\s+", " ", (query or "").strip(" '\""))
+    if not query:
+        raise MessageError("What should I search Discord for?")
+    target = ""
+    if where.strip():
+        contact = find_contact(where) or {}
+        target = (contact.get("discord") or "").lstrip("@") or contact.get("name") or where.strip()
+        discord_open_chat(target)
+    else:
+        _open("discord")
+        automation.press_keys("esc")
+    automation.press_keys("ctrl+f")
+    time.sleep(0.7)
+    automation.press_keys("ctrl+a")  # replace any earlier search
+    automation.type_text(query)
+    time.sleep(0.4)
+    automation.press_keys("enter")
+    return {"searched": query, "in": target or "the server or chat that was open"}
+
+
 def whatsapp_open_chat(target_phone: str, name: str, text: str) -> bool:
     """Open a WhatsApp chat. With a phone number the message is filled in; returns True if it's ready to send."""
     if target_phone and sys.platform.startswith("win"):

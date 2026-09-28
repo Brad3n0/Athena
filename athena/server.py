@@ -696,6 +696,7 @@ async def chat(request: Request):
                     result = await run_in_threadpool(workspace.run, code_root, name, args)
                 elif tool and tool.arun:
                     ctx = tool_ctx(settings)
+                    ctx["history"] = history  # e.g. the photo you attached, for edit_image
                     result = await arun_tool(name, args, ctx)
                 else:
                     result = await run_in_threadpool(run_tool, name, args)
@@ -815,7 +816,7 @@ async def screenshot_and_look(root, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def tool_ctx(settings: dict[str, Any]) -> dict[str, Any]:
-    return {"client": client, "settings": settings, "look_at_screen": look_at_screen, "verify_chat": verify_chat,
+    return {"client": client, "ollama": OLLAMA, "settings": settings, "look_at_screen": look_at_screen, "verify_chat": verify_chat,
             "locate_on_screen": locate_on_screen}
 
 
@@ -1774,11 +1775,10 @@ async def selftest():
     await check("Your documents", docs_check())
 
     async def images_check():
-        api = (settings.get("image_api") or "").rstrip("/")
-        if not api:
-            return "skip", "Not set up (optional)"
-        r = await client.get(f"{api}/sdapi/v1/sd-models", timeout=6)
-        return "ok", f"Connected · {len(r.json())} models"
+        from . import imagegen
+
+        st = await imagegen.status(client, OLLAMA)
+        return ("ok" if st["ok"] else "skip"), st["message"]
     await check("Image generation", images_check())
 
     async def home_check():
@@ -2093,6 +2093,19 @@ async def knowledge_index():
 
 # -------------------------------------------------------- images/integrations
 
+@app.post("/api/images/edit")
+async def images_edit(request: Request):
+    """The photo editor: apply edits to a picture and save the result."""
+    from . import photos
+
+    body = await request.json()
+    steps = body.get("steps") if isinstance(body.get("steps"), list) else []
+    try:
+        return await run_in_threadpool(photos.edit, str(body.get("source") or ""), steps, bool(body.get("draft")))
+    except photos.PhotoError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @app.get("/api/images/{name}")
 async def get_image(name: str):
     from fastapi.responses import FileResponse
@@ -2102,7 +2115,8 @@ async def get_image(name: str):
     path = (IMAGES_DIR / name).resolve()
     if path.parent != IMAGES_DIR.resolve() or not path.is_file():
         raise HTTPException(404, "Not found")
-    return FileResponse(path, media_type="image/png")
+    kind = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(path.suffix.lower(), "image/png")
+    return FileResponse(path, media_type=kind)
 
 
 @app.post("/api/integrations/test")
@@ -2114,13 +2128,9 @@ async def test_integration(request: Request):
         result = await integrations.list_devices(client)
         return {"ok": "error" not in result, "message": result.get("error") or f"Connected — found {result['count']} devices"}
     if kind == "images":
-        api = (store.get_settings().get("image_api") or "").rstrip("/")
-        try:
-            r = await client.get(f"{api}/sdapi/v1/sd-models", timeout=8)
-            r.raise_for_status()
-            return {"ok": True, "message": f"Connected — {len(r.json())} Stable Diffusion models available"}
-        except Exception as exc:
-            return {"ok": False, "message": f"Couldn't connect to {api or '(no address)'} — start it with --api ({exc.__class__.__name__})"}
+        from . import imagegen
+
+        return await imagegen.status(client, OLLAMA)
     if kind == "weather":
         from . import weather
 

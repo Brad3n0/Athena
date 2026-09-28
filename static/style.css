@@ -1140,3 +1140,31 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .bk-list li div { display: flex; flex-direction: column; }
 .bk-list .ghost { padding: 5px 12px; margin: 0; }
 .upd-changes { margin: 4px 0 10px; padding-left: 20px; font-size: 13.5px; color: var(--text-2, var(--text)); }
+
+/* ---------------- Photo editor ---------------- */
+.settings.photo-dlg { width: min(1100px, calc(100vw - 32px)); max-height: calc(100vh - 40px); }
+.pe-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; padding: 14px 18px 18px; min-height: 0; overflow: hidden; }
+.pe-stage { position: relative; display: grid; place-items: center; background: repeating-conic-gradient(rgba(128,128,128,.14) 0 25%, transparent 0 50%) 0 0/22px 22px; border-radius: 14px; min-height: 320px; overflow: hidden; }
+.pe-frame { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+.pe-frame img { display: block; max-width: 100%; max-height: calc(100vh - 170px); object-fit: contain; transition: filter .08s linear; }
+.pe-text { position: absolute; left: 0; right: 0; text-align: center; color: #fff; font: 800 clamp(16px, 4.2vw, 40px)/1.1 Arial, sans-serif; -webkit-text-stroke: 1.5px #000; paint-order: stroke fill; padding: 0 4%; pointer-events: none; }
+.pe-text[data-pos="bottom"] { bottom: 6%; } .pe-text[data-pos="top"] { top: 5%; } .pe-text[data-pos="center"] { top: 50%; transform: translateY(-50%); }
+.pe-frame.vignette::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); pointer-events: none; }
+.pe-busy { position: absolute; inset: 0; display: flex; gap: 10px; align-items: center; justify-content: center; background: rgba(0,0,0,.45); color: #fff; font-weight: 600; }
+.pe-tools { overflow-y: auto; max-height: calc(100vh - 150px); display: flex; flex-direction: column; gap: 12px; padding-right: 4px; }
+.pe-group { display: flex; flex-direction: column; gap: 6px; }
+.pe-group label { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; font-size: 13.5px; margin: 0; }
+.pe-group input[type="range"] { accent-color: var(--accent); width: 100%; padding: 0; border: 0; background: none; }
+.pe-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pe-chips button { padding: 5px 11px; border-radius: 99px; border: 1px solid var(--border); font-size: 13px; }
+.pe-chips button.on { border-color: var(--accent); background: rgba(var(--accent-rgb), .14); }
+.pe-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: auto; }
+@media (max-width: 800px) { .pe-body { grid-template-columns: 1fr; max-height: none; overflow-y: auto; } }
+/* ✏️ on pictures in the chat */
+.pic-wrap { position: relative; display: inline-block; line-height: 0; }
+.gen-images .pic-wrap { max-width: min(100%, 420px); }
+.gen-images .pic-wrap img { max-width: 100%; }
+.gen-images .pic-wrap:has(img[src*="/shot-"]) { max-width: min(100%, 680px); }
+.pic-edit { position: absolute; top: 8px; right: 8px; padding: 4px 10px; border-radius: 99px; font-size: 12.5px; background: rgba(0,0,0,.6); color: #fff; opacity: 0; transition: opacity .15s; border: 1px solid rgba(255,255,255,.25); }
+.pic-wrap:hover .pic-edit, .pic-edit:focus { opacity: 1; }
+@media (hover: none) { .pic-edit { opacity: 1; } }

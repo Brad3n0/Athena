@@ -59,14 +59,47 @@ def match(text: str) -> list[Call] | None:
         if who and msg and len(who.split()) <= 5 and not vague and msg.lower().strip(" .!?") not in ("for me", "please", "for me please"):
             return [("send_message", {"to": who, "app": app, "text": msg})]
 
-    # ---- play / search something on a site: "play lofi beats on youtube", "search youtube for cats", "look up x on amazon"
-    m = re.match(LEAD + r"(?:play|put on|watch|listen to)\s+(?P<q>.+?)\s+on\s+(?P<site>youtube|spotify|soundcloud|twitch|netflix)" + TAIL, low)
+    # ---- search Discord: "search discord for the minecraft ip", "find messages about the trip in the squad on discord",
+    #      "search my dms with jake for that link", "look up tournament in discord"
+    for pattern in (
+        r"(?:search|look|check)\s+(?:through\s+)?(?:my\s+)?discord\s+(?:for|to find)\s+(?P<q>.+?)(?:\s+(?:in|from|with)\s+(?:the\s+|my\s+)?(?P<where>.+?))?",
+        r"(?:search|look|check)\s+(?:through\s+)?(?:my\s+)?(?:dms?|chat|messages|server|group ?chat|gc)\s+(?:with|in)\s+(?P<where>.+?)\s+on\s+discord\s+for\s+(?P<q>.+?)",
+        r"(?:search|look|check)\s+(?:through\s+)?(?:my\s+)?(?:dms?|chat|messages)\s+with\s+(?P<where>.+?)\s+for\s+(?P<q>.+?)(?:\s+on\s+discord)",
+        r"(?:find|search(?:\s+for)?|look\s+(?:up|for))\s+(?:the\s+)?(?:messages?|stuff|posts?)?\s*(?:about|saying|with|mentioning)?\s*(?P<q>.+?)\s+(?:in|on)\s+(?:the\s+|my\s+)?(?P<where>.+?)\s+(?:on|in)\s+discord",
+        r"(?:find|search(?:\s+for)?|look\s+(?:up|for))\s+(?:the\s+)?(?:messages?\s+)?(?:about|saying|mentioning\s+)?(?P<q>.+?)\s+(?:on|in)\s+(?:my\s+)?discord",
+    ):
+        m = re.match(LEAD + pattern + TAIL, low)
+        if m and m.group("q").strip():
+            q = re.sub(r"^(?:the|a|an)\s+", "", t[m.start("q"):m.end("q")].strip(" '\""), flags=re.I)
+            where = t[m.start("where"):m.end("where")].strip() if m.groupdict().get("where") else ""
+            where = re.sub(r"\s+(?:server|group ?chat|gc|chat|dms?)$", "", where, flags=re.I)
+            return [("discord_search", {"query": q, **({"where": where} if where else {})})]
+
+    # ---- play / search something on a site: "play lofi on spotify", "search youtube for cats", "look up x on amazon"
+    m = re.match(LEAD + r"(?:play|put on|watch|listen to)\s+(?P<q>.+?)\s+on\s+(?P<site>spotify|soundcloud|twitch|netflix)" + TAIL, low)
     if m:
-        site, q = m.group("site"), t[m.start("q"):m.end("q")]
-        calls: list[Call] = [("open_website", {"site": site, "search": q})]
-        if site == "youtube":  # click the matching video once the results load
-            calls.append(("click_on_screen", {"target": f"the first video about {q}", "text": q, "wait": 4}))
-        return calls
+        return [("open_website", {"site": m.group("site"), "search": t[m.start("q"):m.end("q")]})]
+
+    # ---- YouTube by name: "watch mrbeast", "put on markiplier's newest video", "pull up dream's channel",
+    #      "play the latest mkbhd video", "play lofi on youtube"
+    m = re.match(LEAD + r"(?:play|put on|watch|show me|pull up|bring up|open)\s+(?:the\s+)?(?P<q>.+?)(?:'s|s')\s+(?:latest|newest|new|last|most recent|recent)\s+(?:youtube\s+)?(?:video|upload|vid)(?:\s+on\s+youtube)?" + TAIL, low) or \
+        re.match(LEAD + r"(?:play|put on|watch|show me|pull up|bring up|open)\s+(?:the\s+|a\s+)?(?:latest|newest|new|last|most recent|recent)\s+(?P<q>.+?)\s+(?:youtube\s+)?(?:video|upload|vid)(?:\s+on\s+youtube)?" + TAIL, low) or \
+        re.match(LEAD + r"(?:play|put on|watch|show me|pull up)\s+(?:the\s+)?(?:latest|newest|last|most recent)\s+(?:youtube\s+)?(?:video|upload|vid)\s+(?:from|by)\s+(?P<q>.+?)(?:\s+on\s+youtube)?" + TAIL, low)
+    if m:
+        return [("watch_youtube", {"query": t[m.start("q"):m.end("q")], "what": "latest"})]
+    m = re.match(LEAD + r"(?:open|pull up|show me|go to|bring up|take me to)\s+(?P<q>.+?)(?:'s|s')\s+(?:youtube\s+)?channel(?:\s+on\s+youtube)?" + TAIL, low) or \
+        re.match(LEAD + r"(?:open|pull up|show me|go to|bring up)\s+(?:the\s+)?(?:youtube\s+)?channel\s+(?:of|for|called)\s+(?P<q>.+?)" + TAIL, low) or \
+        re.match(LEAD + r"(?:pull up|bring up|show me|look up|find)\s+(?P<q>.+?)\s+on\s+youtube" + TAIL, low)
+    if m and len(m.group("q").split()) <= 5:
+        return [("watch_youtube", {"query": t[m.start("q"):m.end("q")], "what": "channel"})]
+    m = re.match(LEAD + r"(?:play|put on|watch|listen to)\s+(?:some\s+)?(?P<q>.+?)\s+on\s+youtube" + TAIL, low)
+    if m:
+        return [("watch_youtube", {"query": t[m.start("q"):m.end("q")], "what": "auto"})]
+    m = re.match(LEAD + r"(?:watch|put on)\s+(?:some\s+|a\s+(?:video|vid)\s+(?:from|by)\s+)?(?P<q>.+?)" + TAIL, low)
+    if m and 0 < len(m.group("q").split()) <= 5 and not _site(m.group("q")) and not NOT_A_TARGET.search(m.group("q")) \
+            and m.group("q") not in ("out", "tv", "a movie", "a show", "something", "youtube", "videos", "a video"):
+        return [("watch_youtube", {"query": t[m.start("q"):m.end("q")], "what": "auto"})]
+
     m = re.match(LEAD + r"(?:search|look up|find)\s+(?P<site>[a-z ]+?)\s+for\s+(?P<q>.+?)" + TAIL, low) or \
         re.match(LEAD + r"(?:search(?: for)?|look up|find|look for)\s+(?P<q>.+?)\s+on\s+(?P<site>[a-z ]+?)" + TAIL, low)
     if m and _site(m.group("site")) in SEARCHABLE:
@@ -151,12 +184,26 @@ def confirm(results: list[tuple[str, dict[str, Any], Any]]) -> str:
         elif name == "open_website":
             label = _nice(args.get("site", "it"))
             lines.append(f"Searching {label} for {args['search']}." if args.get("search") else f"Opening {label}.")
+        elif name == "watch_youtube":
+            if r.get("latest"):
+                lines.append(f"Here's {r.get('channel')}'s newest video: {r.get('title')}.")
+            elif r.get("title"):
+                lines.append(f"Playing {r['title']}" + (f" by {r['channel']}." if r.get("channel") else "."))
+            elif r.get("channel"):
+                lines.append(f"Here's {r['channel']}'s channel.")
+            else:
+                lines.append(r.get("note") or f"Here's what YouTube has for {args.get('query')}.")
+        elif name == "discord_search":
+            lines.append(f"Searching Discord for {args.get('query')}" + (f" in {args['where']}." if args.get("where") else "."))
         elif name == "click_on_screen":
             if r.get("clicked") or r.get("found_by"):
                 lines.append(f"Playing {r.get('clicked') or args.get('text')}.")
         elif name == "open_app":
             opened = str(r.get("opened") or "")
-            lines.append(f"Opening {_nice(args.get('name', '')) if opened.startswith('http') or not opened else opened}.")
+            if r.get("youtube_channel"):
+                lines.append(f"Pulling up {r['youtube_channel']} on YouTube.")
+            else:
+                lines.append(f"Opening {_nice(args.get('name', '')) if opened.startswith('http') or not opened else opened}.")
         elif name == "send_message":
             lines.append(f"Sent to {r.get('to') or args.get('to')}." if r.get("sent") else str(r.get("note") or "Done."))
         elif name == "media_control":

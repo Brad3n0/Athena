@@ -422,9 +422,11 @@
         <p class="muted small" id="weatherStatus"></p>
 
         <h3>Image generation</h3>
-        <p class="muted small">Uses Stable Diffusion running on your PC. Install <b>Stable Diffusion WebUI Forge</b> (free, one-click), start it with <code>--api</code>, then enter its address.</p>
-        <label>Image generator address <input id="setImageApi" placeholder="http://127.0.0.1:7860" /></label>
-        <button type="button" class="ghost" id="testImages">Test connection</button>
+        <p class="muted small">Athena makes pictures with an image generator on your PC and finds it by herself. Easiest: install the free <b>ComfyUI Desktop</b> app (<a href="https://www.comfy.org/download" target="_blank" rel="noopener">comfy.org/download</a>; works with AMD Radeon and NVIDIA cards), open it, and download an image model from its <b>Templates</b> (e.g. SDXL or Flux). Keep ComfyUI open and just ask Athena: “make a picture of…”. Stable Diffusion WebUI Forge (started with <code>--api</code>) works too.</p>
+        <label class="check"><input type="checkbox" id="setImagesEnabled" /> Let Athena make pictures</label>
+        <label>Image model <select id="setImageModel"><option value="">Best one found</option></select></label>
+        <label>Address <span class="muted small">(only if Athena doesn't find it)</span> <input id="setImageApi" placeholder="found automatically" /></label>
+        <button type="button" class="ghost" id="testImages">Find my image generator</button>
         <p class="muted small" id="imagesStatus"></p>
 
         <h3>Smart home</h3>
@@ -654,6 +656,40 @@
     <header><h2 id="reviewTitle">Review</h2><span class="muted small" id="reviewCount"></span>
       <button class="icon-btn" id="reviewClose" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
     <div class="review-body" id="reviewBody"></div>
+  </div>
+</dialog>
+
+<dialog class="settings photo-dlg" id="photoDlg">
+  <div class="settings-inner">
+    <header><h2>Edit photo</h2><span class="muted small" id="peSize"></span>
+      <button class="icon-btn" id="peClose" title="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
+    <div class="pe-body">
+      <div class="pe-stage"><div class="pe-frame" id="peFrame"><img id="peImg" alt="Photo being edited"><div class="pe-text" id="peTextPreview"></div></div>
+        <div class="pe-busy" id="peBusy" hidden><span class="spin"></span><span id="peBusyText">Working…</span></div></div>
+      <div class="pe-tools">
+        <div class="pe-group"><b>Adjust</b>
+          <label>Brightness <input type="range" id="peBright" min="0.3" max="1.8" step="0.01" value="1"></label>
+          <label>Contrast <input type="range" id="peContrast" min="0.3" max="1.8" step="0.01" value="1"></label>
+          <label>Saturation <input type="range" id="peSat" min="0" max="2" step="0.01" value="1"></label>
+          <label>Warmth <input type="range" id="peWarm" min="-1" max="1" step="0.01" value="0"></label>
+          <label>Blur <input type="range" id="peBlur" min="0" max="12" step="0.5" value="0"></label>
+        </div>
+        <div class="pe-group"><b>Filter</b>
+          <div class="pe-chips" id="peFilters"><button type="button" data-f="" class="on">None</button><button type="button" data-f="enhance">✨ Enhance</button><button type="button" data-f="grayscale">B&amp;W</button><button type="button" data-f="sepia">Sepia</button><button type="button" data-f="vignette">Vignette</button><button type="button" data-f="invert">Invert</button></div>
+        </div>
+        <div class="pe-group"><b>Crop &amp; turn</b>
+          <div class="pe-chips" id="peGeo"><button type="button" data-crop="1:1">Square</button><button type="button" data-crop="4:5">4:5</button><button type="button" data-crop="16:9">16:9</button><button type="button" data-crop="9:16">9:16</button>
+            <button type="button" data-rot="-90" title="Rotate left">⟲</button><button type="button" data-rot="90" title="Rotate right">⟳</button><button type="button" data-flip="1" title="Flip">⇋</button></div>
+        </div>
+        <div class="pe-group"><b>Text</b>
+          <input id="peText" placeholder="Add a caption (optional)" maxlength="120">
+          <select id="peTextPos"><option value="bottom">Bottom</option><option value="top">Top</option><option value="center">Middle</option></select>
+        </div>
+        <button type="button" class="ghost" id="peRemoveBg">🪄 Remove background</button>
+        <p class="muted small" id="peNote">The first background removal downloads a small tool (~170 MB) once.</p>
+        <div class="pe-actions"><button type="button" class="ghost" id="peReset">Start over</button><button type="button" class="primary" id="peSave">Save</button></div>
+      </div>
+    </div>
   </div>
 </dialog>
 

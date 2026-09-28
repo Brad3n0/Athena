@@ -985,7 +985,7 @@ function messageEl(m, idx) {
   el.dataset.idx = idx;
   if (m.role === 'user') {
     const files = (m.files || []).map((f) => `<span class="file-chip">${ICONS.file}<span>${escapeHtml(f)}</span></span>`).join('');
-    const imgs = (m.images || []).map((b64) => `<img class="thumb" src="data:image/*;base64,${b64}" alt="">`).join('');
+    const imgs = (m.images || []).map((b64) => `<span class="pic-wrap"><img class="thumb" src="data:image/*;base64,${b64}" alt=""><button type="button" class="pic-edit" data-pic-edit title="Edit this photo">✏️ Edit</button></span>`).join('');
     el.innerHTML = `<div class="col">${files || imgs ? `<div class="files">${imgs}${files}</div>` : ''}
       <div class="bubble">${escapeHtml(m.display ?? m.content)}</div>
       <div class="msg-actions">${m.time ? `<span class="time">${fmtTime(m.time)}</span>` : ''}<button data-msg-act="edit" title="Edit">${ICONS.edit}</button><button data-msg-act="copy" title="Copy">${ICONS.copy}</button></div></div>`;
@@ -1049,7 +1049,7 @@ function updateAssistantEl(el, m) {
   const steps = (m.tools || []).map((t, i) => stepHtml(t, i, openSteps)).join('');
   let html = steps ? `<div class="activity">${steps}</div>` : '';
   if (m.research) html += researchHtml(m, el);
-  const pics = (m.tools || []).filter((t) => t.result?.image).map((t) => `<a href="${escapeHtml(t.result.image)}" target="_blank"><img src="${escapeHtml(t.result.image)}" alt="${escapeHtml(t.result.prompt || 'Generated image')}"></a>`);
+  const pics = (m.tools || []).filter((t) => t.result?.image).map((t) => `<span class="pic-wrap"><a href="${escapeHtml(t.result.image)}" target="_blank"><img src="${escapeHtml(t.result.image)}" alt="${escapeHtml(t.result.prompt || 'Generated image')}"></a><button type="button" class="pic-edit" data-pic-edit title="Edit this picture">✏️ Edit</button></span>`);
   if (pics.length) html += `<div class="gen-images">${pics.join('')}</div>`;
   if (thinking.trim()) {
     const open = el.querySelector('.thinking-box')?.open ?? false;
@@ -1166,6 +1166,9 @@ const STEP_TEXT = {
   run_python: [() => 'Running Python code', (a, r) => r.opened_window ? 'Opened it in a window on your PC' : r.timed_out ? `Code stopped after ${r.seconds}s` : r.exit_code === 0 ? 'Ran the code' : 'The code hit an error'],
   search_documents: [(a) => `Searching your documents for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} passages in your documents`],
   generate_image: [() => 'Creating an image', () => 'Created an image'],
+  edit_image: [() => 'Editing the photo', (a, r) => `Edited the photo${r.edits?.length ? `: ${r.edits.join(', ')}` : ''}`],
+  watch_youtube: [(a) => `Finding ${a.query} on YouTube`, (a, r) => r.title ? `Playing ${r.title}` : r.channel ? `Opened ${r.channel}'s channel` : 'Opened YouTube'],
+  discord_search: [(a) => `Searching Discord for “${a.query}”`, (a) => `Searched Discord for “${a.query}”${a.where ? ` in ${a.where}` : ''}`],
   list_home_devices: [() => 'Checking your smart home', (a, r) => `Found ${r.count} devices`],
   control_home_device: [(a) => `${a.action} ${a.device}`, (a, r) => `${r.device}: ${r.action}${r.value != null ? ` ${r.value}` : ''} ✓`],
 };
@@ -2552,6 +2555,7 @@ function openSettings(tab = 'general') {
   $('#setTextSize').value = s.text_size || 'normal';
   $('#setCompact').checked = !!s.compact;
   $('#setReduceMotion').checked = !!s.reduce_motion;
+  $('#setImagesEnabled').checked = s.images_enabled !== false;
   $('#setAutoRecover').checked = s.auto_recover !== false;
   $('#setAutoBackup').checked = s.auto_backup !== false;
   $('#setUpdateCheck').checked = s.update_check !== false;
@@ -2639,6 +2643,7 @@ function switchTab(tab) {
   if (tab === 'jarvis') loadJarvis();
   if (tab === 'about') loadMemories();
   if (tab === 'privacy') loadBackups();
+  if (tab === 'integrations') findImageGenerator();
   if (tab === 'desktop') loadPhone();
   if (tab === 'voice') { loadMics(); loadCustomVoice(); }
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
@@ -2728,6 +2733,8 @@ bind('#setPc', 'pc_enabled', (el) => el.checked);
 bind('#setTextSize', 'text_size');
 bind('#setCompact', 'compact', (el) => el.checked);
 bind('#setReduceMotion', 'reduce_motion', (el) => el.checked);
+bind('#setImagesEnabled', 'images_enabled', (el) => el.checked);
+bind('#setImageModel', 'image_model');
 bind('#setAutoRecover', 'auto_recover', (el) => el.checked);
 bind('#setAutoBackup', 'auto_backup', (el) => el.checked);
 bind('#setUpdateCheck', 'update_check', (el) => el.checked);
@@ -3436,7 +3443,16 @@ async function testIntegration(kind, out) {
   } catch (e) { $(out).textContent = e.message; }
 }
 $('#testWeather').onclick = () => testIntegration('weather', '#weatherStatus');
-$('#testImages').onclick = () => testIntegration('images', '#imagesStatus');
+async function findImageGenerator() {
+  $('#imagesStatus').textContent = 'Looking for an image generator…';
+  let r;
+  try { r = await api('/api/integrations/test', json('POST', { kind: 'images' })); } catch (e) { $('#imagesStatus').textContent = e.message; return; }
+  $('#imagesStatus').innerHTML = `<span class="${r.ok ? 'status-ok' : 'status-bad'}">${r.ok ? '✓' : '✗'} ${escapeHtml(r.message)}</span>`;
+  const models = r.models || [];
+  $('#setImageModel').innerHTML = '<option value="">Best one found</option>' + models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+  $('#setImageModel').value = models.includes(state.settings.image_model) ? state.settings.image_model : '';
+}
+$('#testImages').onclick = findImageGenerator;
 $('#testHome').onclick = () => testIntegration('home', '#homeStatus');
 
 // ------------------------------------------------------------ wake word + desktop
@@ -4091,6 +4107,99 @@ $('#healthRun').onclick = runHealth;
 $('#healthCopy').onclick = async () => { await copyText(healthReport); toast('Report copied — paste it to share'); };
 
 // ------------------------------------------------------------ boot
+// ------------------------------------------------------------ photo editor
+const pe = { src: '', original: '', filter: '' };
+function peFilterCss() {
+  const v = (id) => Number($(id).value);
+  const w = v('#peWarm');
+  const parts = [`brightness(${v('#peBright')})`, `contrast(${v('#peContrast')})`, `saturate(${v('#peSat')})`];
+  if (w > 0) parts.push(`sepia(${(w * 0.16).toFixed(2)})`, `saturate(${(1 + w * 0.12).toFixed(2)})`);
+  if (w < 0) parts.push(`hue-rotate(${(w * 14).toFixed(1)}deg)`, `saturate(${(1 + w * 0.15).toFixed(2)})`);
+  if (v('#peBlur')) parts.push(`blur(${v('#peBlur') / 2}px)`);
+  parts.push({ grayscale: 'grayscale(1)', sepia: 'sepia(1)', invert: 'invert(1)', enhance: 'contrast(1.1) saturate(1.15)' }[pe.filter] || '');
+  return parts.join(' ');
+}
+function pePreview() {
+  $('#peImg').style.filter = peFilterCss();
+  $('#peFrame').classList.toggle('vignette', pe.filter === 'vignette');
+  $('#peTextPreview').textContent = $('#peText').value;
+  $('#peTextPreview').dataset.pos = $('#peTextPos').value;
+}
+function peResetAdjust() {
+  $('#peBright').value = 1; $('#peContrast').value = 1; $('#peSat').value = 1; $('#peWarm').value = 0; $('#peBlur').value = 0;
+  $('#peText').value = ''; pe.filter = '';
+  $$('#peFilters button').forEach((b) => b.classList.toggle('on', !b.dataset.f));
+}
+function peSetImage(src) {
+  pe.src = src;
+  $('#peImg').src = src;
+  $('#peImg').onload = () => { $('#peSize').textContent = `${$('#peImg').naturalWidth} × ${$('#peImg').naturalHeight}`; };
+  pePreview();
+}
+function openPhotoEditor(src) {
+  pe.original = src;
+  peResetAdjust();
+  peSetImage(src);
+  $('#photoDlg').showModal();
+}
+async function peServer(steps, busyText, draft = true) {
+  $('#peBusyText').textContent = busyText;
+  $('#peBusy').hidden = false;
+  try {
+    return await api('/api/images/edit', json('POST', { source: pe.src, steps, draft }));
+  } catch (e) { toast(e.message, 'error'); return null; } finally { $('#peBusy').hidden = true; }
+}
+['#peBright', '#peContrast', '#peSat', '#peWarm', '#peBlur', '#peText', '#peTextPos'].forEach((id) => $(id).addEventListener('input', pePreview));
+$('#peFilters').onclick = (e) => {
+  const b = e.target.closest('[data-f]');
+  if (!b) return;
+  pe.filter = b.dataset.f;
+  $$('#peFilters button').forEach((x) => x.classList.toggle('on', x === b));
+  pePreview();
+};
+$('#peGeo').onclick = async (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const step = b.dataset.crop ? { op: 'crop', aspect: b.dataset.crop } : b.dataset.rot ? { op: 'rotate', amount: Number(b.dataset.rot) } : { op: 'flip' };
+  const r = await peServer([step], 'One moment…');
+  if (r) peSetImage(r.image);
+};
+$('#peRemoveBg').onclick = async () => {
+  const r = await peServer([{ op: 'remove_background' }], 'Removing the background… (the first time takes a minute or two)');
+  if (r) { peSetImage(r.image); $('#peNote').textContent = 'Background removed. Save keeps it see-through (PNG).'; }
+};
+$('#peReset').onclick = () => { peResetAdjust(); peSetImage(pe.original); };
+$('#peClose').onclick = () => $('#photoDlg').close();
+$('#peSave').onclick = async () => {
+  const v = (id) => Number($(id).value);
+  const steps = [];
+  if (v('#peBright') !== 1) steps.push({ op: 'brightness', amount: v('#peBright') });
+  if (v('#peContrast') !== 1) steps.push({ op: 'contrast', amount: v('#peContrast') });
+  if (v('#peSat') !== 1) steps.push({ op: 'saturation', amount: v('#peSat') });
+  if (v('#peWarm')) steps.push({ op: 'warm', amount: v('#peWarm') });
+  if (pe.filter) steps.push({ op: pe.filter });
+  if (v('#peBlur')) steps.push({ op: 'blur', amount: v('#peBlur') / 2 });
+  if ($('#peText').value.trim()) steps.push({ op: 'text', text: $('#peText').value.trim(), position: $('#peTextPos').value });
+  const r = await peServer(steps, 'Saving…', false);
+  if (!r) return;
+  $('#photoDlg').close();
+  toast(`Saved to ${r.saved_to}`);
+  if (state.chat) {  // show it in the chat, ready to edit again or download
+    state.chat.messages.push({ role: 'assistant', content: "Here's your edited photo.", time: Date.now(),
+      tools: [{ id: `pe${Date.now()}`, name: 'edit_image', args: {}, result: r }] });
+    renderMessages();
+    scrollBottom(true);
+    saveChat();
+  }
+};
+messagesEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-pic-edit]');
+  if (!btn) return;
+  e.preventDefault();
+  const img = btn.closest('.pic-wrap')?.querySelector('img');
+  if (img) openPhotoEditor(img.getAttribute('src'));
+});
+
 // ------------------------------------------------------------ automatic backups
 async function loadBackups() {
   let r;

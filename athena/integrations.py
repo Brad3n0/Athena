@@ -19,6 +19,14 @@ IMAGES_DIR = store.DATA_DIR / "images"
 
 async def generate_image(client: httpx.AsyncClient, prompt: str, negative: str = "", width: int = 1024,
                          height: int = 1024, steps: int = 25) -> dict[str, Any]:
+    """Older entry point: image generation now lives in imagegen (finds ComfyUI, Forge or Ollama by itself)."""
+    from . import imagegen
+
+    return await imagegen.generate(client, prompt, negative, width, height)
+
+
+async def _generate_image_a1111(client: httpx.AsyncClient, prompt: str, negative: str = "", width: int = 1024,
+                                height: int = 1024, steps: int = 25) -> dict[str, Any]:
     api = (store.get_settings().get("image_api") or "").rstrip("/")
     if not api:
         return {"error": "Image generation isn't set up. Add your Stable Diffusion WebUI / Forge address in Settings → Integrations."}
@@ -39,6 +47,9 @@ async def generate_image(client: httpx.AsyncClient, prompt: str, negative: str =
     name = f"athena-{time.strftime('%Y%m%d-%H%M%S')}-{store.new_id()[:4]}.png"
     path = IMAGES_DIR / name
     path.write_bytes(base64.b64decode(images[0].split(",", 1)[-1]))
+    from . import photos
+
+    photos.remember(path)  # "now make it darker" edits this one
     saved = str(path)
     pictures = Path.home() / "Pictures"
     if pictures.is_dir():

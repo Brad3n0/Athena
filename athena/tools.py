@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -134,10 +135,43 @@ async def _weather(a, ctx):
     return await weather.get_weather(ctx["client"], loc, ctx["settings"].get("units", "imperial"))
 
 
+async def _edit_image(a, ctx):
+    from starlette.concurrency import run_in_threadpool
+
+    from . import photos
+    source = str(a.get("image") or "").strip()
+    if not source:
+        history = ctx.get("history") or []
+        attached = [img for m in history if m.get("role") == "user" for img in (m.get("images") or [])]
+        latest_has_photo = bool(history and history[-1].get("images"))
+        made = photos.last_output.get("path")
+        if latest_has_photo:
+            source = history[-1]["images"][-1]
+        elif made and made.exists() and time.time() - photos.last_output["time"] < 3 * 3600:
+            source = str(made)  # "now make it brighter": keep editing the last result
+        elif attached:
+            source = attached[-1]
+    steps = a.get("steps")
+    if isinstance(steps, str):
+        try:
+            steps = json.loads(steps)
+        except ValueError:
+            steps = [{"op": steps}]
+    if isinstance(steps, dict):
+        steps = [steps]
+    try:
+        return await run_in_threadpool(photos.edit, source, steps or [])
+    except photos.PhotoError as exc:
+        return {"error": str(exc)}
+
+
 async def _generate_image(a, ctx):
-    from . import integrations
-    return await integrations.generate_image(ctx["client"], str(a.get("prompt", "")), str(a.get("negative", "")),
-                                             int(a.get("width") or 1024), int(a.get("height") or 1024))
+    from . import imagegen
+    try:
+        w, h = int(a.get("width") or 1024), int(a.get("height") or 1024)
+    except (TypeError, ValueError):
+        w = h = 1024
+    return await imagegen.generate(ctx["client"], str(a.get("prompt", "")), str(a.get("negative", "")), w, h, ctx.get("ollama", ""))
 
 
 async def _ha_list(a, ctx):
@@ -376,7 +410,18 @@ TOOLS: list[Tool] = [
          "Use it for questions about their files, schoolwork, work docs, manuals, leases, etc. Cite the file names.",
          {"query": S("What to look for"), "count": {"type": "integer", "description": "How many passages (default 6)"}}, ["query"], run=_search_docs),
 
-    Tool("generate_image", "images", "Create an image from a text description (Stable Diffusion). Write a detailed visual prompt.",
+    Tool("edit_image", "pc", "Edit a photo: the one the user just attached, or the last picture Athena made or edited "
+         "(or a file path). Steps run in order, e.g. [{\"op\":\"crop\",\"aspect\":\"1:1\"},{\"op\":\"brightness\",\"amount\":1.2}]. "
+         "ops: crop (aspect like 1:1, 16:9, 9:16, 4:5; or box), resize (width/height/scale), rotate (amount = degrees), "
+         "flip (direction horizontal/vertical), brightness/contrast/saturation/sharpness (amount: 1 = same, 1.3 = more, 0.7 = less), "
+         "blur (amount = radius), grayscale, sepia, invert, warm, cool, enhance, vignette, text (text, position top/center/bottom, "
+         "color, size), border, remove_background, format (format png/jpg/webp, quality). The result is shown to the user.",
+         {"steps": {"type": "array", "items": {"type": "object"}, "description": "Edit steps in order"},
+          "image": S("A file path, only if the user named a file on the PC (optional)")},
+         ["steps"], arun=_edit_image),
+    Tool("generate_image", "images", "Create a picture from a description, on this PC (ComfyUI, Stable Diffusion or an Ollama "
+         "image model). Write a detailed visual prompt in English: subject, setting, style, lighting, camera. Use width/height "
+         "for shape (e.g. 1344x768 wide, 768x1344 tall). The picture is shown to the user; don't describe it back in detail.",
          {"prompt": S("Detailed description of the image"), "negative": S("Things to avoid"),
           "width": {"type": "integer"}, "height": {"type": "integer"}}, ["prompt"], arun=_generate_image),
     Tool("list_home_devices", "home", "List smart home devices (lights, switches, thermostats, locks...) and their state.",
@@ -561,6 +606,19 @@ async def _click(a, ctx):
     return {**done, "target": target, "found_by": "screenshot"}
 
 
+def _discord_search(a):
+    from . import automation, messaging
+    try:
+        return messaging.discord_search(str(a.get("query", "")), str(a.get("where") or ""))
+    except (messaging.MessageError, automation.ControlError) as exc:
+        return {"error": str(exc)}
+
+
+def _watch_youtube(a):
+    from . import youtube
+    return youtube.watch(str(a.get("query", "")), str(a.get("what") or "auto"))
+
+
 def _contacts(a):
     from . import messaging
     return {"contacts": [{k: v for k, v in c.items() if k != "id" and v} for c in messaging.list_contacts()]}
@@ -669,6 +727,16 @@ TOOLS += [
           "app": S("The app or website, e.g. discord, whatsapp, instagram, messenger, telegram, text, email, snapchat, slack"),
           "subject": S("Email subject")},
          ["to", "text"], arun=_send_message, approve=_safe(_approve_message)),
+    Tool("discord_search", "pc", "Search Discord messages: opens Discord, goes to a server, channel or person if given (Discord "
+         "searches the one that's open), and searches for the words. Use for 'find the minecraft ip in the squad server' or "
+         "'search my dms with Jake for that link'.",
+         {"query": S("What to search for"), "where": S("Server, channel, group chat or person to search in (optional)")},
+         ["query"], run=_discord_search),
+    Tool("watch_youtube", "pc", "Play or open something on YouTube in the browser. what='auto' plays a YouTuber's newest video "
+         "(or the top video for a topic), 'latest' = a creator's newest upload, 'channel' = open a creator's channel, "
+         "'video' = the top video for a search. Use for 'watch MrBeast', 'put on some Markiplier', 'play lofi on YouTube'.",
+         {"query": S("A YouTuber's name, or what to watch"), "what": S("auto, latest, channel or video", enum=["auto", "latest", "channel", "video"])},
+         ["query"], run=_watch_youtube),
     Tool("list_contacts", "pc", "List the user's saved contacts (names with their Discord username, phone and email).", run=_contacts),
     Tool("add_contact", "pc", "Save or update a contact so messages reach the right person.",
          {"name": S("Name"), "nicknames": S("Other names the user calls them, comma separated (e.g. 'Jay, my brother')"), "discord": S("Discord username"), "instagram": S("Instagram username"), "snapchat": S("Snapchat username"),
@@ -697,7 +765,7 @@ def enabled_tools(settings: dict[str, Any]) -> list[Tool]:
             groups.add(group)
     if settings.get("docs_enabled") and settings.get("knowledge_folders"):
         groups.add("docs")
-    if settings.get("image_api"):
+    if settings.get("images_enabled", True):  # finds ComfyUI / Forge / Ollama image models by itself
         groups.add("images")
     if settings.get("ha_url") and settings.get("ha_token"):
         groups.add("home")

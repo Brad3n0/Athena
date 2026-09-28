@@ -126,6 +126,8 @@ With PC control on (Settings → Abilities), just ask, typed or out loud:
 - **Typing and clicking:** *"type my address into Notepad"*, *"press ctrl+s"*, *"click the Join button"*. Clicking uses a screenshot, so it needs a vision model like `qwen2.5vl:7b`.
 - **Instant commands:** everyday commands run straight away, typed or spoken, without waiting on the AI to decide: *"open YouTube"*, *"open Discord and Spotify"*, *"play lofi beats on YouTube"*, *"search Amazon for gaming chairs"*, *"message Jake on Discord saying I'm on"*, *"pause the music"*, *"next song"*, *"volume to 30"*, *"close Spotify"*, *"minimize everything"*, *"lock my PC"*. Anything else goes to the AI as usual.
 - **Websites:** *"open YouTube"*, *"play lofi beats on YouTube"*, *"open Netflix"*, or any address. She opens it in your browser (and can then click the video you want).
+- **YouTubers by name:** *"watch MrBeast"* or *"put on some Markiplier"* plays their newest video, *"play Dream's latest video"* does the same, *"pull up MKBHD's channel"* (or just *"pull up MrBeast"*) opens their channel, and *"play lofi beats on YouTube"* plays the top video. Names don't need to be exact.
+- **Search Discord:** *"search Discord for the minecraft ip"*, *"find the tournament rules in the Squad server on Discord"*, *"search my DMs with Jake for that link on Discord"*. She jumps to the server or person (nicknames from your contacts work) and searches there, since Discord searches whatever is open.
 - **Voice approvals:** in voice chat, when something needs your OK (like sending a message) she reads it out and asks *"Should I go ahead?"*. Just say **yes** or **no**.
 - **Clicking by what it says:** *"click the video about the Crimson Desert trailer"* or *"click Subscribe"*. She reads the real words on the screen through Windows (like a screen reader does), scrolls down to it if needed, and clicks it. If the words aren't readable she looks at a screenshot instead.
 - **Finding where things are installed:** *"find the folder my game Crimson Desert is in"* looks where games really live: Steam libraries, Epic, Xbox / Game Pass, and your installed programs on every drive. Loose names, typos and short forms like *cs2* work. Regular file search also ignores spaces and capitals, and finds folders too.
@@ -137,6 +139,11 @@ With PC control on (Settings → Abilities), just ask, typed or out loud:
 - **Heads-ups:** she speaks up when a download finishes, the CPU is maxed or memory is almost full (and says which app), a drive is nearly full, a laptop battery is low, or a reminder is 5 minutes away. Choose which ones in **Settings → Jarvis**.
 
 She works your real apps with the keyboard and mouse like you would, so keep the PC unlocked while she's doing things, and keep your hands off the keyboard for those few seconds.
+
+## Pictures: make and edit
+
+- **Edit photos:** attach a photo and say what you want: *"crop it square and make it brighter"*, *"black and white with a vignette"*, *"remove the background"*, *"add the caption 'Summer vibes' at the bottom"*, *"make it warmer"*. Or hover any picture in the chat and click **✏️ Edit** for the photo editor: sliders for brightness, contrast, saturation, warmth and blur, filters, crop and rotate, captions and background removal. Everything happens on your PC. The first background removal downloads a small tool (~170 MB) once. Edited pictures are saved in **Pictures → Athena**.
+- **Make pictures:** *"make a picture of a red fox in the snow at sunset"*. Athena uses an image generator on your PC and finds it by herself. The easiest one is the free **ComfyUI Desktop** app ([comfy.org/download](https://www.comfy.org/download)), which supports AMD Radeon cards on Windows: install it, open it, download an image model from its **Templates** (SDXL or Flux), and keep it open. Stable Diffusion WebUI Forge (with `--api`) works too. Then *"now make it black and white"* edits the picture she just made. Check it in **Settings → Integrations → Find my image generator**.
 
 ## Use Athena on your phone
 
@@ -249,6 +256,9 @@ athena/          Python server (FastAPI)
   server.py      API: streams chat from Ollama, runs tools, model downloads, speech-to-text
   tools.py       Tools the AI can call (tasks, timers, memory, files, web) + approval rules
   research.py    Deep research: plan, search, read, take notes, write a cited report
+  youtube.py       Watch YouTubers by name
+  photos.py        Photo editing (Pillow; background removal with rembg)
+  imagegen.py      Image generation: finds ComfyUI, Forge or Ollama image models
   custom_voice.py  Custom voice (runs clone_worker.py in its own .venv-voiceclone)
   learning.py    Athena learns: facts about you, lessons from 👍/👎 and corrections, Think harder levels
   files.py       Safe file operations limited to allowed folders, with undo journal
