@@ -1722,6 +1722,7 @@ async function loadPhone() {
   let info;
   try { info = await api('/api/phone'); } catch { box.innerHTML = ''; return; }
   $('#setPhone').checked = info.enabled;
+  $('#setWebAddress').value = state.settings.web_address || '';
   $('#setPhone').disabled = !info.pin_set || info.this_is_phone;
   if (info.this_is_phone) { box.innerHTML = '<p class="small">✓ You\'re using Athena from your phone right now.</p>'; return; }
   if (!info.pin_set) {
@@ -1750,6 +1751,7 @@ async function loadPhone() {
       : '<p class="muted small">Then enter your PIN. Typing works; for voice on the phone, update Athena so she can make her secure address.</p>'}
       <p class="muted small">Tip: use your browser's <b>Add to Home Screen</b> and Athena opens like an app.</p></div>`;
 }
+$('#setWebAddress').addEventListener('change', (e) => saveSettings({ web_address: e.target.value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '') }));
 $('#setPhone').addEventListener('change', async (e) => {
   await saveSettings({ phone_access: e.target.checked });
   loadPhone();

@@ -151,6 +151,7 @@ Good to know:
 - The PC has to be on with Athena running. Everything still happens on the PC, so *"open Spotify"* opens it on the PC, which also makes your phone a remote control.
 - Everything works from the phone, **including voice chat and the mic**. That's why Athena uses the secure https address; phone browsers only allow the mic on secure pages.
 - From the phone you can't change or remove the PIN, or restore backups; do those on the PC.
+- **On your own website address** (like `athena.yourdomain.com`, from anywhere): your website can't run Athena itself (she needs your PC's graphics card), but a free **Cloudflare Tunnel** can point your domain at your PC while it's on, with a real https address (so voice works too). Roughly: add your domain to Cloudflare (free plan) → Zero Trust → Networks → Tunnels → create a tunnel, install the connector it gives you on the PC, and add a public hostname `athena.yourdomain.com` → `http://localhost:8765`. Then type that address in **Settings → Desktop app → Your own web address**. Athena treats visitors through the tunnel as outsiders: phone access must be on and they need your PIN (use 6+ digits; wrong guesses lock out for longer and longer). For extra safety, also add a Cloudflare **Access** application on that hostname so only your email can even reach the PIN screen.
 - **Away from home:** install the free **Tailscale** app on both the PC and your phone and sign in to both with the same account. Then open `http://<your-pc-name>:8765` on your phone from anywhere.
 
 ## Desktop app, "Hey Athena" and more

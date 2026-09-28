@@ -10,7 +10,7 @@ from . import store
 
 COOKIE = "athena_session"
 _sessions: dict[str, float] = {}  # token -> last activity
-_fails = {"count": 0, "until": 0.0}
+_fails = {"count": 0, "until": 0.0, "strikes": 0}
 
 
 def _hash(pin: str, salt: str) -> str:
@@ -45,10 +45,11 @@ def unlock(pin: str) -> str:
         raise PermissionError(f"Too many tries. Wait {int(_fails['until'] - now) + 1} seconds.")
     if not verify(pin):
         _fails["count"] += 1
-        if _fails["count"] >= 5:
-            _fails.update(count=0, until=now + 30)
+        if _fails["count"] >= 5:  # each lockout is twice as long as the last: 30 s, 1 min, 2 min … up to an hour
+            _fails["strikes"] += 1
+            _fails.update(count=0, until=now + min(3600, 30 * 2 ** (_fails["strikes"] - 1)))
         raise PermissionError("Wrong PIN")
-    _fails["count"] = 0
+    _fails.update(count=0, strikes=0)
     token = secrets.token_urlsafe(24)
     _sessions[token] = now
     return token

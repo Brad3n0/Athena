@@ -1965,7 +1965,8 @@ def _host_ok(host: str) -> bool:
     except ValueError:
         pass
     extra = [h.strip().lower() for h in os.environ.get("ATHENA_ALLOWED_HOSTS", "").split(",") if h.strip()]
-    return name in extra
+    web = re.sub(r"^https?://|/.*$", "", str(store.get_settings().get("web_address") or "")).strip().lower()
+    return name in extra or bool(web) and name == web
 
 
 def _cross_site(request: Request) -> bool:
@@ -1991,7 +1992,14 @@ async def same_site_only(request: Request, call_next):
 LOOPBACK = ("127.0.0.1", "::1", "localhost")
 
 
+PROXY_HEADERS = ("cf-connecting-ip", "x-forwarded-for", "x-real-ip", "forwarded", "true-client-ip", "cf-ray")
+
+
 def _from_this_pc(request: Request) -> bool:
+    """Really from this PC. Visits through a tunnel or proxy (like your own web address) arrive from 127.0.0.1 too,
+    but they carry forwarding headers; those are other devices and need phone access and the PIN."""
+    if any(h in request.headers for h in PROXY_HEADERS):
+        return False
     return (request.client.host if request.client else "127.0.0.1") in LOOPBACK
 
 

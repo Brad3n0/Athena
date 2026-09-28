@@ -76,7 +76,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "keep_alive": "30m",  # how long models stay loaded after use
     "preload_model": True,  # load your model in the background when Athena opens
     "seasonal_effects": True,
-    "phone_access": False,  # open Athena from your phone on the same Wi-Fi (needs a PIN)
+    "phone_access": False,
+    "web_address": "",  # your own domain pointing at this PC through a tunnel, e.g. athena.example.com  # open Athena from your phone on the same Wi-Fi (needs a PIN)
     "setup_done": False,  # first-run wizard finished
     "text_size": "normal",  # small | normal | large
     "compact": False,
