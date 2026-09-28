@@ -1,5 +1,6 @@
 """Start Athena AI:  python -m athena  [--port 8765] [--no-browser]"""
 import argparse
+import os
 import threading
 import webbrowser
 
@@ -8,7 +9,8 @@ import uvicorn
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Athena AI — offline assistant powered by Ollama")
-    parser.add_argument("--host", default="127.0.0.1", help="Use 0.0.0.0 to allow other devices on your network")
+    parser.add_argument("--host", default=None, help="Use 0.0.0.0 to allow other devices on your network "
+                        "(or turn on Settings → Desktop app → Use on your phone)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--preload-whisper", metavar="MODEL", help="Download a Whisper model for offline use and exit")
@@ -17,10 +19,13 @@ def main() -> None:
     parser.add_argument("--hidden", action="store_true", help="With --desktop: start in the tray without opening a window")
     args = parser.parse_args()
 
+    host = args.host or _default_host()
+    os.environ["ATHENA_LISTEN"] = host
+
     if args.desktop:
         from .desktop import main as desktop_main
 
-        desktop_main(args.host, args.port, hidden=args.hidden)
+        desktop_main(host, args.port, hidden=args.hidden)
         return
 
     if args.download_voice:
@@ -40,10 +45,24 @@ def main() -> None:
         return
 
     url = f"http://localhost:{args.port}"
-    print(f"\n  Athena AI is running at {url}\n  Press Ctrl+C to stop.\n")
+    print(f"\n  Athena AI is running at {url}")
+    if host != "127.0.0.1":
+        from .phone import lan_urls
+
+        for phone_url in lan_urls(args.port):
+            print(f"  On your phone (same Wi-Fi): {phone_url}")
+    print("  Press Ctrl+C to stop.\n")
     if not args.no_browser:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
-    uvicorn.run("athena.server:app", host=args.host, port=args.port, log_level="warning")
+    uvicorn.run("athena.server:app", host=host, port=args.port, log_level="warning")
+
+
+def _default_host() -> str:
+    """Only this PC can open Athena, unless phone access is on (and a PIN protects it)."""
+    from . import store
+
+    s = store.get_settings()
+    return "0.0.0.0" if s.get("phone_access") and s.get("pin_hash") else "127.0.0.1"
 
 
 if __name__ == "__main__":

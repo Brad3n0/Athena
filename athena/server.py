@@ -1883,6 +1883,42 @@ async def same_site_only(request: Request, call_next):
     return await call_next(request)
 
 
+LOOPBACK = ("127.0.0.1", "::1", "localhost")
+
+
+def _from_this_pc(request: Request) -> bool:
+    return (request.client.host if request.client else "127.0.0.1") in LOOPBACK
+
+
+@app.middleware("http")
+async def phone_access(request: Request, call_next):
+    """Other devices (your phone) only get in when phone access is on and a PIN protects Athena."""
+    if not _from_this_pc(request):
+        settings = store.get_settings()
+        if not settings.get("phone_access") or not security.pin_set():
+            msg = ("Phone access is off. On your PC, open Athena → Settings → Desktop app → Use Athena on your phone "
+                   "(it needs a PIN).") if not settings.get("phone_access") else \
+                  "Set a PIN on your PC first (Athena → Settings → Privacy & data), then open this page again."
+            if request.url.path.startswith("/api/"):
+                return JSONResponse({"detail": msg}, status_code=403)
+            return Response(f"<!doctype html><meta name=viewport content='width=device-width'><body style='font:17px system-ui;"
+                            f"padding:24px;background:#10151f;color:#eceff5'><h2 style='color:#f5c542'>Athena</h2><p>{msg}</p>",
+                            status_code=403, media_type="text/html")
+        if request.url.path in ("/api/pin", "/api/backup/restore", "/api/restore"):
+            return JSONResponse({"detail": "Change the PIN and restore backups from the PC itself."}, status_code=403)
+    return await call_next(request)
+
+
+@app.get("/api/phone")
+async def phone_info(request: Request):
+    from . import phone
+
+    port = request.url.port or 8765
+    return {"enabled": bool(store.get_settings().get("phone_access")), "pin_set": security.pin_set(),
+            "listening": phone.listening_on_network(), "urls": await run_in_threadpool(phone.lan_urls, port),
+            "this_is_phone": not _from_this_pc(request)}
+
+
 @app.middleware("http")
 async def require_unlock(request: Request, call_next):
     path = request.url.path

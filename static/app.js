@@ -4,6 +4,7 @@ import { Mic, transcribe, browserRecognize, Speaker, voicesReady, listVoices, la
 import { VoiceOrb } from './orb.js';
 import { startStars } from './stars.js';
 import { marbleTexture } from './marble.js';
+import qrcode from './vendor/qrcode/qrcode.mjs';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf, mistakePrompt } from './study.js';
 import { hydrateGraphs } from './graph.js';
@@ -1618,6 +1619,40 @@ function setResearch(on) {
 }
 $('#researchBtn').onclick = () => setResearch(!state.researchNext);
 
+// ------------------------------------------------------------ use Athena on your phone
+async function loadPhone() {
+  const box = $('#phoneBox');
+  let info;
+  try { info = await api('/api/phone'); } catch { box.innerHTML = ''; return; }
+  $('#setPhone').checked = info.enabled;
+  $('#setPhone').disabled = !info.pin_set || info.this_is_phone;
+  if (info.this_is_phone) { box.innerHTML = '<p class="small">✓ You\'re using Athena from your phone right now.</p>'; return; }
+  if (!info.pin_set) {
+    box.innerHTML = '<p class="small">First set a PIN in <a href="#" data-goto-tab="privacy">Privacy &amp; data</a>, so nobody else on your Wi-Fi can open Athena.</p>';
+    return;
+  }
+  if (!info.enabled) { box.innerHTML = ''; return; }
+  if (!info.listening) {
+    box.innerHTML = `<p class="small"><b>Almost there:</b> close Athena and open her again with start.bat to turn this on.
+      If Windows asks whether Python can use your network, tick <b>Private networks</b> and click <b>Allow</b>.</p>`;
+    return;
+  }
+  const url = info.urls[0];
+  if (!url) { box.innerHTML = '<p class="small">This PC doesn\'t seem to be on a network right now.</p>'; return; }
+  const qr = qrcode(0, 'M');
+  qr.addData(url);
+  qr.make();
+  box.innerHTML = `<div class="phone-qr">${qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true })}</div>
+    <div class="phone-steps"><p class="small"><b>Scan this with your phone's camera</b>, or type this address in its browser:</p>
+      <p class="phone-url">${info.urls.map((u) => `<code>${escapeHtml(u)}</code>`).join('<br>')}</p>
+      <p class="muted small">Then enter your PIN. Tip: use your browser's <b>Add to Home Screen</b> and Athena opens like an app.
+      Typing works everywhere; the mic and voice chat need the PC (phone browsers only allow the mic on secure https sites).</p></div>`;
+}
+$('#setPhone').addEventListener('change', async (e) => {
+  await saveSettings({ phone_access: e.target.checked });
+  loadPhone();
+});
+
 // ------------------------------------------------------------ Athena learns
 const userText = (m) => (m?.display ?? m?.content ?? '').toString();
 const FIRST_PERSON = /\b(i|i'm|im|i've|i'd|my|me|mine|we|our)\b/i;
@@ -2329,6 +2364,7 @@ function switchTab(tab) {
   if (tab === 'stats') loadStats();
   if (tab === 'jarvis') loadJarvis();
   if (tab === 'about') loadMemories();
+  if (tab === 'desktop') loadPhone();
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('[data-panel]', dlg).forEach((p) => (p.hidden = p.dataset.panel !== tab));
 }

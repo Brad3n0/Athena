@@ -131,6 +131,22 @@ With PC control on (Settings → Abilities), just ask, typed or out loud:
 
 She works your real apps with the keyboard and mouse like you would, so keep the PC unlocked while she's doing things, and keep your hands off the keyboard for those few seconds.
 
+## Use Athena on your phone
+
+Athena runs on your PC, and your phone can use her over your home Wi-Fi.
+
+1. On the PC, set a PIN in **Settings → Privacy & data** (so nobody else on the Wi-Fi can get in).
+2. In **Settings → Desktop app**, tick **Let my phone use Athena**.
+3. Close Athena and open her again with **start.bat**. If Windows asks whether Python can use your network, tick **Private networks** and click **Allow**.
+4. Go back to **Settings → Desktop app** and scan the QR code with your phone's camera (or type the address it shows, like `http://192.168.1.20:8765`). Enter your PIN.
+5. Tip: in your phone's browser choose **Add to Home Screen**, and Athena opens like an app with her own icon.
+
+Good to know:
+- The PC has to be on with Athena running. Everything still happens on the PC, so *"open Spotify"* opens it on the PC, which also makes your phone a remote control.
+- Typing, pictures, research, study tools and everything else work from the phone. The mic and voice chat only work on the PC, because phone browsers only allow the mic on secure (https) sites.
+- From the phone you can't change or remove the PIN, or restore backups; do those on the PC.
+- **Away from home:** install the free **Tailscale** app on both the PC and your phone and sign in to both with the same account. Then open `http://<your-pc-name>:8765` on your phone from anywhere.
+
 ## Desktop app, "Hey Athena" and more
 
 - **Desktop app:** double-click **`start-desktop.bat`**. Athena opens in her own window and lives in the system tray. Press **Ctrl+Space** anywhere to bring her up, or **Ctrl+Shift+Space** to start talking. In **Settings → Desktop app** you can turn on **Start with Windows** and create Desktop/Start menu shortcuts.

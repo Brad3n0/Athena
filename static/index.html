@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Athena AI</title>
   <link rel="icon" href="logo.svg" type="image/svg+xml" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Athena" />
+  <meta name="theme-color" content="#10151f" />
   <link rel="stylesheet" href="vendor/katex/katex.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -466,6 +472,11 @@
         <p class="muted small" style="margin-top:-8px">Format: <code>&lt;ctrl&gt;+&lt;space&gt;</code>, <code>&lt;ctrl&gt;+&lt;alt&gt;+a</code>, <code>&lt;cmd&gt;+&lt;shift&gt;+a</code>. Takes effect right away in the desktop app.</p>
         <label class="check"><input type="checkbox" id="setAutostart" /> Start Athena when Windows starts (quietly, in the tray)</label>
         <button type="button" class="ghost" id="makeShortcuts">Create desktop &amp; Start menu shortcuts</button>
+
+        <h3>📱 Use Athena on your phone</h3>
+        <p class="muted small" style="margin-top:-6px">Chat with Athena from your phone while she runs on this PC. Your phone needs to be on the same Wi-Fi. Everything still runs on the PC, so "open Spotify" opens it on the PC.</p>
+        <label class="check"><input type="checkbox" id="setPhone" /> Let my phone use Athena (protected by my PIN)</label>
+        <div class="phone-box" id="phoneBox"></div>
       </section>
 
       <section data-panel="health" hidden>
