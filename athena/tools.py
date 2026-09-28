@@ -432,11 +432,13 @@ async def _send_message(a, ctx):
             ready = await run_in_threadpool(messaging.whatsapp_open_chat, p["target"], p["to"], p["text"])
         if not ready:
             # Before typing anything, check the right chat opened (needs a vision model; skipped without one).
-            ok = await ctx["verify_chat"](" / ".join(p["aliases"]) or p["to"], "Discord" if p["app"] == "discord" else "WhatsApp")
+            ok, seen = await ctx["verify_chat"](" / ".join(p["aliases"]) or p["to"], "Discord" if p["app"] == "discord" else "WhatsApp")
             if ok is False:
                 await run_in_threadpool(automation.press_keys, "esc")
-                return {"error": f"I couldn't find a chat with {p['to']}, so I didn't send anything. Try their exact "
-                                 f"{'Discord username' if p['app'] == 'discord' else 'WhatsApp name'}, or add them in Settings → Jarvis → Contacts."}
+                saw = f" The chat that opened was “{seen}”." if seen else ""
+                return {"error": f"I couldn't find a chat with {p['to']}, so I didn't send anything.{saw} If that's them, "
+                                 f"add “{seen or p['to']}” as their nickname in Settings → Jarvis → Contacts; otherwise try their exact "
+                                 f"{'Discord username' if p['app'] == 'discord' else 'WhatsApp name'}."}
             await run_in_threadpool(messaging.type_and_send, p["text"])
         else:
             await run_in_threadpool(automation.press_keys, "enter")
@@ -481,10 +483,11 @@ async def _send_on_screen(p, ctx):
             return {"error": f"I searched {app} for {target} but couldn't see them in the results, so I didn't send anything."}
         await asyncio.sleep(2.5)
     # Never type into the wrong chat: check the open conversation is with the right person first.
-    ok = await ctx["verify_chat"](" / ".join(p.get("aliases") or [target]), app)
+    ok, seen = await ctx["verify_chat"](" / ".join(p.get("aliases") or [target]), app)
     if ok is False:
-        return {"error": f"The chat that opened in {app} doesn't look like {who}'s, so I didn't send anything. "
-                         f"Try their exact username, or save it in Settings → Jarvis → Contacts."}
+        saw = f" (it was “{seen}”)" if seen else ""
+        return {"error": f"The chat that opened in {app} doesn't look like {who}'s{saw}, so I didn't send anything. "
+                         f"Try their exact username, or save it as a nickname in Settings → Jarvis → Contacts."}
     spot = await _click_spot(ctx, f"the text box for typing a message in the open {app} conversation")
     if spot.get("error"):
         return {"error": f"I opened the chat with {who} but couldn't find the message box, so I didn't send anything."}

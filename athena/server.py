@@ -154,6 +154,10 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
     name = (settings.get("user_name") or "").strip()
     intro = persona_intro(settings) if mode != "code" else PERSONAS["assistant"]
     parts = [intro, f"The current local date and time is {now}."]
+    if mode != "code":
+        parts.append("You have a real sense of humour. When the user asks for a joke, a roast, a pun, a riddle or something "
+                     "funny, just do it: tell a fresh, genuinely funny one (not the same old classics), matched to their vibe, "
+                     "and happily do more if they want. Keep it friendly. Banter back when they're joking around.")
     if name:
         parts.append(f"The user's name is {name}.")
     if mode == "code":
@@ -692,21 +696,42 @@ async def _vision(prompt: str, image: str, max_tokens: int = 120) -> str | None:
         return None
 
 
-async def verify_chat(name: str, app: str) -> bool | None:
-    """Did the right conversation open? True / False, or None when there's no vision model to check with."""
-    from . import pc
+async def verify_chat(name: str, app: str) -> tuple[bool | None, str]:
+    """Did the right conversation open? (True/False, or None when there's no way to check, plus the name seen).
 
-    try:
+    `name` can hold several names for the same person, separated by " / " (username, display name, nicknames).
+    First the app's window title (Discord shows the open chat there), then the vision model reads the chat's name
+    and we compare it loosely: display names, nicknames, capitals and emojis don't matter.
+    """
+    from . import automation, pc
+    from .locate import norm, score
+
+    names = [n.strip() for n in name.split(" / ") if n.strip()]
+
+    def same(seen: str) -> bool:
+        s = norm(seen)
+        return bool(s) and any((n := norm(alias)) and (n in s or (len(s) >= 3 and s in n) or score(alias, seen) >= 0.75)
+                               for alias in names)
+
+    try:  # 1) the window title, e.g. "@jakey_2009 - Discord" or "Discord | Squad"
+        wins = await run_in_threadpool(automation.list_windows)
+        titles = [w["title"] for w in wins if app.lower().split()[0] in (w["app"] + " " + w["title"]).lower()]
+        for title in titles:
+            cleaned = re.sub(r"(?i)\s*[-|•]\s*discord\s*$|^discord\s*[-|•]\s*|^\(\d+\)\s*", "", title).lstrip("@#")
+            if cleaned and same(cleaned):
+                return True, cleaned
+    except Exception:  # not on Windows, or the window list isn't available
+        pass
+    try:  # 2) read the name at the top of the open chat
         image = await run_in_threadpool(pc.screenshot)
     except pc.PCError:
-        return None
-    answer = await _vision(f"This is a screenshot of {app}. Look at the name at the top of the conversation that is open right now. "
-                           f"Is the open conversation, DM, group chat or channel with any of these (they're all names for the same "
-                           f"person or group): {name}? Display names and nicknames count; ignore capital letters, emojis and small "
-                           "differences. Reply with only YES or NO.", image, 8)
+        return None, ""
+    answer = await _vision(f"This is a screenshot of {app}. What is the name of the person, group chat or channel whose "
+                           "conversation is open right now (shown at the top of the chat)? Reply with only that name.", image, 20)
     if answer is None:
-        return None
-    return "YES" in answer.upper() and "NO" not in answer.upper().replace("NOW", "")
+        return None, ""
+    seen = re.sub(r"<think>.*?</think>", "", answer, flags=re.S).strip().strip('"\'.').splitlines()[0][:80] if answer.strip() else ""
+    return same(seen), seen
 
 
 async def locate_on_screen(target: str) -> dict[str, Any]:

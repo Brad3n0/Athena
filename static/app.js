@@ -977,15 +977,34 @@ function messageEl(m, idx) {
 }
 
 function splitThinking(m) {
-  // Some models put their reasoning inline in <think> tags instead of the thinking field.
+  // Some models put their reasoning inline instead of in the thinking field. Keep it out of the answer (and out of
+  // what's read aloud): <think>…</think>, a stray </think> with the reasoning before it, or gpt-oss's
+  // "analysis … assistantfinal" format leaking through.
   let content = m.content || '';
   let thinking = m.thinking || '';
+  let open = false;
   const match = content.match(/^\s*<think>([\s\S]*?)(<\/think>|$)/);
   if (match) {
     thinking += match[1];
     content = match[2] ? content.slice(match.index + match[0].length) : '';
+    open = !match[2];
+  } else if (content.includes('</think>')) {
+    const cut = content.lastIndexOf('</think>');
+    thinking += content.slice(0, cut);
+    content = content.slice(cut + 8);
+  } else if (/^\s*(<\|channel\|>\s*)?analysis\b/i.test(content)) {
+    const fin = content.search(/(<\|channel\|>\s*final\s*<\|message\|>|assistant\s*final)/i);
+    if (fin >= 0) {
+      thinking += content.slice(0, fin).replace(/^\s*(<\|channel\|>\s*)?analysis\s*(<\|message\|>)?/i, '');
+      content = content.slice(fin).replace(/^(<\|channel\|>\s*final\s*<\|message\|>|assistant\s*final)/i, '');
+    } else {
+      thinking += content.replace(/^\s*(<\|channel\|>\s*)?analysis\s*(<\|message\|>)?/i, '');
+      content = '';
+      open = true;
+    }
   }
-  return { content, thinking, stillThinking: !!(m.streaming && (match ? !match[2] : m.thinking && !content)) };
+  content = content.replace(/^\s+/, '');
+  return { content, thinking, stillThinking: !!(m.streaming && (open || (!match && m.thinking && !content))) };
 }
 
 function updateAssistantEl(el, m) {
@@ -1508,6 +1527,7 @@ async function generateReply({ voice = false, model = null, route = null, think 
           }
         } else if (ev.type === 'retry') {
           // The model stopped without answering; the server is asking again. Clear the half-finished attempt.
+          if (speakThis) speaker.reset(); // and don't read it aloud
           reply.content = '';
           reply.thinking = '';
           delete reply.thinkSecs;
