@@ -286,11 +286,17 @@ def language_line(settings: dict[str, Any], spoken: str | None = None) -> str:
     return ""
 
 
+def time_note() -> dict[str, str]:
+    return {"role": "system", "content": f"Current local date and time: {datetime.now().strftime('%A, %B %d, %Y, %I:%M %p')}."}
+
+
 def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool, self_open: bool = False) -> str:
-    now = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p")
     name = (settings.get("user_name") or "").strip()
     intro = persona_intro(settings) if mode != "code" else PERSONAS["assistant"]
-    parts = [intro, f"The current local date and time is {now} (only mention it when it's relevant, like when asked).",
+    # The date and time go in a short note at the END (time_note), not here: this part then stays identical from
+    # message to message, so Ollama can reuse its work on it instead of re-reading thousands of words each time.
+    parts = [intro, "The current local date and time are in a note just before the user's latest message (only mention "
+             "them when it's relevant, like when asked).",
              "Talk like a real, warm person having a conversation: natural, relaxed wording, no stiff or robotic phrasing, "
              "and no filler about yourself or how you work."]
     if mode != "code":
@@ -636,6 +642,7 @@ async def chat(request: Request):
         self_open = selfedit.is_self(code_root)  # her own code is already open in this chat
         system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools, self_open) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
+        messages.insert(len(messages) - 1 if len(messages) > 1 else len(messages), time_note())
         if self_open and use_tools:
             # Models copy their own earlier answers: hide any old "I can't change my own code" replies, and remind her
             # right before the request that she has the tools and should start.
@@ -1173,7 +1180,7 @@ async def _research_stream(model: str, mode: str, settings: dict[str, Any], hist
         yield _event("error", message="I couldn't find anything useful online for that. Are you connected to the internet? "
                                       "Try rewording it, or ask without Research.")
         return
-    system = build_system_prompt(mode, settings, False) + extra_prompt
+    system = build_system_prompt(mode, settings, False) + extra_prompt + "\n\n" + time_note()["content"]
     messages = [{"role": "system", "content": system},
                 *[{"role": m["role"], "content": m["content"][:2000]} for m in history[-5:-1]],
                 {"role": "user", "content": research.report_prompt(question, notes)}]

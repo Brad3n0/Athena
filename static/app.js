@@ -1549,7 +1549,8 @@ async function generateReply({ voice = false, model = null, route = null, think 
   const paint = () => { if (!raf) raf = requestAnimationFrame(frame); };
   let thinkStart = 0;
   // Let you know when the model has to load into memory first (can take a while on the first message).
-  const warmTimer = setTimeout(() => { if (!reply.content && !reply.thinking && !reply.tools.length) { reply.warming = true; paint(); } }, 2500);
+  // "Waking up…" only when the model really isn't loaded yet; otherwise the typing dots show while she reads.
+  const warmTimer = 0;
   fetch('/api/models/loaded').then((r) => r.json()).then((l) => {
     if (!l.unknown && !l.models.includes(model) && !reply.content && !reply.thinking) { reply.warming = true; paint(); }
   }).catch(() => {});
