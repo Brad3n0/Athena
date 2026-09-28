@@ -214,7 +214,7 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
         if "tasks" in groups:
             abilities.append("- Reminders: set_reminder pops up and speaks at the exact time (compute the ISO date/time from now).")
         if "pc" in groups:
-            abilities.append("- PC: open apps, control volume and media, lock/shutdown the PC, and read or set the clipboard "
+            abilities.append("- PC: open apps (open_app) and websites (open_website: 'open YouTube', 'play X on YouTube'), control volume and media, lock/shutdown the PC, and read or set the clipboard "
                              "(e.g. 'rewrite what I copied' → get_clipboard, rewrite, set_clipboard).")
             abilities.append("- Like Jarvis: pc_status for 'how's my PC doing'; window_control to focus, minimize, maximize, close or move "
                              "windows between monitors; type_text and press_keys to operate apps; click_on_screen to click things you "

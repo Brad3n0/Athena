@@ -322,8 +322,14 @@ TOOLS: list[Tool] = [
     Tool("get_weather", "web", "Current weather and 3-day forecast. Leave location empty for the user's home city.",
          {"location": S("City, e.g. 'Chicago' or 'Springfield, IL'")}, arun=_weather),
 
-    Tool("open_app", "pc", "Open an app on the PC (e.g. Spotify, Chrome, Notepad, Calculator, Steam, Discord).",
+    Tool("open_app", "pc", "Open an app installed on the PC (e.g. Spotify, Chrome, Notepad, Calculator, Steam, Discord). "
+         "For websites like YouTube use open_website.",
          {"name": S("App name")}, ["name"], run=_pc(pc.open_app)),
+    Tool("open_website", "pc", "Open a website in the browser: by name (YouTube, Netflix, Google, Gmail, Twitch, Reddit, "
+         "Amazon, Roblox...) or address, optionally searching it ('play lofi on YouTube' → site 'youtube', search 'lofi'). "
+         "After opening search results, use click_on_screen to pick a video or result if the user wants one played.",
+         {"site": S("Site name or address"), "search": S("What to search for on it (optional)")}, ["site"],
+         run=_pc(pc.open_website)),
     Tool("media_control", "pc", "Control music/video playback on the PC.",
          {"action": S("play_pause, next, previous or stop", enum=["play_pause", "next", "previous", "stop"])}, ["action"], run=_pc(pc.media)),
     Tool("set_volume", "pc", "Change the PC's volume: set a level, change it up/down, or toggle mute.",

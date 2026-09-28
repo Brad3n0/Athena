@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -70,7 +71,10 @@ def open_app(name: str) -> dict[str, Any]:
             if close:
                 target = shortcuts[sorted(close, key=len)[0]]
         if not target:
-            raise PCError(f"Couldn't find an app called '{name}'")
+            key = query.removesuffix(".com")
+            if key in SITES or "." in query:  # "open YouTube": it's a website, not an app
+                return open_website(name)
+            raise PCError(f"Couldn't find an app called '{name}'. If it's a website, I can open it in the browser.")
         os.startfile(str(target))  # type: ignore[attr-defined]
         return {"opened": Path(str(target)).stem if isinstance(target, Path) else query}
     if MAC:
@@ -395,3 +399,56 @@ def _clean_trace(err: str) -> str:
 
 def run_python(code: str, timeout: int = 30) -> dict[str, Any]:
     return run_code(code, "python", timeout)
+
+
+# ------------------------------------------------------------ websites
+
+SITES = {
+    "youtube": ("https://www.youtube.com", "https://www.youtube.com/results?search_query={q}"),
+    "google": ("https://www.google.com", "https://www.google.com/search?q={q}"),
+    "gmail": ("https://mail.google.com", "https://mail.google.com/mail/u/0/#search/{q}"),
+    "netflix": ("https://www.netflix.com", "https://www.netflix.com/search?q={q}"),
+    "twitch": ("https://www.twitch.tv", "https://www.twitch.tv/search?term={q}"),
+    "spotify": ("https://open.spotify.com", "https://open.spotify.com/search/{q}"),
+    "reddit": ("https://www.reddit.com", "https://www.reddit.com/search/?q={q}"),
+    "amazon": ("https://www.amazon.com", "https://www.amazon.com/s?k={q}"),
+    "wikipedia": ("https://www.wikipedia.org", "https://en.wikipedia.org/w/index.php?search={q}"),
+    "maps": ("https://www.google.com/maps", "https://www.google.com/maps/search/{q}"),
+    "google maps": ("https://www.google.com/maps", "https://www.google.com/maps/search/{q}"),
+    "tiktok": ("https://www.tiktok.com", "https://www.tiktok.com/search?q={q}"),
+    "instagram": ("https://www.instagram.com", "https://www.instagram.com/explore/search/keyword/?q={q}"),
+    "x": ("https://x.com", "https://x.com/search?q={q}"), "twitter": ("https://x.com", "https://x.com/search?q={q}"),
+    "facebook": ("https://www.facebook.com", "https://www.facebook.com/search/top?q={q}"),
+    "ebay": ("https://www.ebay.com", "https://www.ebay.com/sch/i.html?_nkw={q}"),
+    "github": ("https://github.com", "https://github.com/search?q={q}"),
+    "roblox": ("https://www.roblox.com", "https://www.roblox.com/discover/?Keyword={q}"),
+    "pinterest": ("https://www.pinterest.com", "https://www.pinterest.com/search/pins/?q={q}"),
+    "soundcloud": ("https://soundcloud.com", "https://soundcloud.com/search?q={q}"),
+    "quizlet": ("https://quizlet.com", "https://quizlet.com/search?query={q}"),
+    "disney plus": ("https://www.disneyplus.com", None), "hulu": ("https://www.hulu.com", None),
+    "crunchyroll": ("https://www.crunchyroll.com", "https://www.crunchyroll.com/search?q={q}"),
+}
+
+
+def open_website(site: str, search: str = "") -> dict[str, Any]:
+    """Open a website in the default browser: a known site by name ('YouTube'), any address, and
+    optionally search it ('YouTube' + 'lofi beats' opens the YouTube results)."""
+    from urllib.parse import quote_plus
+
+    raw = (site or "").strip()
+    if not raw:
+        raise PCError("Which website?")
+    key = re.sub(r"\s+", " ", raw.lower()).removesuffix(".com").removeprefix("www.").strip()
+    home, search_url = SITES.get(key, (None, None))
+    if raw.startswith(("http://", "https://")):
+        url = raw
+    elif home:
+        url = search_url.format(q=quote_plus(search)) if search and search_url else home
+    elif "." in raw and " " not in raw:
+        url = "https://" + raw
+    else:
+        url = f"https://www.{re.sub(r'[^a-z0-9-]', '', key)}.com"
+    if search and not (home and search_url) and not raw.startswith("http"):
+        url = f"https://www.google.com/search?q={quote_plus(search + ' ' + raw)}"
+    webbrowser.open(url)
+    return {"opened": url}

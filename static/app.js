@@ -1072,6 +1072,7 @@ const STEP_TEXT = {
   press_keys: [(a) => `Pressing ${a.keys}`, (a) => `Pressed ${a.keys}`],
   click_on_screen: [(a) => `Finding ${q(a.target)} on screen`, (a) => `Clicked ${q(a.target)}`],
   send_message: [(a) => `Messaging ${a.to} on ${a.app || 'Discord'}`, (a, r) => r.draft_opened ? `Draft ready for ${r.to}. Press Send` : `Sent to ${r.to} on ${r.app === 'sms' ? 'text' : r.app}`],
+  open_website: [(a) => `Opening ${a.site}${a.search ? `: ${a.search}` : ''}`, (a, r) => `Opened ${host(r.opened || a.site)}${a.search ? ` · ${a.search}` : ''}`],
   find_installed: [(a) => `Looking for where ${a.name} is installed`, (a, r) => (r.best ? `Found ${r.best.name}${r.opened ? ' and opened its folder' : ''}` : `Couldn't find ${a.name} installed`)],
   list_contacts: [() => 'Checking your contacts', (a, r) => `${r.contacts?.length || 0} contacts`],
   add_contact: [(a) => `Saving ${a.name}`, (a, r) => `Saved ${r.saved?.name || a.name}`],
@@ -1889,7 +1890,42 @@ function askApproval(ev, chat, voice) {
   $('#approvalAlways').checked = false;
   $('#approval').hidden = false;
   $('#approvalAllow').focus();
-  if (voice) { speaker.reset(); speaker.say('I need your OK on screen first.'); }
+  if (voice && state.voice?.active) voiceApproval(ev);
+  else if (voice) { speaker.reset(); speaker.say('I need your OK on screen first.'); }
+}
+
+// In voice chat, say yes or no instead of clicking: "Send a Discord message to Jake: on my way. Should I go ahead?"
+const SAID_NO = /^(no|nope|nah|cancel|stop|don'?t|do not|never ?mind|wait|hold on|not yet)\b/;
+const SAID_YES = /^(yes|yeah|yea|yep|yup|sure|ok|okay|alright|go ahead|go for it|do it|send it|send|allow|confirm|please|of course|absolutely|definitely|correct|right)\b/;
+async function voiceApproval(ev) {
+  const id = ev.id;
+  const spoken = String(ev.summary || '').replace(/\s*\([^)]*\)/g, '').replace(/\s*\n\s*/g, ' ').replace(/:\s*"/, ': "').slice(0, 260);
+  speaker.reset();
+  speaker.say(`${spoken} Should I go ahead?`);
+  await speaker.done();
+  for (let tries = 0; tries < 3 && pendingApproval?.id === id && state.voice.active; tries++) {
+    if (mic.muted) return; // muted: use the buttons
+    setVoiceState('listening');
+    let heard = '';
+    try {
+      if (state.status.whisper) {
+        listenChime('start');
+        const blob = await mic.record({ waitMs: 8000, maxMs: 8000 });
+        if (pendingApproval?.id !== id) return;
+        if (!blob) continue;
+        heard = await transcribe(blob);
+      } else {
+        heard = await browserRecognize({ lang: state.settings.language });
+      }
+    } catch { break; }
+    if (pendingApproval?.id !== id) return;
+    const said = heard.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+    setVoiceCaption(heard, 'you');
+    if (SAID_NO.test(said)) { setVoiceState('thinking'); answerApproval(false); return; }
+    if (SAID_YES.test(said)) { setVoiceState('thinking'); answerApproval(true); return; }
+    if (said) { speaker.say('Sorry, was that a yes or a no?'); await speaker.done(); }
+  }
+  if (pendingApproval?.id === id) { setVoiceState('thinking', 'Waiting for your OK on screen'); }
 }
 
 function closeApproval(id) {
