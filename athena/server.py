@@ -409,6 +409,7 @@ async def chat(request: Request):
         system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
 
+        empty_retries = 0
         for _round in range(MAX_TOOL_ROUNDS):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
             if use_tools:
@@ -466,6 +467,15 @@ async def chat(request: Request):
                 yield _event("error", message=f"Can't reach Ollama at {OLLAMA}. Is the Ollama app running?")
                 return
 
+            if not calls and not content.strip() and empty_retries < 2:
+                # The model stopped without answering (it happens now and then, mostly with lots of tools loaded).
+                # Try again, the second time without tools so there's always a real reply.
+                empty_retries += 1
+                if empty_retries == 2 and use_tools:
+                    use_tools = False
+                    messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + extra_prompt}
+                yield _event("retry")
+                continue
             if not calls:
                 yield _event("done", stats=stats)
                 return

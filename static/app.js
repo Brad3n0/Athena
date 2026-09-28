@@ -1505,6 +1505,12 @@ async function generateReply({ voice = false, model = null, route = null, think 
             if (!speaker.speaking) setVoiceCaption(said, 'athena');
             if (/\b(ha(ha)+|he(he)+|yay|lol|hooray)\b|[♪♡]/i.test(said.slice(-40))) state.voice.avatar?.cheer?.();
           }
+        } else if (ev.type === 'retry') {
+          // The model stopped without answering; the server is asking again. Clear the half-finished attempt.
+          reply.content = '';
+          reply.thinking = '';
+          delete reply.thinkSecs;
+          thinkStart = 0;
         } else if (ev.type === 'research') {
           researchEvent(reply.research, ev);
         } else if (ev.type === 'thinking') {
