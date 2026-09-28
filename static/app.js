@@ -87,7 +87,7 @@ function voiceSettings() {
   const custom = (state.settings.personas || []).find((p) => p.id === state.settings.persona);
   return custom?.voice ? { ...state.settings, kokoro_voice: custom.voice } : state.settings;
 }
-const speaker = new Speaker(() => ({ settings: voiceSettings(), kokoro: !!state.status.kokoro, lang: speakingLanguage() }));
+const speaker = new Speaker(() => ({ settings: voiceSettings(), kokoro: !!state.status.kokoro || (state.settings.tts_engine === 'custom' && !!state.status.custom_voice), lang: speakingLanguage() }));
 
 /** The language she should speak: the one you chose, or (on auto) the one you last spoke. */
 function speakingLanguage() {
@@ -1670,6 +1670,61 @@ function setResearch(on) {
 }
 $('#researchBtn').onclick = () => setResearch(!state.researchNext);
 
+// ------------------------------------------------------------ custom voice (learned from a recording)
+async function loadCustomVoice() {
+  let st;
+  try { st = await api('/api/custom-voice'); } catch { return; }
+  const el = $('#cvStatus');
+  if (!st.installed) {
+    el.innerHTML = '<b>Not installed yet.</b> Close Athena, double-click <b>install-custom-voice</b> (the Windows Batch File) in the Athena folder, wait for “Done”, then start Athena again. It downloads about 3–4 GB.';
+  } else if (!st.sample) {
+    el.innerHTML = '✓ Installed. Now add a recording below.';
+  } else {
+    el.innerHTML = `✓ Using <b>${escapeHtml(st.sample.name)}</b>’s voice.` +
+      (st.running ? ` Ready${st.device === 'cpu' ? ' (on the processor, so each sentence takes a few seconds)' : ''}.` : ' It loads when she first speaks (can take a minute).') +
+      (state.settings.tts_engine !== 'custom' ? ' Choose “Custom voice” above to use it.' : '');
+    if (st.sample.name) $('#cvName').value = st.sample.name;
+  }
+  if (st.error) el.innerHTML += `<br><span class="error-text">${escapeHtml(st.error)}</span>`;
+  $('#cvTest').disabled = $('#cvRemove').disabled = !st.sample;
+}
+$('#cvSave').onclick = async () => {
+  const file = $('#cvFile').files[0];
+  if (!file) { toast('Pick the recording first.', 'error'); return; }
+  if (!$('#cvConsent').checked) { toast('Please confirm you have permission to use this voice.', 'error'); return; }
+  const form = new FormData();
+  form.append('file', file);
+  form.append('name', $('#cvName').value.trim());
+  form.append('consent', 'true');
+  $('#cvSave').disabled = true;
+  try {
+    const res = await fetch('/api/custom-voice', { method: 'POST', body: form });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || 'Couldn’t save the recording');
+    await saveSettings({ tts_engine: 'custom' });
+    $('#setTtsEngine').value = 'custom';
+    await refreshStatus();
+    toast('Voice saved. Athena will use it from now on (the first sentence takes a moment to load).');
+    $('#cvFile').value = '';
+  } catch (err) { toast(err.message, 'error'); } finally { $('#cvSave').disabled = false; loadCustomVoice(); }
+};
+$('#cvTest').onclick = async () => {
+  if (state.settings.tts_engine !== 'custom') { await saveSettings({ tts_engine: 'custom' }); $('#setTtsEngine').value = 'custom'; }
+  await refreshStatus();
+  toast('Loading the voice… the first time can take a minute.');
+  speaker.reset();
+  speaker.say('Hi! This is how I’ll sound from now on. Pretty nice, right?');
+  setTimeout(loadCustomVoice, 1500);
+};
+$('#cvRemove').onclick = async () => {
+  await api('/api/custom-voice', { method: 'DELETE' });
+  if (state.settings.tts_engine === 'custom') { await saveSettings({ tts_engine: 'auto' }); $('#setTtsEngine').value = 'auto'; }
+  await refreshStatus();
+  toast('Custom voice removed. Back to the natural voice.');
+  loadCustomVoice();
+};
+$('#setTtsEngine').addEventListener('change', (e) => { if (e.target.value === 'custom') fetch('/api/custom-voice/warm', { method: 'POST' }).catch(() => {}); });
+
 // ------------------------------------------------------------ microphone choice + mic test
 async function loadMics() {
   const sel = $('#setMic');
@@ -2448,7 +2503,7 @@ function openSettings(tab = 'general') {
   refreshWake();
   refreshDesktop();
   refreshPin();
-  $('#setTtsEngine').value = s.tts_engine === 'system' ? 'system' : 'auto';
+  $('#setTtsEngine').value = ['system', 'custom'].includes(s.tts_engine) ? s.tts_engine : 'auto';
   $('#setPitch').value = s.voice_pitch || 1;
   $('#setKokoroVoice').innerHTML = Object.entries(state.status.kokoro_voices || { athena_silk: 'Athena Silk' })
     .map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join('');
@@ -2506,7 +2561,7 @@ function switchTab(tab) {
   if (tab === 'jarvis') loadJarvis();
   if (tab === 'about') loadMemories();
   if (tab === 'desktop') loadPhone();
-  if (tab === 'voice') loadMics();
+  if (tab === 'voice') { loadMics(); loadCustomVoice(); }
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('[data-panel]', dlg).forEach((p) => (p.hidden = p.dataset.panel !== tab));
 }
@@ -3971,6 +4026,7 @@ async function init() {
   await refreshStatus();
   await refreshModels();
   refreshLoaded().then(preloadCurrentModel);
+  if (state.settings.tts_engine === 'custom' && state.status.custom_voice) fetch('/api/custom-voice/warm', { method: 'POST' }).catch(() => {});
   initCanvas({ state, model: () => currentModel(), save: () => saveChat(), toast,
     onShow: () => { if (innerWidth < 1400 && innerWidth > 860) toggleSidebar(false); } });
   newChat();

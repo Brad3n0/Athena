@@ -527,9 +527,19 @@
           <select id="setTtsEngine">
             <option value="auto">Natural voice (Kokoro, offline) — recommended</option>
             <option value="system">System voices (Windows)</option>
+            <option value="custom">Custom voice (learned from a recording)</option>
           </select>
         </label>
         <p class="muted small" id="kokoroStatus"></p>
+        <details class="custom-voice" id="customVoiceBox">
+          <summary>🎙 Custom voice</summary>
+          <p class="small" id="cvStatus"></p>
+          <p class="muted small">Give Athena a 10–30 second recording of one person talking calmly, with no music or other voices. She learns the voice on this PC; the recording never leaves it. English only (other languages use the natural voice).</p>
+          <label>Recording <input type="file" id="cvFile" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" /></label>
+          <label>Whose voice is it? <input id="cvName" placeholder="e.g. Sarah" maxlength="40" /></label>
+          <label class="check"><input type="checkbox" id="cvConsent" /> <span>This person has given me permission to use their voice</span></label>
+          <div class="cv-actions"><button type="button" class="primary" id="cvSave">Save voice</button><button type="button" class="ghost" id="cvTest">▶ Test</button><button type="button" class="ghost danger" id="cvRemove">Remove</button></div>
+        </details>
         <label>Language
           <select id="setLanguage">
             <option value="en">English</option>

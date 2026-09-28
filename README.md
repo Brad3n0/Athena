@@ -186,6 +186,16 @@ Turn these on or off in **Settings → Abilities**. They need a model that suppo
 - Her default voice is **Athena Silk**, which is soft, breathy and a little sultry. Try **Velvet** (warmer) or **Honey** (sweeter, more playful) in **Settings → Voice → Natural voice**. Lower the **Voice pitch** for sultrier or raise it for cuter, then press **▶ Test voice**.
 - **Settings → General → Personality → Companion** makes her a playful, warm friend instead of a formal assistant.
 
+## Custom voice
+
+Athena can speak in a voice learned from a short recording of someone who's given you permission (English only).
+
+1. Close Athena and double-click **install-custom-voice** (the Windows Batch File). It downloads about 3–4 GB into its own folder, so it can't affect the rest of Athena.
+2. Start Athena, open **Settings → Voice → 🎙 Custom voice**, pick a 10–30 second recording of the person talking calmly (no music or other voices), type their name, tick the permission box and click **Save voice**. Click **▶ Test** to hear it.
+3. Switch between **Custom voice** and the normal voices anytime with **Voice engine**.
+
+On AMD graphics cards (and PCs without NVIDIA) the voice runs on the processor, so each sentence takes a few seconds; the natural Kokoro voice is snappier for back-and-forth voice chat. The recording stays on your PC (in the `data/voices` folder).
+
 ## Voice tips
 
 - Click the **waveform button** next to the message box to start a voice conversation. Just talk, and Athena replies when you pause. Tap the orb to interrupt her. Say *"goodbye"* or press **Esc** to end.
@@ -229,6 +239,7 @@ athena/          Python server (FastAPI)
   server.py      API: streams chat from Ollama, runs tools, model downloads, speech-to-text
   tools.py       Tools the AI can call (tasks, timers, memory, files, web) + approval rules
   research.py    Deep research: plan, search, read, take notes, write a cited report
+  custom_voice.py  Custom voice (runs clone_worker.py in its own .venv-voiceclone)
   learning.py    Athena learns: facts about you, lessons from 👍/👎 and corrections, Think harder levels
   files.py       Safe file operations limited to allowed folders, with undo journal
   web.py         Web search (DuckDuckGo) and page reading

@@ -221,7 +221,7 @@ export class Speaker {
 
   _queueKokoro(text) {
     const { settings, lang } = this.getConfig();
-    const pitch = Number(settings.voice_pitch) || 1;
+    const pitch = settings.tts_engine === 'custom' ? 1 : Number(settings.voice_pitch) || 1; // a real person's voice: don't reshape it
     const rate = Number(settings.tts_rate) || 1;
     const gen = this.gen;
     // Start synthesizing right away so the next sentence is ready when this one ends.

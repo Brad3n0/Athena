@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 
 import httpx
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -1034,6 +1034,7 @@ async def status():
         "ollama": False,
         "whisper": speech.available(),
         "kokoro": tts.available(),
+        "custom_voice": _custom_voice_ready(),
         "kokoro_voices": tts.VOICES,
     }
     try:
@@ -1135,13 +1136,22 @@ async def prepare_speech(request: Request):
 
 @app.post("/api/tts")
 async def text_to_speech(request: Request):
-    if not tts.available():
-        raise HTTPException(501, "Natural voice not installed. Run install-voice.")
+    from . import custom_voice
+
     body = await request.json()
     text = str(body.get("text", "")).strip()
     if not text:
         raise HTTPException(400, "No text")
     settings = store.get_settings()
+    lang = str(body.get("lang") or "en")[:2]
+    # Custom voice (English): used when chosen and set up; otherwise the natural Kokoro voice below.
+    if settings.get("tts_engine") == "custom" and custom_voice.ready() and lang == "en":
+        try:
+            return Response(await run_in_threadpool(custom_voice.synthesize, text), media_type="audio/wav")
+        except custom_voice.VoiceError:
+            pass  # fall back to Kokoro for this sentence
+    if not tts.available():
+        raise HTTPException(501, "Natural voice not installed. Run install-voice.")
     voice = str(body.get("voice") or settings.get("kokoro_voice") or "athena_silk")
     try:
         wav = await run_in_threadpool(tts.synthesize, text, voice, float(body.get("speed") or 1.0), str(body.get("lang") or "en"))
@@ -1152,9 +1162,53 @@ async def text_to_speech(request: Request):
     return Response(wav, media_type="audio/wav")
 
 
+# --------------------------------------------------------- custom voice
+
+@app.get("/api/custom-voice")
+async def custom_voice_status():
+    from . import custom_voice
+
+    return custom_voice.status()
+
+
+@app.post("/api/custom-voice")
+async def custom_voice_save(file: UploadFile = File(...), name: str = Form(""), consent: str = Form("")):
+    from . import custom_voice
+
+    try:
+        meta = await run_in_threadpool(custom_voice.save_sample, file.filename or "", await file.read(), name,
+                                       consent.lower() in ("1", "true", "yes", "on"))
+    except custom_voice.VoiceError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    custom_voice.warm()
+    return {"ok": True, "sample": meta}
+
+
+@app.delete("/api/custom-voice")
+async def custom_voice_remove():
+    from . import custom_voice
+
+    await run_in_threadpool(custom_voice.remove_sample)
+    return {"ok": True}
+
+
+@app.post("/api/custom-voice/warm")
+async def custom_voice_warm():
+    from . import custom_voice
+
+    custom_voice.warm()
+    return {"ok": True}
+
+
 # --------------------------------------------------------- settings/chats
 
 SECRET_KEYS = ("pin_hash", "pin_salt", "ha_token", "briefing_last")
+
+
+def _custom_voice_ready() -> bool:
+    from . import custom_voice
+
+    return custom_voice.ready()
 
 
 def _public_settings(s: dict[str, Any]) -> dict[str, Any]:
