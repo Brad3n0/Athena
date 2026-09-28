@@ -495,7 +495,7 @@ async def chat(request: Request):
                         if _is_image_error(text) and any(m.get("images") for m in messages):
                             if messages[-1].get("images"):
                                 yield _event("error", message=f"{model} can't look at images. Download a vision model like "
-                                             "qwen2.5vl:7b (or gemma3:4b for smaller PCs) in Settings → Models, and Athena will "
+                                             "qwen3-vl:8b (or gemma3:4b for smaller PCs) in Settings → Models, and Athena will "
                                              "use it automatically for pictures.")
                                 return
                             _drop_images(messages)  # a picture from earlier in the chat: carry on without it
@@ -645,7 +645,7 @@ async def look_at_screen(question: str = "") -> dict[str, Any]:
 
     model = await pick_vision_model()
     if not model:
-        return {"error": "Looking at the screen needs a vision model. Download 'qwen2.5vl:7b' or 'gemma3:12b' in Settings → Models."}
+        return {"error": "Looking at the screen needs a vision model. Download 'qwen3-vl:8b' (or 'gemma3:4b' for smaller PCs) in Settings → Models."}
     try:
         image = await run_in_threadpool(pc.screenshot)
     except pc.PCError as exc:
@@ -720,7 +720,7 @@ async def screenshot_and_look(root, args: dict[str, Any]) -> dict[str, Any]:
         "This is a screenshot of a web page that was just built" + (" (phone size)" if args.get("phone") else "") + ". Describe what it "
         "looks like: layout, colors, text you can read, and anything that looks broken or wrong (overlapping or cut-off text, empty "
         "areas, missing images, unreadable colors, things off-screen)." + (f" Also answer: {check}" if check else ""), image, 400)
-    shot["looks_like"] = seen if seen else "(No vision model to describe it. Download qwen2.5vl:7b so I can check my work.)"
+    shot["looks_like"] = seen if seen else "(No vision model to describe it. Download qwen3-vl:8b so I can check my work.)"
     return shot
 
 
@@ -793,7 +793,7 @@ async def locate_on_screen(target: str) -> dict[str, Any]:
         f"This screenshot is {shot['width']}x{shot['height']} pixels. Find: {target}. Reply with only JSON giving the pixel "
         'position of its center, like {"x": 100, "y": 200}, or {"x": null, "y": null} if it is not visible.', shot["image"], 40)
     if answer is None:
-        return {"error": "Clicking on things needs a vision model. Download qwen2.5vl:7b in Settings → Models."}
+        return {"error": "Clicking on things needs a vision model. Download qwen3-vl:8b in Settings → Models."}
     m = re.search(r'"?x"?\s*[:=]\s*(\d+(?:\.\d+)?)\D+?"?y"?\s*[:=]\s*(\d+(?:\.\d+)?)', answer) or re.search(r"\(?\[?\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", answer)
     if not m:
         return {"error": f"I couldn't find '{target}' on the screen."}

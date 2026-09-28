@@ -1370,7 +1370,7 @@ async function sendMessage(text, { voice = false, display = null, research = fal
   if (!voice && (newImage || recentImage) && !isVision(model)) {
     const vision = pickVisionModel();
     if (vision) { if (newImage && !route) toast(`Using ${vision} to look at the image`); model = vision; if (route) route = 'vision'; }
-    else if (newImage) toast('To understand images, download a vision model like qwen2.5vl:7b or gemma3:4b (Settings → Models).', 'error');
+    else if (newImage) toast('To understand images, download a vision model like qwen3-vl:8b or gemma3:4b (Settings → Models).', 'error');
   }
 
   state.pendingKeep?.(0); // sent again without picking a side: keep the left answer
