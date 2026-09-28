@@ -126,6 +126,42 @@ def _smaller_model(settings: dict[str, Any], tried: set[str]) -> str:
     return next((m for m in order if m and m not in tried and size(m) < 40), "")
 
 
+LOOP_NUDGE = ("You started repeating the same sentence. Stop describing what you'll do and DO it: make your next tool call "
+              "now (read_code with a start_line, search_code, or edit_code). If you're finished, give a short final answer.")
+
+
+def _sentences(text: str) -> list[str]:
+    return [p.strip() for p in re.split(r"(?<=[.!?:])\s+|\n+", text) if len(p.strip()) > 25]
+
+
+def _looping(text: str) -> bool:
+    """True when the same sentence has come out 3+ times (a model stuck in a loop)."""
+    seen: dict[str, int] = {}
+    prose = re.sub(r"```[\s\S]*?(?:```|$)", " ", text[-6000:])  # repeated lines inside code are normal
+    for sent in _sentences(prose):
+        key = re.sub(r"\W+", " ", sent.lower()).strip()
+        seen[key] = seen.get(key, 0) + 1
+        if seen[key] >= 3:
+            return True
+    return False
+
+
+def _dedupe(text: str) -> str:
+    """Keep each paragraph (and sentence) once."""
+    out, seen = [], set()
+    for para in re.split(r"\n\s*\n", text):
+        kept = []
+        for sent in re.split(r"(?<=[.!?:])\s+", para.strip()):
+            key = re.sub(r"\W+", " ", sent.lower()).strip()
+            if len(key) > 25 and key in seen:
+                continue
+            seen.add(key)
+            kept.append(sent)
+        if kept and " ".join(kept).strip():
+            out.append(" ".join(kept))
+    return "\n\n".join(out)
+
+
 def _out_of_memory(text: str) -> bool:
     low = text.lower()
     return any(k in low for k in ("out of memory", "unable to allocate", "failed to allocate", "cudamalloc failed", "insufficient memory"))
@@ -611,6 +647,7 @@ async def chat(request: Request):
         recovered = False
         self_pushed = False
         oom_tries = 0
+        loop_pushes = 0
         oom_left = True  # still something to try after running out of graphics memory
         oom_restarted = False
         tried_models = {model}
@@ -620,6 +657,8 @@ async def chat(request: Request):
             payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive(settings)}
             if payload_extra:
                 payload["options"] = dict(payload_extra)
+            if code_root:  # discourages the "same sentence forever" loops small models fall into while coding
+                payload["options"] = {"repeat_penalty": 1.08, "repeat_last_n": 256, **(payload.get("options") or {})}
             if use_tools:
                 payload["tools"] = [t.spec() for t in enabled_tools(settings) if not (self_open and t.name == "work_on_myself")] \
                     + (workspace.specs(code_root) if code_root else [])
@@ -628,6 +667,7 @@ async def chat(request: Request):
             if send_think:
                 payload["think"] = think  # Quick / Deep ("Think harder")
             content, calls, stats = "", [], {}
+            looped = False
             try:
                 async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload) as resp:
                     if resp.status_code != 200:
@@ -679,6 +719,9 @@ async def chat(request: Request):
                         if msg.get("content"):
                             content += msg["content"]
                             yield _event("token", content=msg["content"])
+                            if len(content) > 300 and _looping(content):
+                                looped = True  # stuck saying the same thing over and over: stop it here
+                                break
                         if msg.get("tool_calls"):
                             calls.extend(msg["tool_calls"])
                         if chunk.get("done"):
@@ -747,6 +790,17 @@ async def chat(request: Request):
                     messages[0] = {"role": "system", "content": build_system_prompt(mode, settings, False) + extra_prompt}
                 yield _event("retry")
                 continue
+            if looped:
+                # Small local models sometimes get stuck repeating a sentence. Show it once, then get her moving.
+                content = _dedupe(content)
+                yield _event("retry")
+                yield _event("token", content=content)
+                if not calls and use_tools and loop_pushes < 2:
+                    loop_pushes += 1
+                    messages.append({"role": "assistant", "content": content})
+                    messages.append({"role": "system", "content": LOOP_NUDGE})
+                    yield _event("token", content="\n\n")
+                    continue
             if self_open and use_tools and not calls and not self_pushed and selfedit.REFUSAL.search(content):
                 # She said she can't change her own code (she can) or only showed a mock-up: throw that answer away
                 # and have her start for real.
