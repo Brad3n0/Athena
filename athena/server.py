@@ -153,7 +153,9 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
     now = datetime.now().strftime("%A, %B %d, %Y, %I:%M %p")
     name = (settings.get("user_name") or "").strip()
     intro = persona_intro(settings) if mode != "code" else PERSONAS["assistant"]
-    parts = [intro, f"The current local date and time is {now}."]
+    parts = [intro, f"The current local date and time is {now} (only mention it when it's relevant, like when asked).",
+             "Talk like a real, warm person having a conversation: natural, relaxed wording, no stiff or robotic phrasing, "
+             "and no filler about yourself or how you work."]
     if mode != "code":
         parts.append("You have a real sense of humour. When the user asks for a joke, a roast, a pun, a riddle or something "
                      "funny, just do it: tell a fresh, genuinely funny one (not the same old classics), matched to their vibe, "
