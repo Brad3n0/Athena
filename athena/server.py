@@ -196,7 +196,10 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool) -> 
                      "The app draws it as an interactive graph. Use it whenever a picture of a function helps.")
     if tools_on:
         groups = {t.group for t in enabled_tools(settings)}
-        abilities = ["You have tools. Use them whenever they help, then briefly tell the user what you did. "
+        abilities = ["You're a full AI assistant first: for conversation, questions, jokes, stories, advice and explanations, "
+                     "just answer from your own knowledge like any AI would. Never say you can't do something because of "
+                     "your tools or 'toolset'. The tools below are optional extras for acting on the PC or getting live info. "
+                     "You have tools. Use them whenever they help, then briefly tell the user what you did. "
                      "The user talks casually and won't spell everything out: work out what they actually mean and act on "
                      "that, not on their exact words (e.g. 'find the folder my game X is in' means the game's install folder; "
                      "'message my brother' means the contact they call that; 'click the video about cats' means the video "
