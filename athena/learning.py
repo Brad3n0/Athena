@@ -33,13 +33,15 @@ def _similar(a: str, b: str) -> bool:
 # Lessons about style (pet names, flirting, swearing, emojis...) older than per-personality lessons: treat them as
 # belonging to the Companion personality, so they don't make the Assistant talk like her.
 COMPANION_STYLE = re.compile(r"\b(flirt\w*|pet names?|baby|babe|good boy|handsome|sassy|sass|swear\w*|curs\w*|profan\w*|"
-                             r"emojis?|teas\w*|sultry|sexy|steamy|roast\w*|girlfriend|affection\w*|mommy)\b", re.I)
+                             r"bad words?|uncensored|unfiltered|fuck\w*|shit|ass|bitch|emojis?|teas\w*|sultry|sexy|steamy|"
+                             r"roast\w*|girlfriend|affection\w*|mommy)\b", re.I)
 
 
 def lesson_persona(item: dict[str, Any]) -> str:
-    """Which personality a lesson belongs to ('' = all of them)."""
-    if item.get("persona") is not None:
-        return item["persona"] or ""
+    """Which personality a lesson belongs to ('' = all of them). Style lessons (flirting, pet names, swearing...)
+    are Companion's, whoever added them, so the Assistant keeps her own voice."""
+    if item.get("persona"):
+        return item["persona"]
     return "companion" if COMPANION_STYLE.search(item.get("text") or "") else ""
 
 
