@@ -30,14 +30,28 @@ def _similar(a: str, b: str) -> bool:
     return a in b or b in a or difflib.SequenceMatcher(None, a, b).ratio() > 0.82
 
 
-def add_lesson(text: str, source: str) -> dict[str, Any] | None:
+# Lessons about style (pet names, flirting, swearing, emojis...) older than per-personality lessons: treat them as
+# belonging to the Companion personality, so they don't make the Assistant talk like her.
+COMPANION_STYLE = re.compile(r"\b(flirt\w*|pet names?|baby|babe|good boy|handsome|sassy|sass|swear\w*|curs\w*|profan\w*|"
+                             r"emojis?|teas\w*|sultry|sexy|steamy|roast\w*|girlfriend|affection\w*|mommy)\b", re.I)
+
+
+def lesson_persona(item: dict[str, Any]) -> str:
+    """Which personality a lesson belongs to ('' = all of them)."""
+    if item.get("persona") is not None:
+        return item["persona"] or ""
+    return "companion" if COMPANION_STYLE.search(item.get("text") or "") else ""
+
+
+def add_lesson(text: str, source: str, persona: str = "") -> dict[str, Any] | None:
+    """A lesson learned while a personality was active applies to that personality only ('' = all of them)."""
     text = re.sub(r"\s+", " ", (text or "").strip().strip('"'))[:240]
     if len(text) < 8:
         return None
     items = list_lessons()
-    if any(_similar(text, x["text"]) for x in items):
+    if any(_similar(text, x["text"]) and lesson_persona(x) == persona for x in items):
         return None
-    item = {"id": store.new_id()[:10], "text": text, "source": source, "created": time.time()}
+    item = {"id": store.new_id()[:10], "text": text, "source": source, "created": time.time(), "persona": persona}
     store._write(LESSONS_FILE, (items + [item])[-MAX_LESSONS:])
     return item
 
@@ -64,8 +78,8 @@ def forget_everything() -> None:
     store._write(store.MEMORY_FILE, [])
 
 
-def prompt_section() -> str:
-    lessons = list_lessons()[-25:]
+def prompt_section(persona: str = "") -> str:
+    lessons = [x for x in list_lessons() if lesson_persona(x) in ("", persona)][-25:]
     if not lessons:
         return ""
     return ("Lessons from this user's feedback about how they like answers (follow them):\n"
@@ -141,7 +155,8 @@ async def learn_facts(client, ollama: str, model: str, user: str, reply: str, ke
     return saved
 
 
-async def learn_lesson(client, ollama: str, model: str, user: str, reply: str, kind: str, note: str, keep_alive: Any) -> str | None:
+async def learn_lesson(client, ollama: str, model: str, user: str, reply: str, kind: str, note: str, keep_alive: Any,
+                       persona: str = "") -> str | None:
     """Turn a 👍, 👎 or a correction into one short rule for next time."""
     if kind == "up":
         ask = "The user gave this reply a thumbs UP. In one short sentence, what should the assistant keep doing for this user (about style, length, format or approach — not the topic)?"
@@ -155,5 +170,5 @@ async def learn_lesson(client, ollama: str, model: str, user: str, reply: str, k
     text = _one_line(await _ask(client, ollama, model, prompt, keep_alive, 80))
     if not text:
         return None
-    item = add_lesson(text, {"up": "👍", "down": "👎", "correction": "correction"}.get(kind, kind))
+    item = add_lesson(text, {"up": "👍", "down": "👎", "correction": "correction"}.get(kind, kind), persona)
     return item["text"] if item else None

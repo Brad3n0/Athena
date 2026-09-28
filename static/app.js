@@ -2826,7 +2826,8 @@ async function loadMemories() {
     ? mems.slice().reverse().map((m) => row('memories', m)).join('')
     : '<li class="muted small">Nothing yet. Chat about yourself (school, hobbies, projects…) or say “remember that…” and it shows up here.</li>';
   $('#lessonList').innerHTML = lessons.length
-    ? lessons.slice().reverse().map((l) => row('lessons', l, `<span class="src">${escapeHtml(SOURCE_LABEL[l.source] || '')}</span>`)).join('')
+    ? lessons.slice().reverse().map((l) => row('lessons', l, `<span class="src">${escapeHtml(SOURCE_LABEL[l.source] || '')}${
+      l.for ? ` · ${escapeHtml(personaName(l.for))} only` : ''}</span>`)).join('')
     : '<li class="muted small">Nothing yet. Rate replies with 👍 / 👎 under each answer and she learns how you like them.</li>';
   $('#memoryCount').textContent = mems.length ? `(${mems.length})` : '';
   $('#lessonCount').textContent = lessons.length ? `(${lessons.length})` : '';
@@ -3468,6 +3469,9 @@ $('#exportMenu').onclick = async (e) => {
 };
 
 // ------------------------------------------------------------ personalities
+function personaName(id) {  // "companion" -> "Companion", or a custom personality's name
+  return (BUILTIN_PERSONAS[id] || '').split(' — ')[0] || (state.settings.personas || []).find((p) => p.id === id)?.name || id;
+}
 const BUILTIN_PERSONAS = { assistant: 'Assistant — clear, direct, straight to the point', companion: 'Companion — flirty, savage, foul-mouthed', study: 'Study Buddy — patient tutor' };
 function fillPersonas() {
   const custom = state.settings.personas || [];

@@ -414,7 +414,7 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool, sel
         memories = store.list_memories()
         if memories:
             parts.append("Things you remember about the user:\n" + "\n".join(f"- {m['text']}" for m in memories[-60:]))
-    if settings.get("auto_learn", True) and (lessons := learning.prompt_section()):
+    if settings.get("auto_learn", True) and (lessons := learning.prompt_section(settings.get("persona") or "assistant")):
         parts.append(lessons)
     if settings.get("direct_mode"):
         parts.append(
@@ -1255,7 +1255,7 @@ async def edit_memory(memory_id: str, request: Request):
 
 @app.get("/api/lessons")
 async def list_lessons():
-    return learning.list_lessons()
+    return [{**x, "for": learning.lesson_persona(x)} for x in learning.list_lessons()]
 
 
 @app.post("/api/lessons")
@@ -1296,7 +1296,7 @@ async def learn(request: Request):
         previous = str(body.get("previous_reply") or "")
         if previous and learning.is_correction(user):
             out["lesson"] = await learning.learn_lesson(client, OLLAMA, model, str(body.get("previous_user") or ""),
-                                                        previous, "correction", user, ka)
+                                                        previous, "correction", user, ka, settings.get("persona") or "assistant")
         if settings.get("memory_enabled") and learning.worth_checking_for_facts(user):
             out["facts"] = await learning.learn_facts(client, OLLAMA, model, user, reply, ka)
     except (httpx.HTTPError, ValueError):
@@ -1315,7 +1315,8 @@ async def feedback(request: Request):
         return {"lesson": None}
     try:
         lesson = await learning.learn_lesson(client, OLLAMA, model, str(body.get("user") or ""), str(body.get("reply") or ""),
-                                             rating, str(body.get("note") or ""), keep_alive(settings))
+                                             rating, str(body.get("note") or ""), keep_alive(settings),
+                                             settings.get("persona") or "assistant")
     except (httpx.HTTPError, ValueError):
         lesson = None
     return {"lesson": lesson}
