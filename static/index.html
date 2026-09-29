@@ -500,9 +500,9 @@
       <section data-panel="desktop" hidden>
         <p class="muted small" style="margin-top:0">Run Athena as a desktop app: she lives in the system tray, opens in her own window, and pops up with a shortcut from anywhere. Start it with <b>start-desktop.bat</b>.</p>
         <p class="small" id="desktopStatus"></p>
-        <label>Open Athena shortcut <input id="setHotkey" placeholder="<ctrl>+<space>" /></label>
-        <label>Start talking shortcut <input id="setVoiceHotkey" placeholder="<ctrl>+<shift>+<space>" /></label>
-        <p class="muted small" style="margin-top:-8px">Format: <code>&lt;ctrl&gt;+&lt;space&gt;</code>, <code>&lt;ctrl&gt;+&lt;alt&gt;+a</code>, <code>&lt;cmd&gt;+&lt;shift&gt;+a</code>. Takes effect right away in the desktop app.</p>
+        <label>Open Athena shortcut <input id="setHotkey" placeholder="<ctrl>+<alt>+<space>" /></label>
+        <label>Start talking shortcut <input id="setVoiceHotkey" placeholder="<ctrl>+<alt>+v" /></label>
+        <p class="muted small" style="margin-top:-8px">Format: <code>&lt;ctrl&gt;+&lt;alt&gt;+&lt;space&gt;</code>, <code>&lt;ctrl&gt;+&lt;alt&gt;+a</code>, <code>&lt;cmd&gt;+&lt;shift&gt;+a</code>. Takes effect right away in the desktop app. Leave a box empty to turn that shortcut off. Shortcuts are ignored while a fullscreen game is in front.</p>
         <label class="check"><input type="checkbox" id="setAutostart" /> Start Athena when Windows starts (quietly, in the tray)</label>
         <button type="button" class="ghost" id="makeShortcuts">Create desktop &amp; Start menu shortcuts</button>
 

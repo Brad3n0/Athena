@@ -222,6 +222,63 @@ def _port_open(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+VK = {"ctrl": 0x11, "shift": 0x10, "alt": 0x12, "cmd": 0x5B}
+
+
+def _keys_really_down(combo: str) -> bool:
+    """Games often swallow key-up events, so the listener can think Ctrl is still held and fire on plain Space.
+    Ask Windows whether the modifier keys are actually down right now."""
+    if not WIN:
+        return True
+    user32 = ctypes.windll.user32
+    for mod, vk in VK.items():
+        if f"<{mod}>" in combo.lower() and not (user32.GetAsyncKeyState(vk) & 0x8000):
+            if mod == "cmd" and user32.GetAsyncKeyState(0x5C) & 0x8000:  # right Windows key
+                continue
+            return False
+    return True
+
+
+def _fullscreen_app_in_front() -> bool:
+    """True when something fullscreen (a game, a video) that isn't Athena is in front."""
+    if not WIN:
+        return False
+    try:
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd or hwnd in (user32.GetDesktopWindow(), user32.GetShellWindow()):
+            return False
+        title = ctypes.create_unicode_buffer(256)
+        user32.GetWindowTextW(hwnd, title, 256)
+        if TITLE.lower() in title.value.lower():
+            return False
+        rect = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+
+        class MONITORINFO(ctypes.Structure):
+            _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", wintypes.RECT), ("rcWork", wintypes.RECT), ("dwFlags", wintypes.DWORD)]
+
+        info = MONITORINFO()
+        info.cbSize = ctypes.sizeof(MONITORINFO)
+        monitor = user32.MonitorFromWindow(hwnd, 2)
+        if not user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+            return False
+        m = info.rcMonitor
+        return rect.left <= m.left and rect.top <= m.top and rect.right >= m.right and rect.bottom >= m.bottom
+    except Exception:
+        return False
+
+
+def _guarded(combo: str, action):
+    """Run a hotkey's action only if its keys are really held, and never over a fullscreen game."""
+    def run() -> None:
+        if _keys_really_down(combo) and not _fullscreen_app_in_front():
+            action()
+    return run
+
+
 def _hotkey_listener(app: DesktopApp):
     try:
         from pynput import keyboard
@@ -230,9 +287,9 @@ def _hotkey_listener(app: DesktopApp):
     s = store.get_settings()
     mapping: dict[str, Any] = {}
     if s.get("hotkey"):
-        mapping[s["hotkey"]] = lambda: app.show()
+        mapping[s["hotkey"]] = _guarded(s["hotkey"], lambda: app.show())
     if s.get("voice_hotkey"):
-        mapping[s["voice_hotkey"]] = lambda: app.show(voice=True)
+        mapping[s["voice_hotkey"]] = _guarded(s["voice_hotkey"], lambda: app.show(voice=True))
     try:
         listener = keyboard.GlobalHotKeys(mapping)
         listener.start()

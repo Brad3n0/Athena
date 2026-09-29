@@ -65,8 +65,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "auto_lock_minutes": 0,
     # Desktop app
     "wake_enabled": False,
-    "hotkey": "<ctrl>+<space>",
-    "voice_hotkey": "<ctrl>+<shift>+<space>",
+    "hotkey": "<ctrl>+<alt>+<space>",  # games use Ctrl (crouch) + Space (jump), so not Ctrl+Space
+    "voice_hotkey": "<ctrl>+<alt>+v",
     # Direct mode: no lecturing, moralizing or needless disclaimers
     "direct_mode": False,
     "reply_length": "normal",
@@ -153,6 +153,11 @@ def get_settings() -> dict[str, Any]:
         saved = _read(SETTINGS_FILE, {})
     merged = {**DEFAULT_SETTINGS, **{k: v for k, v in saved.items() if k in DEFAULT_SETTINGS}}
     merged["models"] = {**DEFAULT_SETTINGS["models"], **(saved.get("models") or {})}
+    # The old shortcuts popped Athena open during games (crouch + jump): move anyone still on them to the new ones.
+    if merged.get("hotkey") == "<ctrl>+<space>":
+        merged["hotkey"] = DEFAULT_SETTINGS["hotkey"]
+    if merged.get("voice_hotkey") == "<ctrl>+<shift>+<space>":
+        merged["voice_hotkey"] = DEFAULT_SETTINGS["voice_hotkey"]
     return merged
 
 
