@@ -418,12 +418,12 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool, sel
             abilities.append(
                 "- Sports: sports_games (scores, schedules, betting lines), sports_team (record, form, head-to-head, injuries, news, "
                 "past seasons), sports_player (game logs; with stat + line it checks a PrizePicks / Underdog / sportsbook pick), "
-                "sports_standings, kalshi_markets (live Kalshi prices). ALWAYS look things up instead of answering sports "
+                "sports_standings. ALWAYS look things up instead of answering sports "
                 "questions from memory: your memory is out of date. For a pick, call sports_player with the stat and line, then "
                 "give a straight verdict in a few lines: the hit rates (last 5 / last 10 / season / vs opponent), minutes and "
                 "injuries, and whether history leans over, under or neither. Be honest: past games don't guarantee anything, "
                 "and a 2-pick that pays 3x needs each pick to hit about 58% just to break even, so 'no clear edge' is a real "
-                "answer. For Kalshi, compare the market's % with what the numbers suggest. Never promise wins.")
+                "answer. Never promise wins.")
         if "home" in groups:
             abilities.append("- Smart home: list_home_devices and control_home_device control lights, thermostats, locks and more.")
         if "web" in groups:

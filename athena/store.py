@@ -83,8 +83,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "emotion_tracking": True,  # notice how you seem in each message, adapt to it, keep a mood history
     "adaptive_voice": True,  # her voice follows the mood (faster when excited, softer when you're down)
     "auto_tasks": True,  # add to-dos you mention to Tasks by themselves, and tick them off when you say they're done
-    "offline_mode": False,
-    "sports_enabled": True,  # scores, stats, pick checks and Kalshi prices  # nothing reaches the internet (no web search, updates, YouTube, GitHub...)
+    "offline_mode": False,  # nothing reaches the internet (no web search, updates, YouTube, GitHub...)
+    "sports_enabled": True,  # scores, stats and pick checks
     "auto_recover": True,  # if Ollama crashes or freezes mid-reply, restart it and try again
     "auto_backup": True,  # a copy of your data once a day (last 7 kept)
     "update_check": True,  # look for a new version on GitHub when Athena starts

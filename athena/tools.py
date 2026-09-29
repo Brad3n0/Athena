@@ -199,7 +199,6 @@ _sports_player = _sports(lambda sp, a, c: sp.player_report(c, str(a.get("player"
                                                            str(a.get("stat", "")), a.get("line"), str(a.get("opponent", "")),
                                                            _int(a.get("season")), str(a.get("pick", ""))))
 _sports_standings = _sports(lambda sp, a, c: sp.standings(c, str(a.get("league", "")), _int(a.get("season"))))
-_kalshi = _sports(lambda sp, a, c: sp.kalshi(c, str(a.get("query", ""))))
 
 
 async def _ha_list(a, ctx):
@@ -866,9 +865,6 @@ TOOLS += [
     Tool("sports_standings", "sports", "League standings (wins, losses, games behind, streak).",
          {"league": S("League"), "season": {"type": "integer", "description": "Past season year (optional)"}}, ["league"],
          arun=_sports_standings),
-    Tool("kalshi_markets", "sports", "Live Kalshi prediction-market prices for a team, game, player or league (read-only, no "
-         "account needed). A YES price in cents is the market's % chance.",
-         {"query": S("e.g. 'Lakers', 'NBA', 'Chiefs Bills', 'Super Bowl'")}, ["query"], arun=_kalshi),
     Tool("work_on_myself", "pc", "Open Athena's own code so you can really change yourself: call this whenever the user "
          "wants something changed, fixed, upgraded or added in Athena herself (the app, her features, her look). The app "
          "then opens her code in Code mode and continues with the user's request there.",

@@ -1195,7 +1195,6 @@ const STEP_TEXT = {
   sports_player: [(a) => a.line != null ? `Checking ${a.player} ${a.pick || 'over/under'} ${a.line} ${a.stat || ''}` : `Looking up ${a.player}`,
     (a, r) => r.line != null && r.last_10 ? `${r.player}: over ${r.line} ${r.stat} in ${r.last_10.over} of the last ${r.last_10.games}` : `Looked up ${r.player}`],
   sports_standings: [(a) => `Getting the ${a.league} standings`, (a, r) => `Got the ${r.league} standings`],
-  kalshi_markets: [(a) => `Checking Kalshi for ${q(a.query)}`, (a, r) => `Found ${r.markets?.length || 0} Kalshi market${r.markets?.length === 1 ? '' : 's'}`],
   check_athena: [() => 'Checking my code still works', (a, r) => r.ok ? 'Checked: my code loads fine' : 'Found problems in my code'],
   restart_athena: [() => 'Restarting myself', (a, r) => r.restarting ? 'Restarting with my changes' : 'Not restarting: my code has problems'],
   undo_self_changes: [() => 'Undoing my changes to myself', (a, r) => r.undone ? `Undid my changes (${(r.files || []).length} file${(r.files || []).length === 1 ? '' : 's'})` : (r.note || 'Nothing to undo')],
@@ -1250,8 +1249,6 @@ function stepHtml(t, i, openSteps) {
       row('Home', r.home)}${row('Away', r.away)}${row(`vs ${escapeHtml(r.vs_opponent?.opponent || 'opponent')}`, r.vs_opponent)}</table>` +
       (r.injury ? `<div class="small">🩹 ${escapeHtml(r.injury)}</div>` : '') +
       (r.recent_games?.length ? `<pre class="run-output">${escapeHtml(r.recent_games.join('\n'))}</pre>` : '');
-  } else if (t.name === 'kalshi_markets' && r?.markets?.length) {
-    detail = `<ul>${r.markets.map((m) => `<li><a href="${escapeHtml(m.link)}" target="_blank" rel="noopener">${escapeHtml(m.event)}</a>: <b>${escapeHtml(m.market)}</b> ${escapeHtml(m.market_chance || '')} <span class="muted small">(yes ${escapeHtml(m.yes_price || '–')}, no ${escapeHtml(m.no_price || '–')})</span></li>`).join('')}</ul>`;
   } else if (t.name === 'run_python' && r) {
     detail = `<pre class="run-output">${runOutputHtml(r)}</pre>${r.images?.length ? runImagesHtml(r.images) : ''}`;
   } else if (t.name === 'search_documents' && r?.results) {
@@ -1323,7 +1320,6 @@ const COMMANDS = [
   { cmd: '/image', desc: 'Create an image', hint: 'a gold owl on a night sky', to: (r) => `Generate an image: ${r}` },
   { cmd: '/pick', desc: 'Check a player prop (PrizePicks, Underdog)', hint: 'LeBron over 24.5 points', to: (r) => `Check this pick with real stats: ${r}` },
   { cmd: '/scores', desc: 'Scores, schedule and lines', hint: 'NBA tonight', to: (r) => `Look up the games: ${r}` },
-  { cmd: '/kalshi', desc: 'Kalshi market prices', hint: 'Lakers', to: (r) => `What are the Kalshi prices for ${r}?` },
   { cmd: '/find', desc: 'Find a file on your PC', hint: 'my resume', to: (r) => `Find ${r} on my PC` },
   { cmd: '/organize', desc: 'Tidy up a folder', hint: 'Downloads', to: (r) => `Organize my ${r || 'Downloads'} folder` },
   { cmd: '/docs', desc: 'Ask your documents', hint: 'what does my lease say about pets?', to: (r) => `Search my documents: ${r}` },

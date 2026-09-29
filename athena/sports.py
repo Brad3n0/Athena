@@ -1,14 +1,12 @@
 """Sports research: scores, schedules, odds, standings, injuries, team form, player game logs (this season and past
-ones), pick checks for PrizePicks / Underdog style player props, and Kalshi market prices.
+ones) and pick checks for PrizePicks / Underdog style player props.
 
-Free public data, no account or key: ESPN's public site API and Kalshi's public market data. Needs internet.
+Free public data, no account or key: ESPN's public site API. Needs internet.
 
-None of this predicts the future. It shows how often something has really happened, what the market is pricing, and
-who's hurt, so picks are made on facts instead of vibes.
+None of this predicts the future. It shows how often something has really happened and who's hurt, so picks are made on facts instead of vibes.
 """
 from __future__ import annotations
 
-import asyncio
 import re
 import statistics
 import time
@@ -20,7 +18,6 @@ import httpx
 SITE = "https://site.api.espn.com/apis/site/v2/sports"
 WEB = "https://site.web.api.espn.com/apis"
 STANDINGS = "https://site.api.espn.com/apis/v2/sports"
-KALSHI = "https://api.elections.kalshi.com/trade-api/v2"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AthenaAI/1.0", "Accept": "application/json"}
 
 # name people use -> (ESPN sport, ESPN league, label)
@@ -700,84 +697,4 @@ async def player_report(client: httpx.AsyncClient, player: str, league: str = ""
     if side:
         report["your_pick"] = side
     out.update(report)
-    return out
-
-
-# ------------------------------------------------------------------ Kalshi
-
-def _cents(m: dict[str, Any], key: str) -> float | None:
-    if m.get(key) is not None and not isinstance(m.get(key), bool):
-        try:
-            return float(m[key])
-        except (TypeError, ValueError):
-            pass
-    dollars = m.get(f"{key}_dollars")
-    try:
-        return round(float(dollars) * 100, 1) if dollars not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
-
-
-STOP = {"the", "a", "an", "on", "in", "of", "for", "to", "will", "win", "game", "games", "vs", "at", "and", "who", "odds",
-        "market", "markets", "kalshi", "today", "tonight", "what", "are", "is", "price", "prices", "chance"}
-
-
-async def kalshi(client: httpx.AsyncClient, query: str, limit: int = 12) -> dict[str, Any]:
-    """Open Kalshi markets matching what was asked about, with prices (cents = the market's % chance)."""
-    words = [w for w in re.findall(r"[a-z0-9]+", (query or "").lower()) if w not in STOP and len(w) > 1]
-    if not words:
-        raise SportsError("What should I look up on Kalshi? (a team, player, league or event)")
-    league = next((league_info(w) for w in words if league_info(w)), None)
-    rest = " ".join(w for w in words if not league_info(w))
-    # Kalshi often names teams by city ("Los Angeles L"), so a team matches by nickname, city or abbreviation
-    groups: list[set[str]] = [{w} for w in rest.split()]
-    if rest:
-        try:
-            t, info, _others = await find_team(client, rest, league[2] if league else None)
-            groups = [{t["nickname"].lower(), t["location"].lower(), t["abbr"].lower(), t["name"].lower()} - {""}]
-            league = league or info
-        except SportsError:
-            pass
-    try:
-        series_data = await _get(client, f"{KALSHI}/series", {"category": "Sports"}, ttl=21600)
-    except SportsError:
-        series_data = {}
-    series = series_data.get("series") or []
-    picked = []
-    if league:
-        tag = league[2].lower().replace("college ", "ncaa")
-        tags = {tag, league[1].lower(), _key(league[0], league[1])}
-        picked = [s for s in series if any(t_ in f"{s.get('ticker', '')} {s.get('title', '')}".lower() for t_ in tags)]
-    if not picked:
-        picked = [s for s in series if any(w in f"{s.get('ticker', '')} {s.get('title', '')}".lower() for g in groups for w in g)]
-    picked = sorted(picked, key=lambda s: "game" not in f"{s.get('ticker', '')} {s.get('title', '')}".lower())[:6]
-    requests = [{"status": "open", "with_nested_markets": "true", "limit": 200, "series_ticker": s["ticker"]} for s in picked if s.get("ticker")] \
-        or [{"status": "open", "with_nested_markets": "true", "limit": 200}]
-    results = await asyncio.gather(*(_get(client, f"{KALSHI}/events", params, ttl=60) for params in requests), return_exceptions=True)
-    events = [e for r in results if isinstance(r, dict) for e in r.get("events") or []]
-    if not events and results and all(isinstance(r, Exception) for r in results):
-        raise SportsError(str(results[0]))
-    rows = []
-    for ev in events:
-        ev_text = f"{ev.get('title', '')} {ev.get('sub_title', '')}".lower()
-        for m in ev.get("markets") or []:
-            text = f"{ev_text} {m.get('title', '')} {m.get('yes_sub_title', '')} {m.get('subtitle', '')}".lower()
-            hits = sum(1 for g in groups if any(w in text for w in g))
-            if groups and hits < len(groups):
-                continue
-            bid, ask, last = _cents(m, "yes_bid"), _cents(m, "yes_ask"), _cents(m, "last_price")
-            mid = (bid + ask) / 2 if bid is not None and ask else last
-            rows.append((float(m.get("volume") or 0), {
-                "event": ev.get("title", ""), "market": m.get("yes_sub_title") or m.get("subtitle") or m.get("title", ""),
-                "yes_price": f"{ask:g}¢" if ask else None, "no_price": f"{100 - bid:g}¢" if bid else None,
-                "market_chance": f"{mid:.0f}%" if mid is not None else None, "volume": int(m.get("volume") or 0),
-                "closes": _local(m.get("close_time", "")) if m.get("close_time") else None,
-                "link": f"https://kalshi.com/markets/{str(ev.get('series_ticker') or m.get('event_ticker', '')).lower()}"}))
-    rows.sort(key=lambda r: -r[0])
-    out: dict[str, Any] = {"query": query, "markets": [r[1] for r in rows[:limit]]}
-    if not rows:
-        out["note"] = f"No open Kalshi markets matched '{query}'. Try the team or league name (e.g. 'Lakers' or 'NBA')."
-    else:
-        out["how_to_read"] = ("A YES price of 62¢ means the market gives it about a 62% chance; it pays $1 if it happens. "
-                              "Kalshi also charges a small fee per trade.")
     return out
