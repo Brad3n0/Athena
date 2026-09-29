@@ -183,6 +183,11 @@ async def lifespan(_app: FastAPI):
     from . import maintenance
 
     maintenance.start_backups()  # a copy of your data once a day
+    if sys.platform.startswith("win"):
+        from . import desktop
+
+        # Existing "Athena AI" shortcuts might point at an older copy of Athena: point them at this one.
+        threading.Thread(target=desktop.refresh_shortcuts, daemon=True).start()
     events.bind_loop(asyncio.get_running_loop())
     scheduler.start()
     from . import monitor

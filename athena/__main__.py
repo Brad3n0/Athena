@@ -1,13 +1,44 @@
 """Start Athena AI:  python -m athena  [--port 8765] [--no-browser]"""
 import argparse
 import os
+import sys
 import threading
+import traceback
 import webbrowser
+from pathlib import Path
 
 import uvicorn
 
 
+LOG = Path(__file__).resolve().parent.parent / "data" / "athena-desktop.log"
+
+
+def _no_console_safety() -> None:
+    """Started from the desktop shortcut (no black window): there's nowhere to print, and printing would crash.
+    Send everything to a log file instead."""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    f = open(LOG, "a", encoding="utf-8", errors="replace", buffering=1)  # noqa: SIM115 (kept open while Athena runs)
+    sys.stdout = sys.stdout or f
+    sys.stderr = sys.stderr or f
+
+
+def _popup(text: str) -> None:
+    """Show a message when there's no black window to show it in (Windows)."""
+    if sys.platform.startswith("win"):
+        try:
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(None, text, "Athena AI", 0x10)
+            return
+        except Exception:
+            pass
+    print(text)
+
+
 def main() -> None:
+    _no_console_safety()
     parser = argparse.ArgumentParser(description="Athena AI — offline assistant powered by Ollama")
     parser.add_argument("--host", default=None, help="Use 0.0.0.0 to allow other devices on your network "
                         "(or turn on Settings → Desktop app → Use on your phone)")
@@ -24,15 +55,18 @@ def main() -> None:
     try:
         import athena.server  # noqa: F401
     except Exception as exc:  # SyntaxError, ImportError, NameError…
-        import sys
-        import traceback
-
         traceback.print_exc()
         print(f"\n  Athena couldn't start: {exc.__class__.__name__}: {exc}")
         from . import selfedit
 
-        if selfedit.changed_files():
+        self_made = bool(selfedit.changed_files())
+        if self_made:
             print("  This is probably from a change she made to her own code.")
+        if args.desktop:
+            _popup(f"Athena couldn't start: {exc.__class__.__name__}: {exc}\n\n"
+                   + ("This is probably from a change she made to her own code. Double-click start.bat: it offers to undo "
+                      "her changes.\n\n" if self_made else "Double-click start.bat to see more, or run update.bat.\n\n")
+                   + f"Details: {LOG}")
         sys.exit(3)
 
     host = args.host or _default_host()
@@ -41,7 +75,12 @@ def main() -> None:
     if args.desktop:
         from .desktop import main as desktop_main
 
-        desktop_main(host, args.port, hidden=args.hidden)
+        try:
+            desktop_main(host, args.port, hidden=args.hidden)
+        except Exception as exc:  # never fail silently from the shortcut
+            traceback.print_exc()
+            _popup(f"Athena couldn't open: {exc.__class__.__name__}: {exc}\n\nDouble-click start.bat instead, or send "
+                   f"this message to whoever helps you with Athena.\n\nDetails: {LOG}")
         return
 
     if args.download_voice:

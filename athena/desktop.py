@@ -203,6 +203,17 @@ def create_shortcuts() -> list[str]:
     return made
 
 
+def refresh_shortcuts() -> None:
+    """If Athena's shortcuts exist, rewrite them so they start THIS copy of Athena (after a re-download or move)."""
+    try:
+        places = [Path(os.environ.get("USERPROFILE", str(Path.home()))) / "Desktop",
+                  Path(os.environ.get("APPDATA", "")) / r"Microsoft\Windows\Start Menu\Programs"]
+        if any((p / "Athena AI.lnk").exists() for p in places):
+            create_shortcuts()
+    except Exception:
+        pass  # a shortcut is a convenience; never let it stop Athena
+
+
 # ------------------------------------------------------------------ main
 
 def _port_open(port: int) -> bool:
