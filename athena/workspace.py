@@ -192,6 +192,55 @@ def _normalize_ws(s: str) -> str:
     return "\n".join(line.rstrip() for line in s.replace("\r\n", "\n").split("\n"))
 
 
+LINE_NO = re.compile(r"^\s*\d+(?:  |\t|: |\| ?|→)")
+
+
+def _strip_line_numbers(text: str) -> str:
+    """Remove read_code's line numbers ("  267  <section…") if every line has one."""
+    lines = text.split("\n")
+    filled = [ln for ln in lines if ln.strip()]
+    if filled and all(LINE_NO.match(ln) for ln in filled):
+        return "\n".join(LINE_NO.sub("", ln, count=1) if ln.strip() else ln for ln in lines)
+    return text
+
+
+def _indent(line: str) -> str:
+    return line[:len(line) - len(line.lstrip())]
+
+
+def _loose_block(text: str, find: str, replace: str) -> tuple[int, int, str] | None:
+    """Find `find` in `text` ignoring line numbers and indentation. Returns (start, end, re-indented replacement)
+    when exactly one place matches, else None."""
+    find, replace = _strip_line_numbers(find), _strip_line_numbers(replace)
+    want = [ln.strip() for ln in find.strip("\n").split("\n")]
+    while want and not want[-1]:
+        want.pop()
+    if not want or not any(want):
+        return None
+    lines = text.split("\n")
+    hits = [i for i in range(len(lines) - len(want) + 1)
+            if all(lines[i + k].strip() == w for k, w in enumerate(want))]
+    if len(hits) != 1:
+        return None
+    i = hits[0]
+    start = sum(len(ln) + 1 for ln in lines[:i])
+    end = start + sum(len(ln) + 1 for ln in lines[i:i + len(want)]) - 1
+    # Shift the replacement's indentation by however much the model's copy was off
+    file_first = next(lines[i + k] for k, w in enumerate(want) if w)
+    have = _indent(file_first)
+    rep_lines = replace.strip("\n").split("\n")
+    base = _indent(next((ln for ln in rep_lines if ln.strip()), ""))
+    out = []
+    for ln in rep_lines:
+        if not ln.strip():
+            out.append("")
+        elif ln.startswith(base):
+            out.append(have + ln[len(base):])
+        else:
+            out.append(have + ln.lstrip())
+    return start, end, "\n".join(out)
+
+
 def plan_edit(root: Path, a: dict[str, Any]) -> tuple[Path, str, str]:
     """Work out the new file text for edit_code / write_code without touching the disk."""
     p = _inside(root, str(a.get("path", "")))
@@ -211,8 +260,15 @@ def plan_edit(root: Path, a: dict[str, Any]) -> tuple[Path, str, str]:
         if _normalize_ws(find_n) in loose:
             text, find_n = loose, _normalize_ws(find_n)
             count = text.count(find_n)
+    if count == 0:  # small models often copy read_code's line numbers, or lose the indentation: match line by line
+        block = _loose_block(text, find_n, replace_n)
+        if block:
+            start, end, replace_n = block
+            new = text[:start] + replace_n + text[end:]
+            return p, old, new.replace("\n", "\r\n") if crlf else new
     if count == 0:
-        raise WorkspaceError("Couldn't find that exact text in the file. Read the file again and copy the lines exactly.")
+        raise WorkspaceError("Couldn't find that exact text in the file. Use search_code to find the line, read_code a few "
+                             "lines around it, and copy them exactly into 'find' (without the line numbers).")
     if count > 1 and not a.get("replace_all"):
         raise WorkspaceError(f"That text appears {count} times. Include more surrounding lines so it's unique, or set replace_all.")
     new = text.replace(find_n, replace_n) if a.get("replace_all") else text.replace(find_n, replace_n, 1)

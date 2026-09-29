@@ -59,6 +59,24 @@ def match(text: str) -> list[Call] | None:
         if who and msg and len(who.split()) <= 5 and not vague and msg.lower().strip(" .!?") not in ("for me", "please", "for me please"):
             return [("send_message", {"to": who, "app": app, "text": msg})]
 
+    # ---- pictures: "make me a picture of a gold owl", "draw a dragon", "generate an anime wallpaper", "/image a castle"
+    #      (charts and graphs go to the model, which plots them; "make this photo darker" is an edit, not a new picture)
+    pic = r"(?:picture|image|pic|photo|drawing|painting|illustration|artwork|art|wallpaper|poster|portrait|logo|sketch|render)"
+    verb = r"(?:make|create|generate|draw|paint|design|render|imagine|produce|give me)"
+    not_pic = re.compile(r"\b(graph|chart|plot|diagram|equation|function|y\s*=|table|conclusion|line|number|card|breath|bath|blank|straw|"
+                         r"attention|comparison|parallel|lottery|winner|name)s?\b")
+    m = re.match(LEAD + verb + r"\s+(?:me\s+|us\s+)?(?:a\s+|an\s+|some\s+)?(?:\w+\s+){0,2}?" + pic +
+                 r"s?\s*(?:of|showing|that shows|with|:|-)\s*(?P<d>.+?)" + TAIL, low) or \
+        re.match(LEAD + verb + r"\s+(?:me\s+|us\s+)?(?:a\s+|an\s+)?(?P<d>(?:(?!\b(?:this|that|my|it|the)\b)[\w' -]){3,60}?\s+" + pic + r")" + TAIL, low) or \
+        re.match(LEAD + r"(?:draw|paint|sketch)\s+(?:me\s+|us\s+)?(?P<d>(?:a|an|some)\s+.+?)" + TAIL, low)
+    if m and not not_pic.search(m.group("d")):
+        described = t[m.start("d"):m.end("d")].strip(" .:'\"")
+        style = re.search(r"\b(?:of|showing|that shows|with)\b", t[:m.start("d")].lower())
+        kind = re.search(pic, low[:m.start("d")]) if style else None
+        # keep the kind of picture the user asked for ("a logo of", "a wallpaper of") as part of the description
+        prompt = f"{kind.group(0)} of {described}" if kind and kind.group(0) not in ("picture", "image", "pic") else described
+        return [("generate_image", {"prompt": prompt})]
+
     # ---- search Discord: "search discord for the minecraft ip", "find messages about the trip in the squad on discord",
     #      "search my dms with jake for that link", "look up tournament in discord"
     for pattern in (
@@ -193,6 +211,8 @@ def confirm(results: list[tuple[str, dict[str, Any], Any]]) -> str:
                 lines.append(f"Here's {r['channel']}'s channel.")
             else:
                 lines.append(r.get("note") or f"Here's what YouTube has for {args.get('query')}.")
+        elif name == "generate_image":
+            lines.append("Here you go." + (f" Saved to {r['saved_to']}." if r.get("saved_to") else ""))
         elif name == "discord_search":
             lines.append(f"Searching Discord for {args.get('query')}" + (f" in {args['where']}." if args.get("where") else "."))
         elif name == "click_on_screen":

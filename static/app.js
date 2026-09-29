@@ -1190,6 +1190,12 @@ const STEP_TEXT = {
   search_documents: [(a) => `Searching your documents for ${q(a.query)}`, (a, r) => `Found ${r.results?.length || 0} passages in your documents`],
   generate_image: [() => 'Creating an image', () => 'Created an image'],
   work_on_myself: [() => 'Opening my own code', () => 'Opened my own code'],
+  sports_games: [(a) => `Checking ${a.team || a.league || 'the'} games`, (a, r) => `Found ${r.games?.length || 0} ${r.league || ''} game${r.games?.length === 1 ? '' : 's'}`],
+  sports_team: [(a) => `Looking up the ${a.team}`, (a, r) => `Looked up the ${r.team}${r.results?.record ? ` (${r.results.record})` : ''}`],
+  sports_player: [(a) => a.line != null ? `Checking ${a.player} ${a.pick || 'over/under'} ${a.line} ${a.stat || ''}` : `Looking up ${a.player}`,
+    (a, r) => r.line != null && r.last_10 ? `${r.player}: over ${r.line} ${r.stat} in ${r.last_10.over} of the last ${r.last_10.games}` : `Looked up ${r.player}`],
+  sports_standings: [(a) => `Getting the ${a.league} standings`, (a, r) => `Got the ${r.league} standings`],
+  kalshi_markets: [(a) => `Checking Kalshi for ${q(a.query)}`, (a, r) => `Found ${r.markets?.length || 0} Kalshi market${r.markets?.length === 1 ? '' : 's'}`],
   check_athena: [() => 'Checking my code still works', (a, r) => r.ok ? 'Checked: my code loads fine' : 'Found problems in my code'],
   restart_athena: [() => 'Restarting myself', (a, r) => r.restarting ? 'Restarting with my changes' : 'Not restarting: my code has problems'],
   undo_self_changes: [() => 'Undoing my changes to myself', (a, r) => r.undone ? `Undid my changes (${(r.files || []).length} file${(r.files || []).length === 1 ? '' : 's'})` : (r.note || 'Nothing to undo')],
@@ -1237,6 +1243,15 @@ function stepHtml(t, i, openSteps) {
     detail = `<pre class="run-output">${runOutputHtml(r)}</pre>`;
   } else if (t.name === 'search_code' && r?.matches?.length) {
     detail = `<pre class="run-output">${escapeHtml(r.matches.join('\n'))}</pre>`;
+  } else if (t.name === 'sports_player' && r?.line != null) {
+    const row = (label, x) => x && typeof x === 'object' && x.games ? `<tr><td>${label}</td><td>${x.over}/${x.games}</td><td>${x.over_pct ?? '–'}%</td><td>${x.average ?? ''}</td></tr>` : '';
+    detail = `<table class="pick-table"><tr><th></th><th>Over ${escapeHtml(String(r.line))}</th><th>Hit</th><th>Avg</th></tr>${
+      row('Last 5', r.last_5)}${row('Last 10', r.last_10)}${row('This season', r.this_season)}${row('Last season', r.last_season)}${
+      row('Home', r.home)}${row('Away', r.away)}${row(`vs ${escapeHtml(r.vs_opponent?.opponent || 'opponent')}`, r.vs_opponent)}</table>` +
+      (r.injury ? `<div class="small">🩹 ${escapeHtml(r.injury)}</div>` : '') +
+      (r.recent_games?.length ? `<pre class="run-output">${escapeHtml(r.recent_games.join('\n'))}</pre>` : '');
+  } else if (t.name === 'kalshi_markets' && r?.markets?.length) {
+    detail = `<ul>${r.markets.map((m) => `<li><a href="${escapeHtml(m.link)}" target="_blank" rel="noopener">${escapeHtml(m.event)}</a>: <b>${escapeHtml(m.market)}</b> ${escapeHtml(m.market_chance || '')} <span class="muted small">(yes ${escapeHtml(m.yes_price || '–')}, no ${escapeHtml(m.no_price || '–')})</span></li>`).join('')}</ul>`;
   } else if (t.name === 'run_python' && r) {
     detail = `<pre class="run-output">${runOutputHtml(r)}</pre>${r.images?.length ? runImagesHtml(r.images) : ''}`;
   } else if (t.name === 'search_documents' && r?.results) {
@@ -1306,6 +1321,9 @@ const COMMANDS = [
   { cmd: '/research', desc: 'Deep research: reads many sources, writes a cited report', hint: 'best laptop for college under $800', action: (r) => (r ? sendMessage(r, { research: true }) : setResearch(true)) },
   { cmd: '/search', desc: 'Search the web', hint: 'best budget graphics card', to: (r) => `Search the web for: ${r}` },
   { cmd: '/image', desc: 'Create an image', hint: 'a gold owl on a night sky', to: (r) => `Generate an image: ${r}` },
+  { cmd: '/pick', desc: 'Check a player prop (PrizePicks, Underdog)', hint: 'LeBron over 24.5 points', to: (r) => `Check this pick with real stats: ${r}` },
+  { cmd: '/scores', desc: 'Scores, schedule and lines', hint: 'NBA tonight', to: (r) => `Look up the games: ${r}` },
+  { cmd: '/kalshi', desc: 'Kalshi market prices', hint: 'Lakers', to: (r) => `What are the Kalshi prices for ${r}?` },
   { cmd: '/find', desc: 'Find a file on your PC', hint: 'my resume', to: (r) => `Find ${r} on my PC` },
   { cmd: '/organize', desc: 'Tidy up a folder', hint: 'Downloads', to: (r) => `Organize my ${r || 'Downloads'} folder` },
   { cmd: '/docs', desc: 'Ask your documents', hint: 'what does my lease say about pets?', to: (r) => `Search my documents: ${r}` },
@@ -1393,6 +1411,17 @@ function stopGenerating() {
 }
 
 // "Fix yourself", "improve your code", "add a dark mode button to yourself": open Athena's own code in Code mode first.
+// Asking for a change to the app itself ("add a sports section to settings", "put a button in the sidebar") is a
+// change to Athena herself too, unless another code project is open in this chat.
+const APP_PART = String.raw`(?:settings?|sidebar|side bar|menu|top bar|toolbar|chat ?box|home ?screen|personalit(?:y|ies)|drop ?down|abilities|voice tab|general tab|interface|ui|app|athena|you)`;
+const APP_EDIT = new RegExp([
+  String.raw`\b(?:add|put|make|create|build|insert|include|give)\b.{0,60}?\b(?:section|tab|page|button|toggle|switch|option|setting|menu|panel|drop ?down|slider|field|mode|feature|shortcut)s?\b.{0,40}?\b(?:to|in|into|on|under|inside|for)\s+(?:the\s+|your\s+|my\s+(?!(?:app|website|site|game|project)\b)|athena'?s\s+)?${APP_PART}\b`,
+  String.raw`\b(?:add|make|create)\s+(?:a\s+|an\s+)?(?:new\s+)?(?:\w+\s+){0,3}?(?:settings?|sidebar)\s+(?:section|tab|page|option|toggle|button)\b(?!.*\b(?:my|his|her|their|this|a|the)\s+(?:app|website|site|game|project)\b)`,
+  String.raw`\b(?:remove|delete|get rid of|hide|move|rename)\b.{0,50}?\b(?:button|section|tab|setting|option|toggle|menu)\b.{0,30}?\b(?:from|in|on|to)\s+(?:the\s+|your\s+|my\s+(?!(?:app|website|site|game|project)\b))?${APP_PART}\b`,
+  String.raw`\bgive\s+(?:yourself|your\s*self)\s+(?:the\s+)?(?:ability|option|power|feature|a way)\b`,
+  String.raw`\badd\s+(?:a\s+|the\s+)?(?:new\s+)?feature\s+(?:to\s+you|where\s+you|that\s+lets\s+you|so\s+you)\b`,
+].join('|'), 'i');
+
 const SELF_EDIT = new RegExp([
   // "fix yourself", "upgrade your code", "improve athena's code"
   String.raw`\b(?:fix|upgrade|improve|change|edit|modify|debug|repair|rewrite|work on)\s+(?:yourself|your\s*self|your\s+(?:own\s+)?(?:code|app|source|system|files|ui|design|interface)|athena'?s\s+(?:own\s+)?code)\b`,
@@ -1401,7 +1430,9 @@ const SELF_EDIT = new RegExp([
 ].join('|'), 'i');
 
 async function sendMessage(text, { voice = false, display = null, research = false } = {}) {
-  if (!voice && state.chat && SELF_EDIT.test(text) && state.status.athena_root && state.chat.workspace?.path !== state.status.athena_root) {
+  const otherProject = state.chat?.workspace?.path && state.chat.workspace.path !== state.status.athena_root;
+  const wantsSelf = SELF_EDIT.test(text) || (!otherProject && APP_EDIT.test(text));
+  if (!voice && state.chat && wantsSelf && state.status.athena_root && state.chat.workspace?.path !== state.status.athena_root) {
     await openWorkspace(state.status.athena_root, { quiet: true });
     if (state.chat.workspace?.path) toast('🛠 Opened my own code. You approve every change I make, and I can undo them.');
   }
@@ -2638,6 +2669,7 @@ function openSettings(tab = 'general') {
   $('#setOllamaBoost').checked = s.ollama_boost !== false;
   $('#setSounds').checked = !!s.sound_effects;
   $('#setBirthday').value = s.birthday ? `${new Date().getFullYear()}-${s.birthday}` : '';
+  fillDataSettings();
   $('#setBargeIn').checked = s.voice_barge_in !== false;
   $('#setVoiceSleep').checked = s.voice_sleep !== false;
   $('#setPc').checked = !!s.pc_enabled;
@@ -2786,6 +2818,25 @@ async function saveSettings(patch) {
     applyTheme();
   } catch (e) { toast(e.message, 'error'); }
 }
+
+// Any settings control with data-setting="key" loads and saves by itself: adding a setting (or a whole Settings
+// section) only needs HTML in index.html. Keys Athena adds to herself start with custom_ (e.g. data-setting="custom_team").
+function fillDataSettings() {
+  $$('[data-setting]', dlg).forEach((el) => {
+    const v = state.settings[el.dataset.setting];
+    if (el.type === 'checkbox') el.checked = v === undefined ? el.hasAttribute('data-default-on') : !!v;
+    else if (el.type === 'radio') el.checked = String(v) === el.value;
+    else if (v !== undefined && v !== null) el.value = Array.isArray(v) ? v.join('\n') : String(v);
+  });
+}
+dlg.addEventListener('change', (e) => {
+  const el = e.target.closest?.('[data-setting]');
+  if (!el) return;
+  const value = el.type === 'checkbox' ? el.checked
+    : (el.type === 'number' || el.type === 'range') ? (el.value === '' ? null : Number(el.value))
+    : el.value;
+  saveSettings({ [el.dataset.setting]: value });
+});
 
 const bind = (id, key, get = (el) => el.value) => $(id).addEventListener('change', (e) => saveSettings({ [key]: get(e.target) }));
 bind('#setName', 'user_name');

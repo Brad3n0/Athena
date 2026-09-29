@@ -174,6 +174,34 @@ async def _generate_image(a, ctx):
     return await imagegen.generate(ctx["client"], str(a.get("prompt", "")), str(a.get("negative", "")), w, h, ctx.get("ollama", ""))
 
 
+def _sports(fn):
+    """Run a sports lookup; turn its problems into a plain message for the model."""
+    async def run(a, ctx):
+        from . import sports
+        try:
+            return await fn(sports, a, ctx["client"])
+        except sports.SportsError as exc:
+            return {"error": str(exc)}
+    return run
+
+
+def _int(v: Any) -> int | None:
+    try:
+        return int(str(v)[:4]) if v not in (None, "") else None
+    except ValueError:
+        return None
+
+
+_sports_games = _sports(lambda sp, a, c: sp.games(c, str(a.get("league", "")), str(a.get("date", "")), str(a.get("team", ""))))
+_sports_team = _sports(lambda sp, a, c: sp.team_report(c, str(a.get("team", "")), str(a.get("league", "")),
+                                                       str(a.get("opponent", "")), _int(a.get("season"))))
+_sports_player = _sports(lambda sp, a, c: sp.player_report(c, str(a.get("player", "")), str(a.get("league", "")),
+                                                           str(a.get("stat", "")), a.get("line"), str(a.get("opponent", "")),
+                                                           _int(a.get("season")), str(a.get("pick", ""))))
+_sports_standings = _sports(lambda sp, a, c: sp.standings(c, str(a.get("league", "")), _int(a.get("season"))))
+_kalshi = _sports(lambda sp, a, c: sp.kalshi(c, str(a.get("query", ""))))
+
+
 async def _ha_list(a, ctx):
     from . import integrations
     return await integrations.list_devices(ctx["client"], str(a.get("query", "")))
@@ -814,6 +842,33 @@ TOOLS += [
           "private": {"type": "boolean", "description": "Private (default) or public"},
           "description": S("One-line description (optional)"), "message": S("What changed, for an update (optional)")},
          ["folder"], run=_upload_folder, approve=_safe(_approve_upload)),
+    Tool("sports_games", "sports", "Scores, schedules and betting lines (spread, total, moneyline) for a league on a day. "
+         "Use for 'who plays tonight', 'Lakers score', 'NFL games Sunday'.",
+         {"league": S("NBA, NFL, MLB, NHL, WNBA, college football, college basketball, MLS, EPL, UFC…"),
+          "date": S("today (default), tomorrow, yesterday or 2025-01-31"), "team": S("Only games for this team (optional)")},
+         [], arun=_sports_games),
+    Tool("sports_team", "sports", "A team's record, standing, recent results, home/away form, next games, injuries and news. "
+         "Give opponent for head-to-head results (this season and last); give season for past seasons (e.g. 2016).",
+         {"team": S("Team name, e.g. Lakers"), "league": S("League, if the name is shared (Giants, Rangers, Kings…)"),
+          "opponent": S("Opponent for head-to-head (optional)"), "season": {"type": "integer", "description": "Year of a past season (optional)"}},
+         ["team"], arun=_sports_team),
+    Tool("sports_player", "sports", "A player's game-by-game stats (this or a past season). With stat + line it checks a pick "
+         "(PrizePicks, Underdog, sportsbook props): how often they went over/under that line in the last 5, last 10, this "
+         "season, last season, home/away and against the next opponent, plus minutes and injury status. Use it for any "
+         "'X over 24.5 points', 'should I take the over', 'is this a good pick'.",
+         {"player": S("Player name"), "league": S("League (optional; helps with common names)"),
+          "stat": S("e.g. points, rebounds, assists, threes, PRA, pts+reb, fantasy score, passing yards, receptions, "
+                    "strikeouts, total bases, shots on goal"),
+          "line": {"type": "number", "description": "The line, e.g. 24.5"}, "pick": S("over or under (optional)"),
+          "opponent": S("Opponent (optional; defaults to their next game)"),
+          "season": {"type": "integer", "description": "Year of a past season (optional)"}},
+         ["player"], arun=_sports_player),
+    Tool("sports_standings", "sports", "League standings (wins, losses, games behind, streak).",
+         {"league": S("League"), "season": {"type": "integer", "description": "Past season year (optional)"}}, ["league"],
+         arun=_sports_standings),
+    Tool("kalshi_markets", "sports", "Live Kalshi prediction-market prices for a team, game, player or league (read-only, no "
+         "account needed). A YES price in cents is the market's % chance.",
+         {"query": S("e.g. 'Lakers', 'NBA', 'Chiefs Bills', 'Super Bowl'")}, ["query"], arun=_kalshi),
     Tool("work_on_myself", "pc", "Open Athena's own code so you can really change yourself: call this whenever the user "
          "wants something changed, fixed, upgraded or added in Athena herself (the app, her features, her look). The app "
          "then opens her code in Code mode and continues with the user's request there.",
@@ -848,6 +903,8 @@ def enabled_tools(settings: dict[str, Any]) -> list[Tool]:
     groups = {"core"}
     if settings.get("tools_enabled"):
         groups.add("tasks")
+    if settings.get("web_enabled") and settings.get("sports_enabled", True):
+        groups.add("sports")
     for key, group in (("memory_enabled", "memory"), ("files_enabled", "files"), ("web_enabled", "web"),
                        ("pc_enabled", "pc"), ("screen_enabled", "screen"), ("code_enabled", "code")):
         if settings.get(key):
@@ -860,6 +917,7 @@ def enabled_tools(settings: dict[str, Any]) -> list[Tool]:
         groups.add("home")
     if settings.get("offline_mode"):  # nothing that reaches the internet
         groups.discard("web")
+        groups.discard("sports")
         return [t for t in TOOLS if t.group in groups and t.name not in ONLINE_TOOLS]
     return [t for t in TOOLS if t.group in groups]
 

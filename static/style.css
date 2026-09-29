@@ -1185,3 +1185,8 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .workspace-chip { flex-wrap: wrap; }
 .workspace-chip button.ws-badge { width: auto; height: auto; display: inline-block; }
 .workspace-chip > .ws-badge { margin-left: auto; }
+
+/* Sports pick check */
+.pick-table { border-collapse: collapse; margin: 4px 0 6px; font-size: 13px; }
+.pick-table th, .pick-table td { padding: 3px 10px 3px 0; text-align: left; }
+.pick-table th { color: var(--text-3); font-weight: 600; }

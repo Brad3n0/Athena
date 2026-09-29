@@ -83,7 +83,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "emotion_tracking": True,  # notice how you seem in each message, adapt to it, keep a mood history
     "adaptive_voice": True,  # her voice follows the mood (faster when excited, softer when you're down)
     "auto_tasks": True,  # add to-dos you mention to Tasks by themselves, and tick them off when you say they're done
-    "offline_mode": False,  # nothing reaches the internet (no web search, updates, YouTube, GitHub...)
+    "offline_mode": False,
+    "sports_enabled": True,  # scores, stats, pick checks and Kalshi prices  # nothing reaches the internet (no web search, updates, YouTube, GitHub...)
     "auto_recover": True,  # if Ollama crashes or freezes mid-reply, restart it and try again
     "auto_backup": True,  # a copy of your data once a day (last 7 kept)
     "update_check": True,  # look for a new version on GitHub when Athena starts
@@ -151,7 +152,7 @@ def valid_id(value: str) -> bool:
 def get_settings() -> dict[str, Any]:
     with _lock:
         saved = _read(SETTINGS_FILE, {})
-    merged = {**DEFAULT_SETTINGS, **{k: v for k, v in saved.items() if k in DEFAULT_SETTINGS}}
+    merged = {**DEFAULT_SETTINGS, **{k: v for k, v in saved.items() if k in DEFAULT_SETTINGS or k.startswith("custom_")}}
     merged["models"] = {**DEFAULT_SETTINGS["models"], **(saved.get("models") or {})}
     # The old shortcuts popped Athena open during games (crouch + jump): move anyone still on them to the new ones.
     if merged.get("hotkey") == "<ctrl>+<space>":
@@ -161,11 +162,18 @@ def get_settings() -> dict[str, Any]:
     return merged
 
 
+def _custom_ok(key: str, value: Any) -> bool:
+    """Settings Athena adds to herself (a new Settings section) use keys starting with custom_, so they save without
+    also having to edit this file."""
+    return (isinstance(key, str) and bool(re.fullmatch(r"custom_[a-z0-9_]{1,60}", key))
+            and isinstance(value, (str, int, float, bool, list, type(None))) and len(json.dumps(value)) <= 20_000)
+
+
 def update_settings(patch: dict[str, Any]) -> dict[str, Any]:
     with _lock:
         current = get_settings()
         for key, value in patch.items():
-            if key not in DEFAULT_SETTINGS:
+            if key not in DEFAULT_SETTINGS and not _custom_ok(key, value):
                 continue
             if key == "models" and isinstance(value, dict):
                 current["models"].update({k: str(v) for k, v in value.items() if k in current["models"]})

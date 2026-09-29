@@ -191,7 +191,10 @@ def apply(img: Image.Image, steps: list[dict[str, Any]]) -> tuple[Image.Image, l
     done: list[str] = []
     for raw in steps or []:
         step = raw if isinstance(raw, dict) else {"op": str(raw)}
-        op = str(step.get("op") or step.get("type") or "").lower().replace(" ", "_").replace("-", "_")
+        op = str(step.get("op") or step.get("type") or step.get("edit") or step.get("action") or "").lower().replace(" ", "_").replace("-", "_")
+        if op in ("filter", "effect", "style", "adjust", "adjustment", "preset") and (step.get("name") or step.get("filter") or step.get("style")):
+            op = str(step.get("name") or step.get("filter") or step.get("style")).lower().replace(" ", "_").replace("-", "_")
+            # {"op": "filter", "name": "vintage"} → the vintage edit
         amt = step.get("amount", step.get("value"))
         f = float(amt) if isinstance(amt, (int, float)) or (isinstance(amt, str) and re.fullmatch(r"-?\d+(\.\d+)?", amt)) else None
         if op in ("crop", "square"):

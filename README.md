@@ -193,6 +193,7 @@ Good to know:
 
 ## Desktop app, "Hey Athena" and more
 
+- **Sports:** ask for scores, schedules and betting lines (`/scores NBA tonight`), a team's form, head-to-head and injuries, standings, or past seasons. Check a PrizePicks / Underdog pick with real numbers (`/pick LeBron over 24.5 points`): how often the player has gone over that line recently, this season, last season and against the opponent. `/kalshi Lakers` shows live Kalshi prices. Uses ESPN's and Kalshi's free public data (needs internet). It shows facts, not guarantees.
 - **Desktop app:** double-click **`start-desktop.bat`**. Athena opens in her own window and lives in the system tray. Press **Ctrl+Alt+Space** anywhere to bring her up, or **Ctrl+Alt+V** to start talking (ignored while a fullscreen game is in front). In **Settings → Desktop app** you can turn on **Start with Windows** and create Desktop/Start menu shortcuts.
 - **"Hey Athena":** turn it on in **Settings → Voice**. Say *"Hey Athena"*, or *"Hey Athena, what's the weather?"*, and she starts listening. It needs `install-voice`. Everything is processed offline, and nothing is recorded or kept.
 - **Reminders & morning briefing:** *"remind me at 6pm to call mom"* pops up and speaks at 6pm, even if the window was closed; the tray shows a notification. Set a **Morning briefing** time and your **home city** in **Settings → Integrations**, and she greets you with the weather, your tasks and your reminders.

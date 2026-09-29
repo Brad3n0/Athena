@@ -414,6 +414,16 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool, sel
             abilities.append("- Documents: search_documents searches the user's own files by meaning. Use it for questions about their documents and cite file names.")
         if "images" in groups:
             abilities.append("- Images: generate_image creates pictures with Stable Diffusion; write a rich visual prompt.")
+        if "sports" in groups:
+            abilities.append(
+                "- Sports: sports_games (scores, schedules, betting lines), sports_team (record, form, head-to-head, injuries, news, "
+                "past seasons), sports_player (game logs; with stat + line it checks a PrizePicks / Underdog / sportsbook pick), "
+                "sports_standings, kalshi_markets (live Kalshi prices). ALWAYS look things up instead of answering sports "
+                "questions from memory: your memory is out of date. For a pick, call sports_player with the stat and line, then "
+                "give a straight verdict in a few lines: the hit rates (last 5 / last 10 / season / vs opponent), minutes and "
+                "injuries, and whether history leans over, under or neither. Be honest: past games don't guarantee anything, "
+                "and a 2-pick that pays 3x needs each pick to hit about 58% just to break even, so 'no clear edge' is a real "
+                "answer. For Kalshi, compare the market's % with what the numbers suggest. Never promise wins.")
         if "home" in groups:
             abilities.append("- Smart home: list_home_devices and control_home_device control lights, thermostats, locks and more.")
         if "web" in groups:
@@ -697,8 +707,11 @@ async def chat(request: Request):
             if code_root:  # discourages the "same sentence forever" loops small models fall into while coding
                 payload["options"] = {"repeat_penalty": 1.08, "repeat_last_n": 256, **(payload.get("options") or {})}
             if use_tools:
-                payload["tools"] = [t.spec() for t in enabled_tools(settings) if not (self_open and t.name == "work_on_myself")] \
-                    + (workspace.specs(code_root) if code_root else [])
+                # Working on her own code: only the code tools (and web lookups), so a smaller model isn't choosing
+                # between 70 tools; the rest of her abilities aren't needed to edit herself.
+                general = [t for t in enabled_tools(settings)
+                           if not self_open or t.name in ("web_search", "read_webpage", "get_current_datetime")]
+                payload["tools"] = [t.spec() for t in general] + (workspace.specs(code_root) if code_root else [])
                 if builder and not code_root:
                     payload["tools"].append(workspace.NEW_PROJECT_SPEC)
             if send_think:
@@ -775,6 +788,9 @@ async def chat(request: Request):
                     yield _event("notice", message="My graphics card ran out of memory, so I'm freeing some and trying again…")
                     yield _event("retry")
                     await make_room("")
+                    from . import imagegen
+
+                    await imagegen.free_image_memory(client)  # ComfyUI may still be holding its picture model
                     _ctx_cap[model] = 16384
                     _ctx_used.pop(model, None)
                     if oom_tries == 2:
