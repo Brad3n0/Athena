@@ -80,6 +80,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "keep_alive": "30m",  # how long models stay loaded after use
     "ollama_boost": True,  # flash attention + compressed chat memory for Ollama (faster, less graphics memory)
     "reduce_motion": False,  # turn off animations
+    "emotion_tracking": True,  # notice how you seem in each message, adapt to it, keep a mood history
+    "adaptive_voice": True,  # her voice follows the mood (faster when excited, softer when you're down)
+    "auto_tasks": True,  # add to-dos you mention to Tasks by themselves, and tick them off when you say they're done
+    "offline_mode": False,  # nothing reaches the internet (no web search, updates, YouTube, GitHub...)
     "auto_recover": True,  # if Ollama crashes or freezes mid-reply, restart it and try again
     "auto_backup": True,  # a copy of your data once a day (last 7 kept)
     "update_check": True,  # look for a new version on GitHub when Athena starts

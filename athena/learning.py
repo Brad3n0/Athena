@@ -174,3 +174,62 @@ async def learn_lesson(client, ollama: str, model: str, user: str, reply: str, k
         return None
     item = add_lesson(text, {"up": "👍", "down": "👎", "correction": "correction"}.get(kind, kind), persona)
     return item["text"] if item else None
+
+
+# ------------------------------------------------------------------ auto task manager
+
+TASK_HINT = re.compile(
+    r"\b(i\s*(have|need|got|gotta|must|should|'?ve got)\s*(to|ta)\b|i gotta|i need to|gotta\b|need to\b|have to\b|"
+    r"don'?t (let me )?forget|due (on|by|tomorrow|today|next|this|mon|tue|wed|thu|fri|sat|sun)|deadline|"
+    r"i have (a|an|my) (test|exam|quiz|essay|paper|project|meeting|appointment|game|shift|interview|practice)|"
+    r"(finished|done with|completed|turned in|submitted|handed in|took care of)\b)", re.I)
+EXPLICIT_TASK = re.compile(r"\b(add|put|make)\b.{0,40}\b(task|to-?do|list)\b|\bremind me\b|\bset a reminder\b", re.I)
+
+
+def worth_checking_for_tasks(text: str) -> bool:
+    """Sounds like a to-do or a finished to-do, and they didn't ask her directly (then she uses her task tools)."""
+    return bool(text) and len(text) >= 8 and bool(TASK_HINT.search(text)) and not EXPLICIT_TASK.search(text)
+
+
+def _json_obj(text: str) -> dict[str, Any]:
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.S)
+    m = re.search(r"\{.*\}", text, re.S)
+    if not m:
+        return {}
+    try:
+        data = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+async def learn_tasks(client, ollama: str, model: str, user: str, keep_alive: Any) -> dict[str, list[str]]:
+    """Add to-dos the user mentions to their Tasks, and tick off the ones they say they finished."""
+    from datetime import datetime
+
+    open_tasks = [t for t in store.list_tasks() if not t.get("done")]
+    now = datetime.now().strftime("%A %B %d, %Y")
+    prompt = (
+        f"Today is {now}. The user told their assistant:\n\"{user[:1200]}\"\n\n"
+        f"Their open to-dos: {json.dumps([t['title'] for t in open_tasks][-40:])}\n\n"
+        "1) Did they mention something THEY need to do later (homework, an exam to study for, an errand, a call, an "
+        "appointment)? Only real, specific to-dos, not wishes, feelings or things happening right now.\n"
+        "2) Did they say they FINISHED one of their open to-dos? Use its exact text from the list.\n"
+        'Reply with ONLY JSON: {"add": [{"title": "Finish history essay", "due": "Fri Oct 3"}], "done": ["exact open to-do"]}. '
+        'Titles are short, start with a verb. due is a short date like "Fri Oct 3" or "Tomorrow 3 PM", or "" if none. '
+        'Use empty lists when nothing fits.')
+    data = _json_obj(await _ask(client, ollama, model, prompt, keep_alive, 220))
+    added, done = [], []
+    titles = [t["title"] for t in open_tasks]
+    for item in (data.get("add") or [])[:3]:
+        title = str((item or {}).get("title") or "").strip()[:120] if isinstance(item, dict) else ""
+        if len(title) < 4 or any(_similar(title, t) for t in titles + added):
+            continue
+        store.add_task(title, str(item.get("due") or "")[:40])
+        added.append(title)
+    for name in (data.get("done") or [])[:3]:
+        hit = next((t for t in open_tasks if _similar(str(name), t["title"])), None)
+        if hit:
+            store.update_task(hit["id"], {"done": True})
+            done.append(hit["title"])
+    return {"added": added, "done": done}

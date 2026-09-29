@@ -858,7 +858,14 @@ def enabled_tools(settings: dict[str, Any]) -> list[Tool]:
         groups.add("images")
     if settings.get("ha_url") and settings.get("ha_token"):
         groups.add("home")
+    if settings.get("offline_mode"):  # nothing that reaches the internet
+        groups.discard("web")
+        return [t for t in TOOLS if t.group in groups and t.name not in ONLINE_TOOLS]
     return [t for t in TOOLS if t.group in groups]
+
+
+# Tools that need the internet (hidden in offline mode; web search, pages and weather are the "web" group)
+ONLINE_TOOLS = {"watch_youtube", "upload_folder_to_github", "save_self_changes", "open_website", "discord_search", "send_message"}
 
 
 def approval_summary(name: str, args: dict[str, Any], settings: dict[str, Any]) -> str | None:

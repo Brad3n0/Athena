@@ -353,8 +353,10 @@
       </section>
 
       <section data-panel="abilities" hidden>
+        <label class="check offline-switch"><input type="checkbox" id="setOffline" /> <span><b>✈️ Offline mode</b>: nothing reaches the internet. No web search or research, no update checks, YouTube, GitHub, weather or messaging. Chat, voice, files, PC control, photos, pictures and your models keep working.</span></label>
         <p class="muted small" style="margin-top:0">What Athena can do for you. These need a tool-capable model (gpt-oss, qwen3, llama3.1…).</p>
         <label class="check"><input type="checkbox" id="setTools" /> Tasks &amp; timers</label>
+        <label class="check"><input type="checkbox" id="setAutoTasks" /> <span><b>Auto task manager</b>: when I mention something I need to do (“I have to finish my essay by Friday”), add it to Tasks, and tick it off when I say it's done</span></label>
         <label class="check"><input type="checkbox" id="setMemory" /> Memory — remembers things you tell her, across all chats</label>
         <label class="check"><input type="checkbox" id="setFiles" /> Files — find, read, move, organize, create and delete files</label>
         <label class="check"><input type="checkbox" id="setWeb" /> Web — search the internet, read pages, check the weather (when you're online)</label>
@@ -385,6 +387,11 @@
         <div class="about-add" id="lessonAdd"><input id="lessonNew" placeholder="Add a rule, e.g. “Always show the final answer in bold”" maxlength="240" /><button type="button" class="ghost">Add</button></div>
         <ul class="memories" id="lessonList"></ul>
         <button type="button" class="ghost danger" id="forgetAll">Forget everything she's learned</button>
+
+        <h3>Your mood <span class="muted small" id="moodCount"></span></h3>
+        <label class="check"><input type="checkbox" id="setEmotions" /> <span>Notice how I seem in each message and adapt to it (it's worked out on this PC from my words and emoji; nothing is sent anywhere)</span></label>
+        <ul class="mood-days" id="moodDays"></ul>
+        <button type="button" class="ghost" id="moodClear">Clear my mood history</button>
       </section>
 
       <section data-panel="knowledge" hidden>
@@ -574,6 +581,7 @@
             <div class="cv-actions"><button type="button" class="primary" id="cvSave">Add voice</button></div>
           </div>
         </details>
+        <label class="check"><input type="checkbox" id="setAdaptiveVoice" /> <span><b>Adaptive voice</b>: her voice follows your mood (softer and slower when you're down or stressed, livelier when you're excited)</span></label>
         <label>Language
           <select id="setLanguage">
             <option value="en">English</option>

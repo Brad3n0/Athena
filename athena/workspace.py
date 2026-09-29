@@ -265,7 +265,16 @@ def apply_edit(root: Path, a: dict[str, Any]) -> dict[str, Any]:
     diff = _diff(rel, old, new)
     plus = sum(1 for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++"))
     minus = sum(1 for ln in diff.splitlines() if ln.startswith("-") and not ln.startswith("---"))
-    return {"edited" if existed else "created": rel, "added_lines": plus, "removed_lines": minus, "diff": diff[:20_000]}
+    out = {"edited" if existed else "created": rel, "added_lines": plus, "removed_lines": minus, "diff": diff[:20_000]}
+    from . import codecheck
+
+    found = codecheck.check_file(root, p)  # real-time check: she sees mistakes straight away and can fix them
+    if found:
+        out["problems_now"] = found[:10]
+        out["next_step"] = "This file now has the problems listed in problems_now. Fix them before moving on."
+    elif p.suffix.lower() in (".py", ".js", ".mjs", ".cjs", ".json", ".html", ".htm"):
+        out["check"] = "No problems found in this file."
+    return out
 
 
 def undo(root: Path, _a: dict[str, Any]) -> dict[str, Any]:

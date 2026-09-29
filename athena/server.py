@@ -376,6 +376,10 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool, sel
             )
         if "tasks" in groups:
             abilities.append("- Reminders: set_reminder pops up and speaks at the exact time (compute the ISO date/time from now).")
+        if settings.get("offline_mode"):
+            abilities.append("- Offline mode is ON: you can't use the internet (no web search, websites, YouTube, weather, "
+                             "GitHub or messaging). If the user asks for something that needs it, say so briefly and "
+                             "mention they can turn Offline mode off in Settings → Abilities; answer from what you know.")
         if "pc" in groups and not self_open:
             abilities.append("- Yourself: you CAN change your own code (you're the Athena app on this PC). Whenever the user wants you "
                              "to change, fix, upgrade or add something to yourself or your own app/code ('implement it in your code', "
@@ -575,6 +579,14 @@ async def chat(request: Request):
     if len(raw_history) > 8:  # a long chat: fold the oldest part into a summary if it no longer fits
         raw_history, chat_summary, covered = await fit_history(raw_history, chat_summary, model, settings)
     history = _clean_messages(raw_history)
+    # Emotion tracking: how the user seems in this message (instant, no AI call), for her tone and the mood history.
+    from . import emotions
+
+    user_mood = None
+    if settings.get("emotion_tracking", True) and mode != "code" and history and history[-1]["role"] == "user" \
+            and not body.get("no_tools"):
+        user_mood = emotions.detect(history[-1]["content"])
+        await run_in_threadpool(emotions.record, user_mood)
     project = store.get_project(body.get("project_id"))
     if mode == "study":
         await run_in_threadpool(decks.record_study_day)
@@ -616,6 +628,8 @@ async def chat(request: Request):
     # Saying a routine's phrase ("goodnight", "game time") runs it straight away, no model needed.
     from . import routines as routines_mod
 
+    if body.get("research") and settings.get("offline_mode"):
+        raise HTTPException(400, "Deep research needs the internet, and Offline mode is on (Settings → Abilities).")
     if body.get("research") and mode != "voice" and history and history[-1]["role"] == "user":
         return StreamingResponse(_research_stream(model, mode, settings, history, extra_prompt, think),
                                  media_type="application/x-ndjson")
@@ -637,6 +651,8 @@ async def chat(request: Request):
 
     async def generate() -> AsyncIterator[bytes]:
         nonlocal use_tools, auto_approve, code_root, model
+        if user_mood:
+            yield _event("mood", mood=user_mood["mood"], intensity=user_mood["intensity"], emoji=emotions.emoji(user_mood["mood"]))
         if covered:
             yield _event("summary", text=chat_summary, covered=covered)
         if routine:
@@ -653,7 +669,10 @@ async def chat(request: Request):
         self_open = selfedit.is_self(code_root)  # her own code is already open in this chat
         system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools, self_open) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
-        messages.insert(len(messages) - 1 if len(messages) > 1 else len(messages), time_note())
+        note = time_note()
+        if user_mood:
+            note = {**note, "content": note["content"] + " " + emotions.note(user_mood)}
+        messages.insert(len(messages) - 1 if len(messages) > 1 else len(messages), note)
         if self_open and use_tools:
             # Models copy their own earlier answers: hide any old "I can't change my own code" replies, and remind her
             # right before the request that she has the tools and should start.
@@ -1262,6 +1281,35 @@ async def edit_memory(memory_id: str, request: Request):
 
 # ------------------------------------------------------------ Athena learns
 
+@app.get("/api/moods")
+async def moods():
+    from . import emotions
+
+    return {"days": emotions.summary(14), "count": len(emotions.history())}
+
+
+@app.delete("/api/moods")
+async def moods_clear():
+    from . import emotions
+
+    emotions.clear()
+    return {"ok": True}
+
+
+@app.get("/api/workspace/problems")
+async def workspace_problems(path: str):
+    """Real-time code analysis for the open Code-mode project."""
+    from . import codecheck
+
+    try:
+        root = workspace.open_root(path)
+    except workspace.WorkspaceError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not root:
+        return {"problems": [], "errors": 0, "warnings": 0, "checked": 0}
+    return await run_in_threadpool(lambda: codecheck.check_project(root, workspace.walk(root)))
+
+
 @app.get("/api/lessons")
 async def list_lessons():
     return [{**x, "for": learning.lesson_persona(x)} for x in learning.list_lessons()]
@@ -1298,9 +1346,16 @@ async def learn(request: Request):
     settings = store.get_settings()
     model, user, reply = str(body.get("model") or ""), str(body.get("user") or ""), str(body.get("reply") or "")
     out: dict[str, Any] = {"facts": [], "lesson": None}
-    if not settings.get("auto_learn", True) or not model or not user:
+    if not model or not user:
         return out
     ka = keep_alive(settings)
+    if not settings.get("auto_learn", True):  # learning is off, but the task manager has its own switch
+        if settings.get("auto_tasks", True) and settings.get("tools_enabled") and learning.worth_checking_for_tasks(user):
+            try:
+                out["tasks"] = await learning.learn_tasks(client, OLLAMA, model, user, ka)
+            except (httpx.HTTPError, ValueError):
+                pass
+        return out
     try:
         previous = str(body.get("previous_reply") or "")
         if previous and learning.is_correction(user):
@@ -1308,6 +1363,8 @@ async def learn(request: Request):
                                                         previous, "correction", user, ka, settings.get("persona") or "assistant")
         if settings.get("memory_enabled") and learning.worth_checking_for_facts(user):
             out["facts"] = await learning.learn_facts(client, OLLAMA, model, user, reply, ka)
+        if settings.get("auto_tasks", True) and settings.get("tools_enabled") and learning.worth_checking_for_tasks(user):
+            out["tasks"] = await learning.learn_tasks(client, OLLAMA, model, user, ka)
     except (httpx.HTTPError, ValueError):
         pass  # learning is a bonus; never bother the user about it
     return out

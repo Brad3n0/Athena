@@ -118,6 +118,8 @@ def _git(*args: str, timeout: int = 60) -> str:
 
 
 def check_update() -> dict[str, Any]:
+    if store.get_settings().get("offline_mode"):
+        return {"available": False, "reason": "Offline mode is on, so Athena doesn't check GitHub. Turn it off to update."}
     if not (store.ROOT / ".git").exists():
         return {"available": False, "reason": "Run update.bat once to connect Athena to GitHub; after that she updates herself."}
     try:

@@ -1168,3 +1168,20 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .pic-edit { position: absolute; top: 8px; right: 8px; padding: 4px 10px; border-radius: 99px; font-size: 12.5px; background: rgba(0,0,0,.6); color: #fff; opacity: 0; transition: opacity .15s; border: 1px solid rgba(255,255,255,.25); }
 .pic-wrap:hover .pic-edit, .pic-edit:focus { opacity: 1; }
 @media (hover: none) { .pic-edit { opacity: 1; } }
+
+/* Mood history */
+.mood-days { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+.mood-days li { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px; }
+.mood-days .mood-main { text-transform: capitalize; }
+
+/* Real-time code check badge on the project bar */
+.ws-badge { margin-left: 10px; font-size: 12.5px; padding: 2px 9px; border-radius: 99px; white-space: nowrap; }
+.ws-badge.ok { color: #4caf50; border: 1px solid rgba(76, 175, 80, .4); }
+.ws-badge.bad { color: #ff8a65; border: 1px solid rgba(255, 138, 101, .5); background: rgba(255, 138, 101, .08); cursor: pointer; }
+.ws-problems { list-style: none; margin: 8px 0 2px; padding: 0; width: 100%; max-height: 200px; overflow-y: auto; font-size: 13px; }
+.ws-problems li { padding: 5px 8px; border-radius: 8px; cursor: pointer; }
+.ws-problems li:hover { background: rgba(var(--accent-rgb), .1); }
+.ws-problems .err { color: #ff6b6b; font-weight: 700; } .ws-problems .warn { color: #ffb74d; font-weight: 700; }
+.workspace-chip { flex-wrap: wrap; }
+.workspace-chip button.ws-badge { width: auto; height: auto; display: inline-block; }
+.workspace-chip > .ws-badge { margin-left: auto; }

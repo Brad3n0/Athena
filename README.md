@@ -140,6 +140,14 @@ With PC control on (Settings → Abilities), just ask, typed or out loud:
 
 She works your real apps with the keyboard and mouse like you would, so keep the PC unlocked while she's doing things, and keep your hands off the keyboard for those few seconds.
 
+## Feels more human
+
+- **Emotion tracking:** from your words and emoji she notices how you seem (happy, excited, stressed, sad, tired, angry…) and lets it shape her tone, like a person who cares would. It's worked out instantly on your PC. See your mood by day in **Settings → About you → Your mood** (turn it off or clear it there).
+- **Adaptive voice:** when she talks, her voice follows your mood: softer and slower when you're down or stressed, livelier when you're excited (**Settings → Voice**).
+- **Auto task manager:** mention something you need to do (*"I have to finish my essay by Friday"*) and she adds it to **Tasks** with the due date; say *"I turned in my essay"* and she ticks it off (**Settings → Abilities**).
+- **Offline mode:** one switch (**Settings → Abilities → ✈️ Offline mode**) and nothing reaches the internet: no web search, research, update checks, YouTube, GitHub, weather or messaging. Everything else keeps working.
+- **Real-time code analysis:** in Code mode the project bar shows **✓ No problems** or **⚠ N problems** (Python syntax errors and undefined names, JavaScript syntax, broken JSON, unclosed HTML tags). It checks when the project opens, after every change she makes (she sees the problems and fixes them), and every few seconds, so edits you make in another editor show up too. Click a problem to ask her to fix it.
+
 ## She can fix and improve herself
 
 Say *"fix yourself, the send button doesn't work on my phone"*, *"add a dark red theme to yourself"* or *"improve your code so YouTube opens faster"*. Athena opens her own code in Code mode (also: 📂 → **🛠 Athena's own code**) and works like a careful developer:

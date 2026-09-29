@@ -81,8 +81,21 @@ function voiceSettings() {
   if (choice) return { ...s, kokoro_voice: choice, ...(s.tts_engine === 'custom' ? { tts_engine: 'auto' } : {}) };
   return s;
 }
+/** Adaptive voice: she speaks a little softer and slower when you seem down, livelier when you're excited. */
+function adaptVoice(settings) {
+  if (settings.adaptive_voice === false) return settings;
+  const m = state.userMood;
+  if (!m || Date.now() - m.at > 20 * 60000) return settings;
+  const k = 0.5 + (m.intensity || 0.5) / 2;  // stronger feelings, bigger change
+  const [rate, pitch] = {
+    sad: [0.9, 0.97], stressed: [0.93, 0.98], tired: [0.9, 0.97], angry: [0.95, 0.98],
+    excited: [1.08, 1.04], happy: [1.04, 1.02], loving: [0.96, 1.01],
+  }[m.mood] || [1, 1];
+  return { ...settings, tts_rate: (Number(settings.tts_rate) || 1) * (1 + (rate - 1) * k),
+    voice_pitch: (Number(settings.voice_pitch) || 1) * (1 + (pitch - 1) * k) };
+}
 const speaker = new Speaker(() => {
-  const settings = voiceSettings();
+  const settings = adaptVoice(voiceSettings());
   return { settings, kokoro: !!state.status.kokoro || (settings.tts_engine === 'custom' && !!state.status.custom_voice), lang: speakingLanguage() };
 });
 let lastVoiceFail = 0;
@@ -154,7 +167,7 @@ async function refreshStatus() {
   const el = $('#status');
   el.classList.toggle('ok', !!state.status.ollama);
   el.classList.toggle('bad', !state.status.ollama);
-  $('#statusText').textContent = state.status.ollama ? `Ollama ${state.status.ollama_version || ''} · offline & private` : 'Ollama not running';
+  $('#statusText').textContent = state.status.ollama ? `Ollama ${state.status.ollama_version || ''} · ${state.settings.offline_mode ? '✈️ Offline mode' : 'offline & private'}` : 'Ollama not running';
   const banner = $('#banner');
   if (!state.status.ollama) {
     banner.innerHTML = `<b>Can't reach Ollama.</b> Start the Ollama app (or run <code>ollama serve</code>), then this will connect automatically. Looking at <code>${escapeHtml(state.status.ollama_url || 'http://127.0.0.1:11434')}</code>.`;
@@ -1612,6 +1625,8 @@ async function generateReply({ voice = false, model = null, route = null, think 
           thinkStart = 0;
         } else if (ev.type === 'summary') {
           chat.summary = { text: ev.text, upto: (summaryFor(chat)?.upto || 0) + ev.covered };
+        } else if (ev.type === 'mood') {  // how you seem in this message: her voice follows it (adaptive voice)
+          state.userMood = { mood: ev.mood, intensity: ev.intensity, at: Date.now() };
         } else if (ev.type === 'model') {  // her model didn't fit on the graphics card: she switched, so keep using that one
           reply.model = ev.name;
           if (chat === state.chat) { chat.model = ev.name; renderModelButton(); }
@@ -1935,13 +1950,16 @@ const FIRST_PERSON = /\b(i|i'm|im|i've|i'd|my|me|mine|we|our)\b/i;
 const CORRECTION = /^\s*(no[,.! ]|nope|not quite|that'?s (wrong|not)|wrong|incorrect|actually[, ]|i meant|i said|not what i|you misunderstood|try again|stop )/i;
 
 // After a reply, quietly pick up lasting facts about you and learn from corrections ("no, I meant…").
+// To-dos you mention in passing ("I have to finish my essay by Friday") or finish ("I turned it in").
+const TASK_HINT = /\b(i\s*(have|need|got|gotta|must|should)\s*(to|ta)|gotta|need to|have to|don'?t forget|due (on|by|tomorrow|today|next|this)|deadline|i have (a|an|my) (test|exam|quiz|essay|paper|project|meeting|appointment|game|shift|interview|practice)|finished|done with|completed|turned in|submitted|handed in)\b/i;
 async function learnFrom(chat, reply) {
-  if (state.settings.auto_learn === false) return;
   const i = chat.messages.indexOf(reply);
   const user = chat.messages[i - 1];
   const text = userText(user);
+  const tasks = state.settings.auto_tasks !== false && TASK_HINT.test(text || '');
+  if (state.settings.auto_learn === false && !tasks) return;
   const correction = CORRECTION.test(text) && chat.messages[i - 2]?.role === 'assistant';
-  if (!text || (!correction && !(state.settings.memory_enabled && text.length >= 12 && FIRST_PERSON.test(text)))) return;
+  if (!text || (!tasks && !correction && !(state.settings.memory_enabled && text.length >= 12 && FIRST_PERSON.test(text)))) return;
   const prev = correction ? chat.messages[i - 2] : null;
   try {
     const out = await api('/api/learn', json('POST', {
@@ -1950,6 +1968,11 @@ async function learnFrom(chat, reply) {
     }));
     if (out.facts?.length) toast(`🧠 Remembered: ${out.facts.join(' · ')}`, '', { action: { label: 'See all', fn: () => openSettings('about') }, ms: 6000 });
     if (out.lesson) toast(`📝 Got it for next time: ${out.lesson}`, '', { action: { label: 'See all', fn: () => openSettings('about') }, ms: 6000 });
+    if (out.tasks?.added?.length || out.tasks?.done?.length) {
+      const bits = [...(out.tasks.added || []).map((t) => `➕ ${t}`), ...(out.tasks.done || []).map((t) => `✅ ${t}`)];
+      toast(`Tasks: ${bits.join(' · ')}`, '', { action: { label: 'Open tasks', fn: () => { $('#tasksDrawer').hidden = false; loadTasks(); } }, ms: 7000 });
+      loadTasks();
+    }
   } catch { /* learning is a bonus */ }
 }
 
@@ -2160,6 +2183,7 @@ $('#approvalDeny').onclick = () => answerApproval(false);
 
 // ------------------------------------------------------------ tools / timers
 function handleToolEvent(ev) {
+  if (['write_code', 'edit_code', 'undo_code_edit'].includes(ev.name) && state.chat.workspace?.path) setTimeout(checkProblems, 300);
   if (['write_code', 'edit_code', 'undo_code_edit'].includes(ev.name) && state.chat.workspace?.path && !ev.result?.error) {
     api('/api/workspace/open', json('POST', { path: state.chat.workspace.path })).then((info) => { state.chat.workspace = info; renderWorkspaceChip(); }).catch(() => {});
   }
@@ -2602,6 +2626,10 @@ function openSettings(tab = 'general') {
   $('#setTextSize').value = s.text_size || 'normal';
   $('#setCompact').checked = !!s.compact;
   $('#setReduceMotion').checked = !!s.reduce_motion;
+  $('#setOffline').checked = !!s.offline_mode;
+  $('#setEmotions').checked = s.emotion_tracking !== false;
+  $('#setAdaptiveVoice').checked = s.adaptive_voice !== false;
+  $('#setAutoTasks').checked = s.auto_tasks !== false;
   $('#setImagesEnabled').checked = s.images_enabled !== false;
   $('#setGithubPrivate').checked = s.github_private !== false;
   $('#setAutoRecover').checked = s.auto_recover !== false;
@@ -2786,6 +2814,7 @@ bind('#setPc', 'pc_enabled', (el) => el.checked);
 bind('#setTextSize', 'text_size');
 bind('#setCompact', 'compact', (el) => el.checked);
 bind('#setReduceMotion', 'reduce_motion', (el) => el.checked);
+$('#setOffline').addEventListener('change', async (e) => { await saveSettings({ offline_mode: e.target.checked }); refreshStatus(); toast(e.target.checked ? '✈️ Offline mode on: nothing reaches the internet.' : 'Offline mode off.'); });
 bind('#setImagesEnabled', 'images_enabled', (el) => el.checked);
 bind('#setGithubPrivate', 'github_private', (el) => el.checked);
 bind('#setImageModel', 'image_model');
@@ -2829,7 +2858,20 @@ $('#setWake').addEventListener('change', async (e) => { await saveSettings({ wak
 bind('#setFolders', 'file_folders', (el) => el.value.split('\n').map((l) => l.trim()).filter(Boolean));
 
 const SOURCE_LABEL = { '👍': '👍', '👎': '👎', correction: 'from a correction', you: 'added by you' };
+async function loadMoods() {
+  const r = await api('/api/moods').catch(() => ({ days: [], count: 0 }));
+  $('#moodCount').textContent = r.count ? `(last 2 weeks)` : '';
+  $('#moodDays').innerHTML = r.days.length ? r.days.slice().reverse().map((d) => `<li><b>${escapeHtml(d.day)}</b> <span class="mood-main">${d.emoji} ${escapeHtml(d.main)}</span>
+      <span class="muted small">${Object.entries(d.counts).map(([m, n]) => `${escapeHtml(m)} ×${n}`).join(' · ')}</span></li>`).join('')
+    : '<li class="muted small">Nothing yet. As you chat, the days you seemed happy, stressed, tired and so on show up here.</li>';
+}
+$('#moodClear').onclick = async () => { if (!confirm('Clear your mood history?')) return; await api('/api/moods', { method: 'DELETE' }); loadMoods(); toast('Mood history cleared'); };
+bind('#setEmotions', 'emotion_tracking', (el) => el.checked);
+bind('#setAdaptiveVoice', 'adaptive_voice', (el) => el.checked);
+bind('#setAutoTasks', 'auto_tasks', (el) => el.checked);
+
 async function loadMemories() {
+  loadMoods();
   const [mems, lessons] = await Promise.all([api('/api/memories').catch(() => []), api('/api/lessons').catch(() => [])]);
   const row = (kind, item, extra = '') => `<li data-kind="${kind}" data-id="${item.id}"><span contenteditable="plaintext-only" spellcheck="false">${escapeHtml(item.text)}</span>${extra}<button type="button" data-forget title="Forget">${ICONS.trash}</button></li>`;
   $('#memoryList').innerHTML = mems.length
@@ -3054,8 +3096,41 @@ function renderWorkspaceChip() {
   const chip = $('#workspaceChip');
   chip.hidden = !ws;
   $('#folderBtn').classList.toggle('on', !!ws);
-  if (ws) chip.innerHTML = `<span>📂 <b>${escapeHtml(ws.name)}</b> <span class="muted">· ${ws.files} files${ws.languages?.length ? ` · ${escapeHtml(ws.languages.slice(0, 3).join(' '))}` : ''}</span></span><button type="button" id="wsClose" title="Close the project">${ICONS.x}</button>`;
+  const pr = state.problems?.path === ws?.path ? state.problems : null;
+  const badge = !pr ? '' : pr.errors + pr.warnings === 0
+    ? '<span class="ws-badge ok" title="Real-time code check: no problems found">✓ No problems</span>'
+    : `<button type="button" class="ws-badge bad" id="wsProblems" title="Show the problems">⚠ ${pr.errors + pr.warnings} problem${pr.errors + pr.warnings === 1 ? '' : 's'}</button>`;
+  if (ws) chip.innerHTML = `<span>📂 <b>${escapeHtml(ws.name)}</b> <span class="muted">· ${ws.files} files${ws.languages?.length ? ` · ${escapeHtml(ws.languages.slice(0, 3).join(' '))}` : ''}</span></span>${badge}<button type="button" id="wsClose" title="Close the project">${ICONS.x}</button>`;
+  if (ws && pr && state.problemsOpen && pr.problems.length) {
+    chip.insertAdjacentHTML('beforeend', `<ul class="ws-problems">${pr.problems.slice(0, 12).map((p, i) => `<li data-problem="${i}" title="Ask Athena to fix it">
+      <span class="${p.severity === 'error' ? 'err' : 'warn'}">${p.severity === 'error' ? '✕' : '!'}</span> <b>${escapeHtml(p.file)}:${p.line}</b> ${escapeHtml(p.message)}</li>`).join('')}</ul>`);
+  }
 }
+
+// Real-time code analysis: check the open project when it opens, after her edits, and every few seconds
+// (so changes you make in another editor show up too).
+async function checkProblems() {
+  const ws = state.chat?.workspace;
+  if (!ws?.path) return;
+  try {
+    const r = await api(`/api/workspace/problems?path=${encodeURIComponent(ws.path)}`);
+    const before = state.problems?.path === ws.path ? state.problems.errors + state.problems.warnings : null;
+    state.problems = { ...r, path: ws.path };
+    renderWorkspaceChip();
+    if (before === 0 && r.errors > 0) toast(`⚠ ${r.errors} new problem${r.errors === 1 ? '' : 's'} in ${ws.name}. Click the badge to see them.`, 'error');
+  } catch { /* the check is a bonus */ }
+}
+setInterval(() => { if (!document.hidden && state.chat?.workspace?.path) checkProblems(); }, 8000);
+$('#workspaceChip').addEventListener('click', (e) => {
+  if (e.target.closest('#wsProblems')) { state.problemsOpen = !state.problemsOpen; renderWorkspaceChip(); return; }
+  const li = e.target.closest('[data-problem]');
+  if (!li) return;
+  const p = state.problems.problems[Number(li.dataset.problem)];
+  $('#input').value = `Fix this problem in ${p.file} line ${p.line}: ${p.message}`;
+  $('#input').focus();
+  state.problemsOpen = false;
+  renderWorkspaceChip();
+});
 
 async function openWorkspaceDialog() {
   $('#wsPath').value = state.chat?.workspace?.path || '';
@@ -3083,6 +3158,7 @@ async function openWorkspace(path, { quiet = false } = {}) {
     }
     $('#workspaceDlg').close();
     renderWorkspaceChip();
+    checkProblems();
     if (!quiet) toast(path === state.status.athena_root ? '🛠 My own code is open. Tell me what to fix or add; you approve every change.'
       : `📂 Opened ${info.name} (${info.files} files). Ask away, e.g. “explain how this project works”`);
     if (state.chat.messages.length) saveChat();
@@ -3130,6 +3206,7 @@ $('#wsBrowse').onclick = async () => {
   $('#wsBrowse').disabled = false;
 };
 $('#workspaceChip').onclick = (e) => {
+  if (e.target.closest('#wsProblems, [data-problem], .ws-badge, .ws-problems')) return;  // the code check has its own clicks
   if (!e.target.closest('#wsClose')) return openWorkspaceDialog();
   delete state.chat.workspace;
   renderWorkspaceChip();
