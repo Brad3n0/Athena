@@ -1,6 +1,6 @@
 # ✦ Athena AI
 
-### Your own Jarvis. An evolving AI that's private, offline, and running entirely on your PC.
+### An evolving AI that's private, offline, and running entirely on your PC.
 
 Athena is an evolving personal AI assistant that lives on your computer, not in the cloud. The more you use her, the more she becomes *yours*. She talks, listens, learns who you are, and takes real action on your PC: opening apps, sending messages, writing code and helping with homework. Your conversations never leave your machine, and once she's set up she keeps working with the internet unplugged (only web search, sports and updates need it).
 
@@ -37,7 +37,7 @@ Linux/macOS: use `./start.sh` and `./install-voice.sh`.
 
 Athena runs her AI herself with a built-in engine that works on AMD and NVIDIA cards. One brain, **Qwen3-VL 8B**, handles chat, code, tools and pictures. Change it in **Settings → Models → Engine**, or switch to Ollama if you prefer. When a smarter brain comes out, a one-click **brain upgrade** keeps all her memories and settings.
 
-**🧠 See her mind:** click **Athena's Brain** in the sidebar for a 3D, Jarvis-style map of what she knows: memories, lessons, library, reflections and skills, linked where related. It lights up live while she thinks. Drag to turn, scroll to zoom, click a star to read or delete it, and slide the timeline to watch her grow. It pauses while you're in a game.
+**🧠 See her mind:** click **Athena's Brain** in the sidebar for a holographic 3D map of what she knows: memories, lessons, library, reflections and skills, linked where related. It lights up live while she thinks. Drag to turn, scroll to zoom, click a star to read or delete it, and slide the timeline to watch her grow. It pauses while you're in a game.
 
 ## She learns and grows
 
@@ -63,7 +63,7 @@ All of it is on your PC, editable in **Settings → About you**, and never chang
 - **▶ Run** code blocks; web pages and games **open live in the chat**.
 - **Live error check** shows problems as you work.
 
-## Like Jarvis: run your PC
+## Run your PC
 
 Typed or spoken:
 
