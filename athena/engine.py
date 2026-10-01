@@ -15,6 +15,7 @@ import json
 import re
 import shutil
 import subprocess
+import tarfile
 import sys
 import threading
 import time
@@ -164,11 +165,28 @@ def _download(client: httpx.Client, url: str, dest: Path, what: str) -> None:
 
 
 def _engine_asset() -> str:
+    # Windows builds come as .zip; Mac and Linux builds as .tar.gz (older releases used .zip for all)
     if sys.platform.startswith("win"):
         return r"bin-win-vulkan-x64\.zip$"
     if sys.platform == "darwin":
-        return r"bin-macos-arm64\.zip$"
-    return r"bin-ubuntu-vulkan-x64\.zip$|bin-ubuntu-x64\.zip$"
+        return r"bin-macos-arm64\.(?:zip|tar\.gz)$"
+    return r"bin-ubuntu-vulkan-x64\.(?:zip|tar\.gz)$|bin-ubuntu-x64\.(?:zip|tar\.gz)$"
+
+
+def _unpack(archive: Path, dest: Path) -> None:
+    if archive.name.endswith(".tar.gz"):
+        with tarfile.open(archive) as t:
+            if hasattr(tarfile, "data_filter"):
+                t.extractall(dest, filter="data")  # nothing may land outside the engine folder
+            else:
+                for m in t.getmembers():
+                    target = (dest / m.name).resolve()
+                    if not str(target).startswith(str(dest.resolve())):
+                        raise EngineError("The engine download looks damaged")
+                t.extractall(dest)
+    else:
+        with zipfile.ZipFile(archive) as z:
+            z.extractall(dest)
 
 
 def server_exe() -> Path | None:
@@ -186,8 +204,8 @@ def _releases_without_api(client: httpx.Client) -> list[dict[str, Any]]:
             _log(f"engine lookup without the API: no release tag in {r.url} (HTTP {r.status_code})")
             return []
         assets = []
-        for name in (f"llama-{tag}-bin-win-vulkan-x64.zip", f"llama-{tag}-bin-macos-arm64.zip",
-                     f"llama-{tag}-bin-ubuntu-vulkan-x64.zip", f"llama-{tag}-bin-ubuntu-x64.zip"):
+        for name in (f"llama-{tag}-bin-win-vulkan-x64.zip", f"llama-{tag}-bin-macos-arm64.tar.gz",
+                     f"llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz", f"llama-{tag}-bin-ubuntu-x64.tar.gz"):
             if not re.search(_engine_asset(), name):
                 continue
             url = f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{name}"
@@ -243,8 +261,7 @@ def ensure_engine(client: httpx.Client) -> Path:
     release, asset = _find_engine(client)
     zpath = ENGINE_DIR / asset["name"]
     _download(client, asset["browser_download_url"], zpath, "the engine")
-    with zipfile.ZipFile(zpath) as z:
-        z.extractall(ENGINE_DIR)
+    _unpack(zpath, ENGINE_DIR)
     zpath.unlink(missing_ok=True)
     exe = server_exe()
     if not exe:
