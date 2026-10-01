@@ -125,22 +125,15 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
     }
 
     if (theme.jarvis) buildJarvis();
-    // the nebula: thousands of particles in a slowly turning galaxy around her core, so her mind always looks full
+    // the nebula: thousands of particles in a soft cloud around her core, so her mind always looks full
     else {
       const n = small ? 5000 : 11000, pos = new Float32Array(n * 3), size = new Float32Array(n), color = new Float32Array(n * 3), seed = new Float32Array(n), show = new Float32Array(n).fill(1);
       const tmp = new THREE.Color();
       for (let i = 0; i < n; i++) {
-        let p;
-        if (i % 3) { // spiral arms in a tilted disc
-          const arm = i % 5, t = Math.pow(Math.random(), 0.7), a = arm * (Math.PI * 2 / 5) + t * 3.6 + (Math.random() - 0.5) * 0.5;
-          const r = 0.35 + t * 3.4;
-          p = [Math.cos(a) * r, (Math.random() - 0.5) * 0.35 * (1.2 - t), Math.sin(a) * r];
-          tmp.copy(palette[arm]).lerp(new THREE.Color(1, 1, 1), 0.15 * (1 - t));
-        } else { // a soft halo
-          const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = 0.4 + Math.pow(Math.random(), 1.6) * 3.2;
-          p = [Math.sqrt(1 - u * u) * Math.cos(a) * r, u * r * 0.8, Math.sqrt(1 - u * u) * Math.sin(a) * r];
-          tmp.copy(palette[Math.floor(Math.random() * palette.length)]).multiplyScalar(0.6);
-        }
+        // a soft round cloud of light around her core (no galaxy swirl)
+        const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = 0.4 + Math.pow(Math.random(), 1.4) * 3.4;
+        const p = [Math.sqrt(1 - u * u) * Math.cos(a) * r, u * r * 0.85, Math.sqrt(1 - u * u) * Math.sin(a) * r];
+        tmp.copy(palette[Math.floor(Math.random() * palette.length)]).lerp(new THREE.Color(1, 1, 1), 0.15).multiplyScalar(0.7);
         pos.set(p, i * 3);
         size[i] = 0.25 + Math.random() * 0.9; seed[i] = Math.random();
         tmp.multiplyScalar(0.4); color.set([tmp.r, tmp.g, tmp.b], i * 3);
