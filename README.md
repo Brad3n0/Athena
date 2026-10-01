@@ -1,14 +1,20 @@
 # ✦ Athena AI
 
-A private, **fully offline** AI assistant for your home PC. Like Jarvis, but yours.
+### Your own Jarvis. Private, offline, and running entirely on your PC.
 
-- 💬 **Assistant**: chat, writing, planning and questions
-- 🧑‍💻 **Code**: writes, fixes and runs code, and can work on a whole project folder
-- 📘 **Study**: study guides, flashcards, quizzes and homework help from your own notes
-- 🎙️ **Voice**: talk to her hands-free. Ask her anything, or just chat if you're bored
-- 🧠 **Memory**: she remembers what you tell her and gets smarter the more you use her
-- 🖥️ **Runs your PC**: opens apps, sends messages, controls music, finds files
-- 🌐 **Web search** when you're online, and everything else works offline
+Athena is a personal AI assistant that lives on your computer, not in the cloud. She talks, listens, learns who you are, and takes real action on your PC: opening apps, sending messages, writing code and helping with homework. Your conversations never leave your machine, and once she's set up she keeps working with the internet unplugged (only web search, sports and updates need it).
+
+| | |
+|---|---|
+| 🧠 **A mind of her own** | Runs her own AI brain on your graphics card. No subscriptions, no accounts, and your chats never leave your PC. |
+| 🌌 **See her think** | A holographic 3D map of her mind that lights up live as she thinks, remembers and learns. |
+| 🎙️ **Hands-free voice** | Talk naturally and she answers out loud. Say *"Hey Athena"* from across the room, interrupt her mid-sentence, or just chat when you're bored. |
+| 🖥️ **Runs your PC** | *"Open Discord and Spotify"*, *"message Jake I'm on"*, *"snap Chrome left"*, *"goodnight"*: apps, windows, music, messages and routines on command. |
+| 📈 **Gets smarter every day** | Remembers what matters to you, learns from your feedback, keeps a library of everything she looks up, and reflects on her day each night. |
+| 🧑‍💻 **A real developer** | Builds websites, apps and games from scratch, runs them live in the chat, checks her own work and fixes what's broken. |
+| 📘 **Your study partner** | Turns your notes into study guides, flashcards that adapt to you, and clickable quizzes with step-by-step explanations. |
+| 🎨 **Creative tools** | Edits your photos, makes new pictures, and helps you write essays, emails and stories. |
+| 🛡️ **Private by design** | Asks before she moves a file or sends a message, and keeps everything in one folder on your PC. |
 
 ---
 
