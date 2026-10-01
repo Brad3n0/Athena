@@ -4720,7 +4720,7 @@ let brainMod = null;
 const brainSignal = (...args) => brainMod?.brainSignal(...args);
 $('#openBrain').addEventListener('click', async () => {
   if (isNarrow()) toggleSidebar(false);
-  const opts = { api, toast, onAsk: (text) => sendMessage(text), style: state.settings.brain_style || 'holo',
+  const opts = { api, toast, onAsk: (text) => sendMessage(text), style: state.settings.brain_style || 'athena',
     onStyle: (k) => saveSettings({ brain_style: k }) };
   if (!brainMod) brainMod = await import('./brain3d.js').catch(() => null);
   if (!brainMod || brainMod.openBrain(opts) === false) {

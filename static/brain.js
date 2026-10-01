@@ -14,6 +14,11 @@ export const CLUSTERS = {
 // Looks to choose from (the switch at the top of the view). Hologram is Jarvis cyan; Constellation and Armillary use
 // Athena's own night-sky blue and gold.
 export const THEMES = {
+  athena: { name: 'Athena', jarvis: true, spiral: true, orange: [150, 190, 255], hud: [245, 197, 66], text: '#fff4d6', accent: '#f5c542',
+    wire: [245, 197, 66], link: [245, 205, 110], flow: [255, 226, 150], dust: [255, 238, 200],
+    core: [[240, 160, 40], [255, 205, 90], [255, 140, 90], [255, 250, 230]],
+    clusters: { about: [255, 200, 90], lessons: [255, 160, 130], library: [250, 228, 160], reflections: [235, 240, 255], skills: [150, 190, 255] },
+    globe: false, rings: 'none', stars: true, node: 'star', bg: 'radial-gradient(ellipse at 50% 42%, rgba(60,55,90,.45), rgba(11,14,26,.98) 60%), #0b0e1a' },
   holo: { name: 'Jarvis', jarvis: true, orange: [255, 150, 50], hud: [70, 215, 255], text: '#e6fbff', accent: '#4fd8ff', wire: [80, 200, 255], link: [120, 230, 255],
     flow: [150, 240, 255], dust: [150, 230, 255], core: [[40, 160, 255], [60, 220, 255], [120, 90, 255], [235, 252, 255]],
     clusters: { about: [255, 160, 60], lessons: [130, 235, 255], library: [40, 200, 255], reflections: [235, 250, 255], skills: [70, 140, 255] },
@@ -107,7 +112,7 @@ export function template() {
   </footer>`;
 }
 
-export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
+export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {}) {
   if (ui) { ui.el.hidden = false; ui.setStyle(style); ui.start(); ui.reload(); return; }
   const el = document.createElement('div');
   el.className = 'brain-view';

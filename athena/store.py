@@ -85,7 +85,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "auto_tasks": True,  # add to-dos you mention to Tasks by themselves, and tick them off when you say they're done
     "offline_mode": False,  # nothing reaches the internet (no web search, updates, YouTube, GitHub...)
     "sports_enabled": True,
-    "brain_style": "holo",  # Athena's Brain view: holo, constellation or armillary
+    "brain_style": "athena",  # Athena's Brain view: athena, holo (Jarvis), constellation or armillary
     "library_enabled": True,  # keep what she looks up and answers you liked, so she knows it next time
     "reflection_enabled": True,  # once a day, when idle, review the day's chats and learn from them
     "engine": "builtin",  # Athena's own engine (llama.cpp, no Ollama needed) or "ollama"

@@ -61,7 +61,7 @@ function pointsMaterial(map, { size = 1, twinkle = 1 } = {}) {
   });
 }
 
-export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
+export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {}) {
   if (ui) { ui.el.hidden = false; ui.setStyle(style); ui.start(); ui.reload(); return true; }
   const el = document.createElement('div');
   el.className = 'brain-view brain-3d';
@@ -97,7 +97,7 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
   const dotTex = spriteTexture('dot'), starTex = spriteTexture('star'), nodeTex = spriteTexture('node');
   const view = { yaw: 0.5, pitch: 0.18, dist: 11, targetDist: 8.6, focus: new THREE.Vector3(), focusTo: new THREE.Vector3(),
     drag: null, energy: 0.2, hidden: new Set(), cutoff: Infinity, boot: 0 };
-  let theme = THEMES[style] || THEMES.holo;
+  let theme = THEMES[style] || THEMES.athena;
   let data = null, map = { nodes: [], hubs: {}, links: [], t0: 0 };
   let world = new THREE.Group(); scene.add(world);
   let nodePoints = null, pulses = [], hover = null, pinned = null;
@@ -108,7 +108,7 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
     scene.remove(world);
     world.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
     world = new THREE.Group(); scene.add(world);
-    scene.background = col3(theme.node === 'dot' ? [2, 7, 14] : [9, 11, 22]);
+    scene.background = col3(theme.spiral ? [8, 10, 20] : theme.node === 'dot' ? [2, 7, 14] : [9, 11, 22]);
     scene.fog = new THREE.FogExp2(scene.background, 0.035);
     const cl = theme.clusters;
     const palette = Object.values(cl).map(col3);
@@ -130,15 +130,23 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
     }
 
     if (theme.jarvis) buildJarvis();
-    // the nebula: thousands of particles in a soft cloud around her core, so her mind always looks full
-    else {
+    // the nebula: thousands of particles around her core, so her mind always looks full
+    // (a galaxy spiral in the Athena style, a soft round cloud otherwise)
+    if (!theme.jarvis || theme.spiral) {
       const n = small ? 5000 : 11000, pos = new Float32Array(n * 3), size = new Float32Array(n), color = new Float32Array(n * 3), seed = new Float32Array(n), show = new Float32Array(n).fill(1);
       const tmp = new THREE.Color();
       for (let i = 0; i < n; i++) {
-        // a soft round cloud of light around her core (no galaxy swirl)
-        const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = 0.4 + Math.pow(Math.random(), 1.4) * 3.4;
-        const p = [Math.sqrt(1 - u * u) * Math.cos(a) * r, u * r * 0.85, Math.sqrt(1 - u * u) * Math.sin(a) * r];
-        tmp.copy(palette[Math.floor(Math.random() * palette.length)]).lerp(new THREE.Color(1, 1, 1), 0.15).multiplyScalar(0.7);
+        let p;
+        if (theme.spiral && i % 3) { // spiral arms in a tilted disc
+          const arm = i % 5, t = Math.pow(Math.random(), 0.7), a = arm * (Math.PI * 2 / 5) + t * 3.6 + (Math.random() - 0.5) * 0.5;
+          const r = 0.35 + t * 3.4;
+          p = [Math.cos(a) * r, (Math.random() - 0.5) * 0.35 * (1.2 - t), Math.sin(a) * r];
+          tmp.copy(palette[arm]).lerp(new THREE.Color(1, 1, 1), 0.15 * (1 - t));
+        } else { // a soft round cloud of light around her core
+          const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = 0.4 + Math.pow(Math.random(), 1.4) * (theme.spiral ? 2.6 : 3.4);
+          p = [Math.sqrt(1 - u * u) * Math.cos(a) * r, u * r * 0.85, Math.sqrt(1 - u * u) * Math.sin(a) * r];
+          tmp.copy(palette[Math.floor(Math.random() * palette.length)]).lerp(new THREE.Color(1, 1, 1), 0.15).multiplyScalar(theme.spiral ? 0.5 : 0.7);
+        }
         pos.set(p, i * 3);
         size[i] = 0.25 + Math.random() * 0.9; seed[i] = Math.random();
         tmp.multiplyScalar(0.4); color.set([tmp.r, tmp.g, tmp.b], i * 3);
@@ -146,7 +154,7 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
       const g = new THREE.BufferGeometry();
       for (const [k, arr, d] of [['position', pos, 3], ['size', size, 1], ['color', color, 3], ['seed', seed, 1], ['show', show, 1]]) g.setAttribute(k, new THREE.BufferAttribute(arr, d));
       const nebula = new THREE.Points(g, pointsMaterial(dotTex, { size: 0.55, twinkle: 0.6 }));
-      nebula.rotation.x = 0.35; nebula.userData.kind = 'nebula';
+      nebula.rotation.x = theme.spiral ? 0.42 : 0.35; nebula.userData.kind = 'nebula';
       world.add(nebula);
     }
 
@@ -202,7 +210,7 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
       const g = new THREE.BufferGeometry().setFromPoints(pts);
       return new THREE.Line(g, new THREE.LineBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false }));
     };
-    const globe = new THREE.Group(); globe.userData.kind = 'globe';
+    const globe = new THREE.Group(); globe.userData.kind = 'globe'; globe.visible = !theme.spiral; // Athena: the galaxy instead of a wire globe
     const gr = R * 1.12;
     for (let i = 1; i < 12; i++) { // latitudes
       const lat = -Math.PI / 2 + (i * Math.PI) / 12, pts = [];
@@ -218,7 +226,7 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
     globe.add(ico);
     world.add(globe);
     // data points scattered over the globe's surface and inside it
-    {
+    if (!theme.spiral) {
       const n = small ? 1800 : 3600, pos = new Float32Array(n * 3), size = new Float32Array(n), color = new Float32Array(n * 3), seed = new Float32Array(n), show = new Float32Array(n).fill(1);
       for (let i = 0; i < n; i++) {
         const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = i % 3 ? gr * (0.99 + Math.random() * 0.03) : gr * Math.pow(Math.random(), 0.5) * 0.95;
@@ -239,7 +247,7 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
       const grp = new THREE.Group(); grp.rotation.set(tiltX, 0, tiltZ);
       for (let s = 0; s < segs; s++) {
         const arc = segs === 1 ? Math.PI * 2 : (Math.PI * 2 / segs) * (0.55 + 0.25 * ((s * 7) % 3) / 2);
-        const m = new THREE.Mesh(new THREE.TorusGeometry(R * r, tube, 6, 160, arc), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(1.4), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }));
+        const m = new THREE.Mesh(new THREE.TorusGeometry(R * r, tube, 6, 160, arc), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(theme.spiral ? 0.85 : 1.4), transparent: true, opacity: op * (theme.spiral ? 0.8 : 1), blending: THREE.AdditiveBlending, depthWrite: false }));
         m.rotation.z = (s / segs) * Math.PI * 2;
         grp.add(m);
       }
@@ -274,7 +282,7 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
     const C = theme.hud, O = theme.orange, a = (c, al) => `rgba(${c[0]},${c[1]},${c[2]},${al})`;
     if (!hexPattern) { // faint hexagon grid behind everything
       const p = document.createElement('canvas'); p.width = 52; p.height = 90;
-      const q = p.getContext('2d'); q.strokeStyle = 'rgba(70,215,255,0.05)'; q.lineWidth = 1;
+      const q = p.getContext('2d'); q.strokeStyle = `rgba(${theme.hud.join(',')},0.05)`; q.lineWidth = 1;
       const hex = (cx2, cy2, r) => { q.beginPath(); for (let k = 0; k < 6; k++) { const an = Math.PI / 6 + k * Math.PI / 3; q.lineTo(cx2 + Math.cos(an) * r, cy2 + Math.sin(an) * r); } q.closePath(); q.stroke(); };
       hex(26, 15, 15); hex(0, 60, 15); hex(52, 60, 15);
       hexPattern = hx.createPattern(p, 'repeat');
@@ -389,12 +397,12 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
     const push = (a, b, c, alpha) => { lp.push(a.x, a.y, a.z, b.x, b.y, b.z); lc.push(c.r * alpha, c.g * alpha, c.b * alpha, c.r * alpha, c.g * alpha, c.b * alpha); };
     const zero = new THREE.Vector3();
     for (const hub of Object.values(map.hubs)) push(zero, hub.p3, col3(hub.color), 0.55);
-    for (const nd of nodes) push(map.hubs[nd.cluster].p3, nd.p3, col3(nd.color), 0.16);
+    for (const nd of nodes) push(map.hubs[nd.cluster].p3, nd.p3, col3(nd.color), theme.spiral ? 0.26 : 0.16);
     for (const [a, b] of map.links) {
       const mid = a.p3.clone().add(b.p3).multiplyScalar(0.32);
       const curve = new THREE.QuadraticBezierCurve3(a.p3, mid, b.p3);
       const pts = curve.getPoints(16);
-      for (let i = 0; i < pts.length - 1; i++) push(pts[i], pts[i + 1], col3(theme.flow), 0.22);
+      for (let i = 0; i < pts.length - 1; i++) push(pts[i], pts[i + 1], col3(theme.flow), theme.spiral ? 0.38 : 0.22);
     }
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
@@ -413,13 +421,14 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
 
   // ---------------------------------------------------------- panels (same as the flat version)
   function setStyle(key) {
-    theme = THEMES[key] || THEMES.holo;
-    el.dataset.style = THEMES[key] ? key : 'holo';
+    theme = THEMES[key] || THEMES.athena;
+    el.dataset.style = THEMES[key] ? key : 'athena';
     el.style.setProperty('--hud', theme.hud.join(','));
     el.style.setProperty('--hud-text', theme.text);
     el.style.setProperty('--hud-accent', theme.accent);
     el.style.background = '#000';
     el.querySelectorAll('[data-style]').forEach((b) => b.classList.toggle('on', b.dataset.style === el.dataset.style));
+    hexPattern = null; // redrawn in this style's color
     rebuild();
     if (data) paintPanels();
   }
@@ -551,8 +560,8 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
       view.focus.y + Math.sin(view.pitch + bob) * view.dist,
       view.focus.z + Math.cos(view.pitch + bob) * Math.cos(view.yaw) * view.dist);
     camera.lookAt(view.focus);
-    bloom.strength = (theme.jarvis ? 0.75 : 0.45) + view.energy * (theme.jarvis ? 0.7 : 0.4);
-    renderer.toneMappingExposure = theme.jarvis ? 1.1 : 0.85;
+    bloom.strength = (theme.spiral ? 0.6 : theme.jarvis ? 0.75 : 0.45) + view.energy * (theme.jarvis ? 0.7 : 0.4);
+    renderer.toneMappingExposure = theme.spiral ? 0.8 : theme.jarvis ? 1.1 : 0.85;
     world.traverse((o) => {
       const k = o.userData?.kind;
       if (o.material?.uniforms?.time) o.material.uniforms.time.value = t;
