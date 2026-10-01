@@ -4718,5 +4718,6 @@ init();
 // ------------------------------------------------------------ 🧠 Athena's Brain (holographic map of her mind)
 $('#openBrain').addEventListener('click', () => {
   if (isNarrow()) toggleSidebar(false);
-  openBrain({ api, toast, onAsk: (text) => sendMessage(text) });
+  openBrain({ api, toast, onAsk: (text) => sendMessage(text), style: state.settings.brain_style || 'holo',
+    onStyle: (k) => saveSettings({ brain_style: k }) });
 });
