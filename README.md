@@ -35,7 +35,7 @@ Athena runs her AI herself with a built-in engine that works on AMD and NVIDIA c
 
 ## She learns and grows
 
-- **Memory:** *"remember my sister's birthday is June 3rd"*. She also picks up things about you on her own.
+- **Memory:** *"remember my mom's birthday is on June 10th"*. She also picks up things about you on her own.
 - **Lessons:** rate answers 👍 / 👎 or correct her, and she follows it in every chat.
 - **Library:** everything she looks up is saved, so next time she already knows it.
 - **Nightly reflection:** when the PC is idle (never during games), she reviews the day and writes herself lessons.
@@ -61,14 +61,14 @@ All of it is on your PC, editable in **Settings → About you**, and never chang
 
 Typed or spoken:
 
-- **Apps & web:** *"open Discord and Spotify"*, *"watch MrBeast"*, *"search Amazon for gaming chairs"*
+- **Apps & web:** *"open Discord and Spotify"*, *"watch (YouTubers name)"*, *"search Amazon for AA batteries"*
 - **Windows & keys:** *"snap Chrome left"*, *"minimize everything"*, *"click Subscribe"*, *"type my address"*
 - **Music & PC:** *"pause the music"*, *"volume to 30"*, *"lock my PC"*, *"how's my PC doing?"*
 - **Messages:** Discord, WhatsApp, Instagram, Snapchat and more: *"message my brother on Discord I'm on"*. You see it and press **Allow** first.
 - **Find things:** *"find the folder Crimson Desert is in"* (checks Steam, Epic and Xbox too)
 - **Routines:** one phrase, many steps: *"goodnight"* closes apps, lowers the volume and locks the PC.
 - **Heads-ups:** she speaks up when a download finishes, memory is full, or a reminder is close.
-- **Tasks & reminders:** *"remind me at 6pm to call mom"*, *"set a 10 minute timer"*. She also adds tasks you mention and ticks them off.
+- **Tasks & reminders:** *"remind me at 12pm to call my professor"*, *"set a 10 minute timer"*. She also adds tasks you mention and ticks them off.
 
 ## Pictures
 
@@ -92,9 +92,9 @@ Scores, schedules, standings, injuries and past seasons: `/scores NBA tonight`. 
 2. Tick **Let my phone use Athena** in **Settings → Desktop app**, then restart Athena.
 3. Scan the QR code. Tap **Advanced → Proceed** on the warning (it's your own PC's certificate). Then **Add to Home Screen**.
 
-**Away from home:** install the free **Tailscale** app on the PC and phone (same account) and use the **🌍 From anywhere** address. Voice works on the phone too.
+**Away from home:** install **Tailscale** (free app) on the PC and phone (same account) and use the **🌍 From anywhere** address. Voice works on the phone too.
 
-## She can edit herself
+## She can edit herself (some bugs still getting worked out)
 
 *"Add a section to your settings for my workouts"* or *"fix the send button on my phone"*. She changes her own code, shows each change for **Allow**, checks it works, then restarts. Say *"undo your changes"* to go back.
 
