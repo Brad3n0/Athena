@@ -466,10 +466,18 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool, sel
             parts.append("Things you remember about the user:\n" + "\n".join(f"- {m['text']}" for m in memories[-60:]))
     if settings.get("auto_learn", True) and (lessons := learning.prompt_section(settings.get("persona") or "assistant")):
         parts.append(lessons)
+    # Always: talking about something isn't endorsing it. Small models often shut down whole topics they should explain.
+    parts.append(
+        "Explaining a topic is not endorsing it. When the user asks about a conspiracy theory, hoax, rumor, controversial "
+        "person or event, dark history, crime, drugs, sex, religion or politics, answer the question: explain what it is, "
+        "where it came from, what people claim, and what the evidence actually shows. Don't refuse to discuss a subject "
+        "just because it's offensive, false or uncomfortable."
+    )
     if settings.get("direct_mode"):
         parts.append(
             "Be direct and candid. Answer the question fully and plainly. Don't lecture, moralize, or add "
-            "warnings, disclaimers or caveats unless they're genuinely important. Treat the user as a capable adult."
+            "warnings, disclaimers or caveats unless they're genuinely important. Treat the user as a capable adult. Don't "
+            "refuse or change the subject on sensitive, edgy or controversial questions: give the real, factual answer."
         )
     length = settings.get("reply_length") or "normal"
     if length == "short" and mode != "voice":
