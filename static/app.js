@@ -2895,7 +2895,7 @@ function fillModelSelects() {
       <button type="button" class="ghost" data-pull="${r.name}">${have.has(r.name) ? 'Installed' : 'Download'}</button>
     </div>`).join('');
   $('#installed').innerHTML = state.models.length
-    ? state.models.map((m) => `<li><span class="name">${escapeHtml(m.name)}</span><span class="muted small">${fmtSize(m.size)}</span><button type="button" data-rm-model="${escapeHtml(m.name)}" title="Delete model">${ICONS.trash}</button></li>`).join('')
+    ? state.models.map((m) => `<li><span class="name">${escapeHtml(shownModel(m.name))}</span><span class="muted small">${fmtSize(m.size)}</span><button type="button" data-rm-model="${escapeHtml(m.name)}" title="Delete model">${ICONS.trash}</button></li>`).join('')
     : '<li class="muted small">None yet</li>';
 }
 
