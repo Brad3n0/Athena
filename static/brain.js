@@ -247,9 +247,7 @@ export function openBrain({ api, onAsk, toast } = {}) {
     }
     if (!view.drag) hover = best;
 
-    // hub labels
-    ctx.font = '600 11px "Segoe UI", system-ui, sans-serif';
-    ctx.textAlign = 'center';
+    // cluster hubs
     for (const hub of Object.values(map.hubs)) {
       if (view.hidden.has(hub.key) || !hub.p) continue;
       const h = hub.p;
@@ -257,7 +255,6 @@ export function openBrain({ api, onAsk, toast } = {}) {
       ctx.beginPath(); ctx.arc(h.x, h.y, 3.5, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = rgba(hub.color, 0.6); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.arc(h.x, h.y, 9 + Math.sin(t * 2 + h.x) * 1.5, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillText(hub.label.toUpperCase(), h.x, h.y - 16);
     }
 
     // signals travelling through her mind
@@ -288,9 +285,6 @@ export function openBrain({ api, onAsk, toast } = {}) {
       ctx.strokeStyle = `rgba(140,235,255,${0.35 + view.energy * 0.4})`; ctx.lineWidth = 1.2; ctx.stroke();
     }
     ctx.restore();
-    ctx.fillStyle = 'rgba(220,250,255,0.85)';
-    ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
-    ctx.fillText('CORE', c.x, c.y + cr * 2.2 + 12);
 
     // hover tooltip
     const tip = $b('tip');
