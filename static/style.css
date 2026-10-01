@@ -1225,10 +1225,17 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .brain-close { position: absolute; top: 24px; right: 34px; z-index: 2; width: 38px; height: 38px; border-radius: 50%;
   border: 1px solid rgba(var(--hud),.5); background: rgba(10,40,60,.5); color: var(--hud-text); font-size: 15px; cursor: pointer; }
 .brain-close:hover { background: rgba(var(--hud),.35); box-shadow: 0 0 14px rgba(var(--hud),.6); }
-.brain-stats { position: absolute; top: 84px; right: 34px; width: 210px; padding: 10px 14px; font-size: 11px;
-  border: 1px solid rgba(var(--hud),.3); background: linear-gradient(135deg, rgba(20,80,120,.25), rgba(5,20,35,.4));
-  box-shadow: inset 0 0 20px rgba(var(--hud),.08); clip-path: polygon(0 0, 92% 0, 100% 12%, 100% 100%, 8% 100%, 0 88%); }
-.bs-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed rgba(var(--hud),.15); }
+.brain-stats { position: absolute; top: 84px; right: 34px; width: 172px; padding: 6px 12px 8px; font-size: 10px; letter-spacing: .06em;
+  border: 1px solid rgba(var(--hud),.18); background: rgba(8,12,24,.28); backdrop-filter: blur(3px); opacity: .85; transition: opacity .2s;
+  clip-path: polygon(0 0, 92% 0, 100% 10%, 100% 100%, 8% 100%, 0 90%); }
+.brain-stats:hover { opacity: 1; }
+.bs-head { display: flex; justify-content: space-between; width: 100%; padding: 2px 0 4px; background: none; border: 0; cursor: pointer;
+  color: var(--hud-accent); font: inherit; font-size: 10px; letter-spacing: .25em; }
+.bs-head i { font-style: normal; transition: transform .2s; }
+.brain-stats.min { width: auto; padding-bottom: 4px; }
+.brain-stats.min .bs-row { display: none; }
+.brain-stats.min .bs-head i { transform: rotate(-90deg); }
+.bs-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed rgba(var(--hud),.12); }
 .bs-row span { color: var(--c, var(--hud-accent)); }
 .bs-row b { color: var(--hud-text); font-weight: 600; text-shadow: 0 0 8px rgba(var(--hud),.6); }
 .brain-legend { position: absolute; top: 96px; left: 34px; display: flex; flex-direction: column; gap: 6px; }

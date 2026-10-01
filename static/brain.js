@@ -156,7 +156,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     const c = data.core;
     $b('sub').textContent = `${c.brain.toUpperCase()} · ${c.engine.toUpperCase()} · ${c.state === 'ready' || c.engine === 'Ollama' ? 'ONLINE' : c.state.toUpperCase()}`;
     const count = (k) => (data[k] || []).length;
-    $b('stats').innerHTML = [['MEMORIES', count('memories'), 'about'], ['LESSONS', count('lessons'), 'lessons'],
+    $b('stats').innerHTML = '<button type="button" class="bs-head" title="Show or hide">VITALS <i>▾</i></button>' + [['MEMORIES', count('memories'), 'about'], ['LESSONS', count('lessons'), 'lessons'],
       ['LIBRARY', count('library'), 'library'], ['REFLECTIONS', count('reflections'), 'reflections'],
       ['SKILLS', count('skills'), 'skills'], ['LINKS', map.links.length, null]]
       .map(([k, n, cl]) => `<div class="bs-row"${cl ? ` style="--c:${rgba(theme.clusters[cl], 1)}"` : ''}><span>${k}</span><b>${n}</b></div>`).join('') +
@@ -523,6 +523,13 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
   canvas.addEventListener('pointerleave', () => { view.mouse = null; });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); view.zoom = Math.max(0.5, Math.min(2.6, view.zoom * (e.deltaY > 0 ? 0.92 : 1.08))); }, { passive: false });
   $b('time').addEventListener('input', updateTime);
+  // the stats panel folds away so it doesn't cover her brain (remembered on this device)
+  try { $b('stats').classList.toggle('min', localStorage.getItem('athena.brainStats') === 'min'); } catch { /* no storage here */ }
+  $b('stats').addEventListener('click', (e) => {
+    if (!e.target.closest('.bs-head')) return;
+    const min = $b('stats').classList.toggle('min');
+    try { localStorage.setItem('athena.brainStats', min ? 'min' : ''); } catch { /* fine */ }
+  });
   $b('legend').addEventListener('click', (e) => {
     const k = e.target.closest('[data-cl]')?.dataset.cl;
     if (!k) return;

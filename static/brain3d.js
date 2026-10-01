@@ -160,12 +160,13 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
 
     // her core: a white-hot center, a soft shell and spinning rings
     const coreCol = col3(theme.core[1]);
-    const core = new THREE.Mesh(new THREE.SphereGeometry(theme.jarvis ? 0.22 : 0.16, 48, 48), new THREE.MeshBasicMaterial({ color: col3(theme.core[3]).multiplyScalar(theme.spiral ? 1.7 : theme.jarvis ? 2.2 : 1.3) }));
+    const core = new THREE.Mesh(new THREE.SphereGeometry(theme.spiral ? 0.075 : theme.jarvis ? 0.22 : 0.16, 48, 48), new THREE.MeshBasicMaterial({ color: col3(theme.core[3]).multiplyScalar(theme.spiral ? 1.6 : theme.jarvis ? 2.2 : 1.3) }));
     core.userData.kind = 'core'; world.add(core);
+    if (theme.spiral) buildEnergyCore(coreCol);
     const shell = new THREE.Mesh(new THREE.SphereGeometry(0.42, 48, 48), new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { c: { value: coreCol }, e: { value: 0.3 } },
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { c: { value: coreCol }, e: { value: 0.3 }, k: { value: theme.spiral ? 0.3 : 1 } },
       vertexShader: 'varying vec3 n; varying vec3 v; void main(){ n = normalize(normalMatrix*normal); vec4 mv = modelViewMatrix*vec4(position,1.0); v = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
-      fragmentShader: 'uniform vec3 c; uniform float e; varying vec3 n; varying vec3 v; void main(){ float f = pow(1.0-abs(dot(n,v)), 2.5); gl_FragColor = vec4(c*(1.2+e*2.0), f*(0.8+e)); }',
+      fragmentShader: 'uniform vec3 c; uniform float e, k; varying vec3 n; varying vec3 v; void main(){ float f = pow(1.0-abs(dot(n,v)), 2.5); gl_FragColor = vec4(c*(1.2+e*2.0), f*(0.8+e)*k); }',
     }));
     shell.userData.kind = 'shell'; world.add(shell);
     for (let i = 0; i < (theme.jarvis ? 0 : 3); i++) {
@@ -200,6 +201,36 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
 
     // her real memories as bright stars, hubs, and the links between related things
     buildNodes();
+  }
+
+  // Athena's core: a see-through ball of gold energy with layers turning different ways, so it has real depth
+  // instead of being one flat glowing blob
+  function buildEnergyCore(coreCol) {
+    const gold = col3(theme.hud);
+    const plasma = new THREE.Mesh(new THREE.SphereGeometry(0.3, 64, 64), new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      uniforms: { c: { value: coreCol }, time: { value: 0 }, e: { value: 0.3 } },
+      vertexShader: 'varying vec3 p; varying vec3 n; varying vec3 v; void main(){ p = position; n = normalize(normalMatrix*normal); vec4 mv = modelViewMatrix*vec4(position,1.0); v = normalize(-mv.xyz); gl_Position = projectionMatrix*mv; }',
+      fragmentShader: `uniform vec3 c; uniform float time, e; varying vec3 p; varying vec3 n; varying vec3 v;
+        void main(){
+          vec3 q = p * 9.0;
+          float w = sin(q.x + time * 1.3 + sin(q.y * 1.7 - time)) + sin(q.y * 1.3 - time * 0.9 + sin(q.z * 1.5 + time * 0.7)) + sin(q.z * 1.1 + time * 1.1 + sin(q.x * 1.9));
+          float bands = pow(1.0 - abs(w) / 3.0, 6.0);
+          float rim = pow(1.0 - abs(dot(n, v)), 2.0);
+          gl_FragColor = vec4(c * (0.9 + e), (bands * 0.4 + rim * 0.12) * (0.55 + e * 0.6));
+        }`,
+    }));
+    plasma.userData.kind = 'plasma'; world.add(plasma);
+    for (const [geo, op, spin] of [[new THREE.IcosahedronGeometry(0.2, 1), 0.5, [0.35, 0.5]], [new THREE.IcosahedronGeometry(0.36, 0), 0.32, [-0.22, -0.3]], [new THREE.OctahedronGeometry(0.5, 0), 0.16, [0.12, -0.18]]]) {
+      const wire = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: gold.clone().multiplyScalar(1.3), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }));
+      wire.userData = { kind: 'coreWire', spin }; world.add(wire);
+    }
+    // three thin orbits around the core at different tilts (real 3D circles, not a flat badge)
+    for (let i = 0; i < 3; i++) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.46 + i * 0.09, 0.0035, 6, 160), new THREE.MeshBasicMaterial({ color: gold.clone().multiplyScalar(1.4), transparent: true, opacity: 0.6 - i * 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
+      ring.rotation.set(0.6 + i * 0.9, i * 1.3, 0.3 * i); ring.userData = { kind: 'coreRing', spin: (i % 2 ? -1 : 1) * (0.35 + i * 0.2) };
+      world.add(ring);
+    }
   }
 
   // Jarvis: a holographic globe of latitude/longitude lines, a cloud of data points on its surface, segmented
@@ -243,7 +274,9 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     // segmented rings orbiting at different tilts (orange accents)
     for (const [r, tube, segs, tiltX, tiltZ, spin, color, op] of [
       [1.32, 0.012, 5, 1.2, 0.3, 0.25, cyan, 0.75], [1.42, 0.006, 9, 1.75, -0.4, -0.18, cyan, 0.55],
-      [1.5, 0.018, 2, 0.5, 0.9, 0.35, orange, 0.9], [1.25, 0.004, 1, 1.57, 0, 0.1, cyan, 0.4]].filter((r) => !(theme.spiral && r[6] === orange))) {
+      [1.5, 0.018, 2, 0.5, 0.9, 0.35, orange, 0.9], [1.25, 0.004, 1, 1.57, 0, 0.1, cyan, 0.4]]
+      .filter((r) => !(theme.spiral && (r[6] === orange || r[1] > 0.01)))
+      .map((r) => (theme.spiral ? [r[0], 0.0028, r[2], r[3], r[4], r[5], r[6], r[7] * 0.55] : r))) {
       const grp = new THREE.Group(); grp.rotation.set(tiltX, 0, tiltZ);
       for (let s = 0; s < segs; s++) {
         const arc = segs === 1 ? Math.PI * 2 : (Math.PI * 2 / segs) * (0.55 + 0.25 * ((s * 7) % 3) / 2);
@@ -254,7 +287,8 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
       const holder = new THREE.Group(); holder.add(grp); holder.userData = { kind: 'jRing', spin, grp };
       world.add(holder);
     }
-    // the arc-reactor core: rings and three glowing segments, always facing you
+    // the arc-reactor core: rings and three glowing segments, always facing you (Athena has her 3D energy core instead)
+    if (theme.spiral) return;
     const reactor = new THREE.Group(); reactor.userData.kind = 'reactor';
     const mat = (c, o) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false });
     reactor.add(new THREE.Mesh(new THREE.RingGeometry(0.34, 0.36, 96), mat(cyan.clone().multiplyScalar(2), 0.9)));
@@ -402,15 +436,22 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     }
     // lines: core → hub → node (faint), and curved links between related memories
     const lp = [], lc = [];
-    const push = (a, b, c, alpha) => { lp.push(a.x, a.y, a.z, b.x, b.y, b.z); lc.push(c.r * alpha, c.g * alpha, c.b * alpha, c.r * alpha, c.g * alpha, c.b * alpha); };
+    const push = (a, b, c, alpha, c2 = c) => { lp.push(a.x, a.y, a.z, b.x, b.y, b.z); lc.push(c.r * alpha, c.g * alpha, c.b * alpha, c2.r * alpha, c2.g * alpha, c2.b * alpha); };
     const zero = new THREE.Vector3();
-    for (const hub of Object.values(map.hubs)) push(zero, hub.p3, col3(hub.color), 0.55);
-    for (const nd of nodes) push(map.hubs[nd.cluster].p3, nd.p3, col3(nd.color), theme.spiral ? 0.42 : 0.16);
+    // the Athena style tints every line in its section's color (a little richer, so they don't all add up to white)
+    const tint = (c) => (theme.spiral ? col3(c).offsetHSL(0, 0.25, -0.12) : col3(c));
+    for (const hub of Object.values(map.hubs)) push(zero, hub.p3, tint(hub.color), 0.55);
+    for (const nd of nodes) push(map.hubs[nd.cluster].p3, nd.p3, tint(nd.color), theme.spiral ? 0.4 : 0.16);
+    map.curves = [];
     for (const [a, b] of map.links) {
       const mid = a.p3.clone().add(b.p3).multiplyScalar(0.32);
       const curve = new THREE.QuadraticBezierCurve3(a.p3, mid, b.p3);
-      const pts = curve.getPoints(16);
-      for (let i = 0; i < pts.length - 1; i++) push(pts[i], pts[i + 1], col3(theme.flow), theme.spiral ? 0.55 : 0.22);
+      map.curves.push({ curve, a, b });
+      const pts = curve.getPoints(16), ca = tint(a.color), cb = tint(b.color);
+      for (let i = 0; i < pts.length - 1; i++) {
+        if (!theme.spiral) { push(pts[i], pts[i + 1], col3(theme.flow), 0.22); continue; }
+        push(pts[i], pts[i + 1], ca.clone().lerp(cb, i / 16), 0.42, ca.clone().lerp(cb, (i + 1) / 16));
+      }
     }
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
@@ -450,7 +491,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     const c = data.core;
     $b('sub').textContent = `${c.brain.toUpperCase()} · ${c.engine.toUpperCase()} · ${c.state === 'ready' || c.engine === 'Ollama' ? 'ONLINE' : c.state.toUpperCase()}`;
     const count = (k) => (data[k] || []).length;
-    $b('stats').innerHTML = [['MEMORIES', count('memories'), 'about'], ['LESSONS', count('lessons'), 'lessons'],
+    $b('stats').innerHTML = '<button type="button" class="bs-head" title="Show or hide">VITALS <i>▾</i></button>' + [['MEMORIES', count('memories'), 'about'], ['LESSONS', count('lessons'), 'lessons'],
       ['LIBRARY', count('library'), 'library'], ['REFLECTIONS', count('reflections'), 'reflections'],
       ['SKILLS', count('skills'), 'skills'], ['LINKS', map.links.length, null]]
       .map(([k, n, cl]) => `<div class="bs-row"${cl ? ` style="--c:${rgba(theme.clusters[cl], 1)}"` : ''}><span>${k}</span><b>${n}</b></div>`).join('') +
@@ -506,6 +547,19 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     }
   }
 
+  // a soft spark drifting along a random link (or out to a memory) even when she's idle
+  function idleSpark() {
+    const useLink = map.curves?.length && Math.random() < 0.6;
+    if (!useLink && !map.nodes.length) return;
+    const pick = useLink ? map.curves[Math.floor(Math.random() * map.curves.length)] : null;
+    const nd = pick ? (Math.random() < 0.5 ? pick.a : pick.b) : map.nodes[Math.floor(Math.random() * map.nodes.length)];
+    if (!pick && !map.hubs[nd.cluster]?.p3) return;
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, color: col3(nd.color).multiplyScalar(1.8), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+    m.scale.setScalar(0.13);
+    scene.add(m);
+    pulses.push({ m, curve: pick?.curve, back: pick && nd === pick.a, via: map.hubs[nd.cluster]?.p3, to: nd.p3, t: pick ? 0 : 0.5, speed: 0.35 + Math.random() * 0.3 });
+  }
+
   // ---------------------------------------------------------- input
   const ray = new THREE.Raycaster(); ray.params.Points.threshold = 0.12;
   const mouse = new THREE.Vector2(9, 9);
@@ -523,6 +577,13 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
   canvas.addEventListener('pointerleave', () => mouse.set(9, 9));
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); view.targetDist = Math.max(2.4, Math.min(14, view.targetDist * (e.deltaY > 0 ? 1.1 : 0.9))); }, { passive: false });
   $b('time').addEventListener('input', updateTime);
+  // the stats panel folds away so it doesn't cover her brain (remembered on this device)
+  try { $b('stats').classList.toggle('min', localStorage.getItem('athena.brainStats') === 'min'); } catch { /* no storage here */ }
+  $b('stats').addEventListener('click', (e) => {
+    if (!e.target.closest('.bs-head')) return;
+    const min = $b('stats').classList.toggle('min');
+    try { localStorage.setItem('athena.brainStats', min ? 'min' : ''); } catch { /* fine */ }
+  });
   $b('legend').addEventListener('click', (e) => {
     const k = e.target.closest('[data-cl]')?.dataset.cl;
     if (!k) return;
@@ -585,14 +646,23 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
       else if (k === 'dust') { o.rotation.y = -t * 0.04; o.material.uniforms.grow.value = 0.4 + 0.6 * boot; }
       else if (k === 'jRing') { o.userData.grp.rotation.z += dt * o.userData.spin * (1 + view.energy * 1.5); o.scale.setScalar(0.5 + 0.5 * boot); }
       else if (k === 'reactor') { o.quaternion.copy(camera.quaternion); o.children.forEach((m, i) => { if (i >= 2 && i < 5) m.rotation.z = t * (0.8 + view.energy * 3); if (i >= 5) m.rotation.z = -t * 0.3; }); o.scale.setScalar((0.6 + 0.4 * boot) * (1 + view.energy * 0.15)); }
+      else if (k === 'plasma') { o.material.uniforms.e.value = view.energy; o.rotation.y = t * 0.2; o.scale.setScalar((0.3 + 0.7 * boot) * (1 + view.energy * 0.12)); }
+      else if (k === 'coreWire') { o.rotation.x += dt * o.userData.spin[0] * (1 + view.energy * 2); o.rotation.y += dt * o.userData.spin[1] * (1 + view.energy * 2); o.scale.setScalar(0.3 + 0.7 * boot); }
       else if (k === 'core') o.scale.setScalar((1 + Math.sin(t * 3) * 0.05 * (1 + view.energy * 3)) * (0.3 + 0.7 * boot));
       else if (k === 'shell') { o.material.uniforms.e.value = view.energy; o.scale.setScalar(1 + Math.sin(t * 2) * 0.04 + view.energy * 0.15); }
     });
     // pulses: core → hub → memory
+    view.spark = (view.spark || 0) - dt;
+    if (theme.spiral && view.spark <= 0 && view.boot >= 1 && pulses.length < 24) { idleSpark(); view.spark = 0.25 + Math.random() * 0.5; }
     pulses = pulses.filter((q) => {
       q.t += dt * q.speed;
-      const p = q.t < 0.5 ? new THREE.Vector3().lerpVectors(new THREE.Vector3(), q.via, q.t * 2) : new THREE.Vector3().lerpVectors(q.via, q.to, (q.t - 0.5) * 2);
-      q.m.position.copy(p);
+      if (q.curve) {
+        q.curve.getPoint(Math.min(1, q.back ? 1 - q.t : q.t), q.m.position);
+        q.m.material.opacity = Math.sin(Math.min(1, q.t) * Math.PI); // fade in and out along the way
+      } else {
+        const p = q.t < 0.5 ? new THREE.Vector3().lerpVectors(new THREE.Vector3(), q.via, q.t * 2) : new THREE.Vector3().lerpVectors(q.via, q.to, (q.t - 0.5) * 2);
+        q.m.position.copy(p);
+      }
       if (q.t >= 1) { scene.remove(q.m); q.m.material.dispose(); return false; }
       return true;
     });
