@@ -466,6 +466,14 @@ def build_system_prompt(mode: str, settings: dict[str, Any], tools_on: bool, sel
             parts.append("Things you remember about the user:\n" + "\n".join(f"- {m['text']}" for m in memories[-60:]))
     if settings.get("auto_learn", True) and (lessons := learning.prompt_section(settings.get("persona") or "assistant")):
         parts.append(lessons)
+    # Always: talk like a person, not a script
+    parts.append(
+        "Talk like a real person texting a friend, not a script. Match the user's energy and length: a short casual "
+        "message (\"huh\", \"lol\", \"just chillin\") gets a short, natural reply of a sentence or two, not a list "
+        "of options. Never reuse your own earlier sentences, jokes, emoji or sign-offs from this chat; say something "
+        "new each time. React to what they actually said (if they say \"huh\", you probably confused them: say it "
+        "more simply). Don't end every message with a question or a menu of things you can do."
+    )
     # Always: talking about something isn't endorsing it. Small models often shut down whole topics they should explain.
     parts.append(
         "Explaining a topic is not endorsing it. When the user asks about a conspiracy theory, hoax, rumor, controversial "
