@@ -23,7 +23,7 @@ SAVED_FILE = DATA_DIR / "saved.json"
 PROJECTS_FILE = DATA_DIR / "projects.json"
 
 _lock = threading.RLock()
-_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "user_name": "",
@@ -149,7 +149,16 @@ def new_id() -> str:
 
 
 def valid_id(value: str) -> bool:
-    return bool(_ID_RE.match(value or ""))
+    return bool(_ID_RE.fullmatch(value or ""))
+
+
+def _chat_file(chat_id: str) -> Path:
+    """The file for a chat, guaranteed to be inside the chats folder."""
+    base = os.path.realpath(CHATS_DIR)
+    path = os.path.realpath(os.path.join(base, f"{chat_id}.json"))
+    if not valid_id(chat_id) or not path.startswith(base + os.sep):
+        raise ValueError("bad id")
+    return Path(path)
 
 
 # ---------------------------------------------------------------- settings
@@ -244,7 +253,7 @@ def search_messages(query: str, limit: int = 30, project_id: str | None = None) 
 def get_conversation(chat_id: str) -> dict[str, Any] | None:
     if not valid_id(chat_id):
         return None
-    return _read(CHATS_DIR / f"{chat_id}.json", None)
+    return _read(_chat_file(chat_id), None)
 
 
 def save_conversation(chat_id: str, chat: dict[str, Any]) -> dict[str, Any]:
@@ -260,7 +269,7 @@ def save_conversation(chat_id: str, chat: dict[str, Any]) -> dict[str, Any]:
             "created": existing.get("created") or chat.get("created") or now,
             "updated": now,
         }
-        _write(CHATS_DIR / f"{chat_id}.json", chat)
+        _write(_chat_file(chat_id), chat)
         return chat
 
 
@@ -268,7 +277,7 @@ def delete_conversation(chat_id: str) -> bool:
     if not valid_id(chat_id):
         return False
     try:
-        (CHATS_DIR / f"{chat_id}.json").unlink()
+        (_chat_file(chat_id)).unlink()
         return True
     except FileNotFoundError:
         return False
