@@ -41,7 +41,8 @@ FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 # The brains she can run. Each is one model file in GGUF format (Q4_K_M: a quarter of the size, nearly the same smarts).
 BRAINS: dict[str, dict[str, Any]] = {
     "qwen3-vl-8b": {"name": "ATH-X", "label": "ATH-X: chat, code, tools and pictures, fast (about 6 GB, built on Qwen3-VL 8B)",
-                    "repo": "ggml-org/Qwen3-VL-8B-Instruct-GGUF", "params": "8B", "family": "qwen3vl"},
+                    "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF", "repos": ["Qwen/Qwen3-VL-8B-Instruct-GGUF", "ggml-org/Qwen3-VL-8B-Instruct-GGUF"],
+                    "params": "8B", "family": "qwen3vl"},
     "gemma3-12b": {"name": "Gemma 3 12B", "label": "Gemma 3 12B: chat, writing and pictures (about 8 GB)",
                    "repo": "ggml-org/gemma-3-12b-it-GGUF", "params": "12B", "family": "gemma3"},
     "qwen3-14b": {"name": "Qwen3 14B", "label": "Qwen3 14B: smartest at code, math and tools; can't see pictures (about 9 GB)",
@@ -102,7 +103,8 @@ def status() -> dict[str, Any]:
     s["mode"] = "builtin" if wanted() else "ollama"
     s["brain"] = brain_key()
     s["brain_label"] = BRAINS[brain_key()]["label"]
-    s["brain_name"] = BRAINS[brain_key()].get("name") or s["brain_label"].split(":")[0]
+    running = s.get("running") if s.get("running") in BRAINS else brain_key()
+    s["brain_name"] = BRAINS[running].get("name") or BRAINS[running]["label"].split(":")[0]
     s["brains"] = {k: v["label"] for k, v in BRAINS.items()}
     if s["total"]:
         s["percent"] = round(100 * s["done"] / s["total"])
@@ -306,15 +308,22 @@ def ensure_brain(client: httpx.Client, key: str) -> tuple[Path, Path | None]:
     model, eyes = brain_files(key)
     if model:
         return model, eyes
-    repo = BRAINS[key]["repo"]
     _set(state="downloading", what="Athena's brain", done=0, total=0)
-    r = client.get(f"https://huggingface.co/api/models/{repo}", timeout=30)
-    if r.status_code != 200:
-        raise EngineError(f"Couldn't find the brain download ({repo}: HTTP {r.status_code})")
-    names = [s.get("rfilename", "") for s in r.json().get("siblings") or []]
-    model_name, eyes_name = _pick(names)
+    # Try each place the brain is published (the official one first), so one moved or renamed copy doesn't matter
+    model_name = eyes_name = None
+    problems = []
+    for repo in BRAINS[key].get("repos") or [BRAINS[key]["repo"]]:
+        r = client.get(f"https://huggingface.co/api/models/{repo}", timeout=30)
+        if r.status_code != 200:
+            problems.append(f"{repo}: HTTP {r.status_code}")
+            continue
+        model_name, eyes_name = _pick([s.get("rfilename", "") for s in r.json().get("siblings") or []])
+        if model_name:
+            break
+        problems.append(f"{repo}: no model file")
+    _log(f"brain {key}: " + ("; ".join(problems) + "; " if problems else "") + (f"using {repo}/{model_name}" if model_name else "not found"))
     if not model_name:
-        raise EngineError(f"No model file found in {repo}")
+        raise EngineError(f"Couldn't find the brain download ({'; '.join(problems)})")
     folder = BRAIN_DIR / key
     if eyes_name:
         _download(client, f"https://huggingface.co/{repo}/resolve/main/{eyes_name}", folder / eyes_name, "Athena's eyes (for pictures)")
@@ -330,9 +339,12 @@ def _brain_with_fallback(client: httpx.Client) -> tuple[Path, Path | None]:
     for key in order:
         try:
             files = ensure_brain(client, key)
+            # Your choice stays saved: if it couldn't be downloaded this time, she uses another brain for now and
+            # tries yours again next start (instead of quietly switching your setting)
+            _set(running=key, note="" if key == first else
+                 f"{BRAINS[first].get('name', first)} couldn't be downloaded right now, so she's using {BRAINS[key].get('name', key)} for now.")
             if key != first:
-                store.update_settings({"brain": key})
-                _log(f"brain {first} wasn't available; using {key}")
+                _log(f"brain {first} wasn't available; using {key} for now")
             return files
         except EngineError as exc:
             last = exc

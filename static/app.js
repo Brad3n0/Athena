@@ -240,6 +240,7 @@ function fillEngine(eng) {
     : eng.in_use && eng.state === 'ready' ? `✓ Running on her own engine${eng.build ? ` (llama.cpp ${escapeHtml(eng.build)})` : ''}. The Ollama model lists below aren't used.`
     : eng.state === 'off' && eng.in_use ? '✓ Her brain is unloaded to free the graphics card; it loads again on your next message.'
     : engineLine(eng);
+  if (eng.note) $('#engineNote').innerHTML += `<br>⚠️ ${escapeHtml(eng.note)}`;
 }
 
 let reconnectTimer = null;
