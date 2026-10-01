@@ -94,7 +94,7 @@ def match_phrase(message: str) -> dict[str, Any] | None:
     text = _norm(message)
     text = re.sub(r"^(hey |ok |okay )?athena\s*", "", text)
     text = re.sub(r"^(please |can you |start |run |do |activate )", "", text)
-    text = re.sub(r"\s*(please|mode on|now)$", "", text).strip()
+    text = re.sub(r"(?:please|mode on|now)$", "", text.strip()).strip()
     if not text or len(text) > 60:
         return None
     for r in list_routines():

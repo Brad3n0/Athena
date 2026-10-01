@@ -3422,11 +3422,13 @@ function previewSource(block) {
   const js = siblings.filter((b) => ['javascript', 'js'].includes(LANG_OF(b))).map((b) => b.querySelector('code').innerText);
   if (css.length || js.length) {
     // The reply split the page into files: drop links to local files and put the code in directly.
-    src = src.replace(/<link[^>]+href=["'](?!https?:|\/\/)[^"']+\.css["'][^>]*>/gi, '').replace(/<script[^>]+src=["'](?!https?:|\/\/)[^"']+\.js["'][^>]*>\s*<\/script>/gi, '');
-    const style = css.length ? `<style>\n${css.join('\n')}\n</style>` : '';
-    const script = js.length ? `<script>\n${js.join('\n;\n')}\n</script>` : '';
-    src = /<\/head>/i.test(src) ? src.replace(/<\/head>/i, `${style}</head>`) : style + src;
-    src = /<\/body>/i.test(src) ? src.replace(/<\/body>(?![\s\S]*<\/body>)/i, `${script}</body>`) : src + script;
+    const doc = new DOMParser().parseFromString(src, 'text/html'); // parsing only: nothing in it runs here
+    const local = (u) => !/^(?:[a-z]+:)?\/\//i.test(u || '');
+    doc.querySelectorAll('link[href]').forEach((el) => { if (local(el.getAttribute('href')) && /\.css(?:[?#]|$)/i.test(el.getAttribute('href'))) el.remove(); });
+    doc.querySelectorAll('script[src]').forEach((el) => { if (local(el.getAttribute('src')) && /\.js(?:[?#]|$)/i.test(el.getAttribute('src'))) el.remove(); });
+    if (css.length) { const st = doc.createElement('style'); st.textContent = `\n${css.join('\n')}\n`; doc.head.append(st); }
+    if (js.length) { const sc = doc.createElement('script'); sc.textContent = `\n${js.join('\n;\n')}\n`; doc.body.append(sc); }
+    src = `<!DOCTYPE html>\n${doc.documentElement.outerHTML}`;
   }
   return src;
 }

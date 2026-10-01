@@ -4,6 +4,7 @@ What's new in Athena, newest first. Most changes are built with [Claude Code](ht
 
 ## October 2026
 
+- **Security fixes** from GitHub's code scanning: safer chat and picture file paths, a stricter search link check, no error details sent to the page, faster text matching, and a safety net on the writing canvas.
 - **Updates** use the branch's new name, `Athena-Ai`.
 - **README** rewritten shorter, with the newer features added.
 - **Athena's Brain view**

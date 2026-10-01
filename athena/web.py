@@ -22,7 +22,8 @@ def _real_url(href: str) -> str:
     if href.startswith("//"):
         href = "https:" + href
     parsed = urlparse(href)
-    if "duckduckgo.com" in parsed.netloc and parsed.path.startswith("/l/"):
+    host = (parsed.hostname or "").lower()
+    if (host == "duckduckgo.com" or host.endswith(".duckduckgo.com")) and parsed.path.startswith("/l/"):
         target = parse_qs(parsed.query).get("uddg", [""])[0]
         return unquote(target) or href
     return href

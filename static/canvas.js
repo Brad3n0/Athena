@@ -111,11 +111,22 @@ export function applyCanvasReply(content) {
   return true;
 }
 
+/** Show the formatted document. The formatter already escapes what you typed; this also drops anything
+ * that could run (scripts, event handlers, javascript: links) as a second safety net. */
+function showFormatted(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.body.querySelectorAll('script, iframe, object, embed, link, meta, base, form').forEach((n) => n.remove());
+  doc.body.querySelectorAll('*').forEach((n) => [...n.attributes].forEach((a) => {
+    if (/^on/i.test(a.name) || (/^(?:href|src|action|formaction|xlink:href)$/i.test(a.name) && !/^(?:https?:|mailto:|#|data:image\/)/i.test(a.value.trim()))) n.removeAttribute(a.name);
+  }));
+  ui.preview.replaceChildren(...doc.body.childNodes);
+}
+
 function changed() {
   const c = deps.state.chat?.canvas;
   if (c && !ui.root.hidden) { c.text = ui.text.value; c.title = ui.title.value; }
   countWords();
-  if (ui.preview && !ui.preview.hidden) ui.preview.innerHTML = renderMarkdown(ui.text.value);
+  if (ui.preview && !ui.preview.hidden) showFormatted(renderMarkdown(ui.text.value));
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => { if (deps.state.chat?.canvas && (deps.state.chat.id || ui.text.value.trim())) deps.save(); }, 800);
 }
@@ -232,7 +243,7 @@ function setPreview(on) {
   ui.preview.hidden = !on;
   ui.text.hidden = on;
   $('#canvasHead [data-cv="preview"]').classList.toggle('on', on);
-  if (on) ui.preview.innerHTML = renderMarkdown(ui.text.value) || '<p class="muted">Nothing here yet.</p>';
+  if (on) showFormatted(renderMarkdown(ui.text.value) || '<p class="muted">Nothing here yet.</p>');
 }
 function togglePreview() { setPreview(ui.preview.hidden); }
 

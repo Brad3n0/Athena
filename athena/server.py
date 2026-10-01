@@ -2088,7 +2088,8 @@ async def rewrite(request: Request):
                             yield json.dumps({"t": chunk}) + "\n"
                     return
             except httpx.HTTPError as exc:
-                yield json.dumps({"error": f"Ollama unavailable: {exc}"}) + "\n"
+                print(f"Ollama unavailable: {exc!r}", file=sys.stderr)
+                yield json.dumps({"error": "Ollama isn't answering. Check that it's running, then try again."}) + "\n"
                 return
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
@@ -2540,10 +2541,11 @@ async def get_image(name: str):
 
     from .integrations import IMAGES_DIR
 
-    path = (IMAGES_DIR / name).resolve()
-    if path.parent != IMAGES_DIR.resolve() or not path.is_file():
+    base = os.path.realpath(IMAGES_DIR)
+    path = os.path.realpath(os.path.join(base, name))
+    if not path.startswith(base + os.sep) or os.path.dirname(path) != base or not os.path.isfile(path):
         raise HTTPException(404, "Not found")
-    kind = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(path.suffix.lower(), "image/png")
+    kind = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}.get(os.path.splitext(path)[1].lower(), "image/png")
     return FileResponse(path, media_type=kind)
 
 

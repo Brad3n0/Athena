@@ -51,7 +51,7 @@ def match(text: str) -> list[Call] | None:
     if m:
         who = t[m.start("who"):m.end("who")].strip(" ,:")  # as the user wrote it ("Jake", not "jake")
         who = re.sub(r"^(?:to|my friend)\s+", "", who, flags=re.I)
-        who = re.sub(r"\s+(?:group ?chat|gc|group|chat|server|dms?)$", "", re.sub(r"^the\s+", "", who, flags=re.I), flags=re.I) or who
+        who = re.sub(r"(?<=\s)(?:group ?chat|gc|group|chat|server|dms?)$", "", re.sub(r"^the\s+", "", who, flags=re.I).rstrip(), flags=re.I).rstrip() or who
         app = (m.groupdict().get("app") or "discord").strip()
         start = m.start("msg")
         msg = t[start:].strip().strip('"“”')  # keep the user's capitals in the message itself
@@ -90,7 +90,7 @@ def match(text: str) -> list[Call] | None:
         if m and m.group("q").strip():
             q = re.sub(r"^(?:the|a|an)\s+", "", t[m.start("q"):m.end("q")].strip(" '\""), flags=re.I)
             where = t[m.start("where"):m.end("where")].strip() if m.groupdict().get("where") else ""
-            where = re.sub(r"\s+(?:server|group ?chat|gc|chat|dms?)$", "", where, flags=re.I)
+            where = re.sub(r"(?<=\s)(?:server|group ?chat|gc|chat|dms?)$", "", where.rstrip(), flags=re.I).rstrip()
             return [("discord_search", {"query": q, **({"where": where} if where else {})})]
 
     # ---- play / search something on a site: "play lofi on spotify", "search youtube for cats", "look up x on amazon"
@@ -142,7 +142,7 @@ def match(text: str) -> list[Call] | None:
     m = re.match(LEAD + r"(?:open|launch|start|run|load|go to|pull up|bring up|fire up|boot up)\s+(?:up\s+)?(?P<what>.+?)" + TAIL, low)
     if m:
         what = m.group("what").strip()
-        parts = [p.strip() for p in re.split(r"\s*(?:,|\band\b|&)\s*", what) if p.strip()]
+        parts = [p.strip() for p in re.split(r",|\band\b|&", what) if p.strip()]
         if 0 < len(parts) <= 4 and all(len(p.split()) <= 3 and not NOT_A_TARGET.search(p) for p in parts):
             # Installed apps first (Spotify, Discord, Roblox...); open_app falls back to the website for sites like YouTube.
             return [("open_website", {"site": p}) if re.search(r"\.[a-z]{2,}$", p) else ("open_app", {"name": p}) for p in parts]
