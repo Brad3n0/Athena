@@ -2879,14 +2879,14 @@ function fillModelSelects() {
   for (const [id, mode] of [['#setModelAssistant', 'assistant'], ['#setModelCode', 'code'], ['#setModelVoice', 'voice'], ['#setModelStudy', 'study'], ['#setModelVision', 'vision']]) {
     const sel = $(id);
     const auto = mode === 'vision' ? pickVisionModel() : pickDefaultModel(mode);
-    sel.innerHTML = `<option value="">Automatic${auto ? ` (${escapeHtml(auto)})` : ''}</option>` +
-      state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
+    sel.innerHTML = `<option value="">Automatic${auto ? ` (${escapeHtml(shownModel(auto))})` : ''}</option>` +
+      state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(shownModel(m.name))}</option>`).join('');
     sel.value = modelNames().includes(state.settings.models?.[mode]) ? state.settings.models[mode] : '';
   }
   const saved = state.settings.self_model;
   const autoSelf = selfModel({ automatic: true });
-  $('#setSelfModel').innerHTML = `<option value="">Automatic${autoSelf ? ` (${escapeHtml(autoSelf)})` : ' (the model that\'s loaded)'}</option>` +
-    state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
+  $('#setSelfModel').innerHTML = `<option value="">Automatic${autoSelf ? ` (${escapeHtml(shownModel(autoSelf))})` : ' (the model that\'s loaded)'}</option>` +
+    state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(shownModel(m.name))}</option>`).join('');
   $('#setSelfModel').value = modelNames().includes(saved) ? saved : '';
   const have = new Set(modelNames().flatMap((n) => [n, n.replace(/:latest$/, '')]));
   $('#recommend').innerHTML = RECOMMENDED.map((r) => `
