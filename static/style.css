@@ -1278,3 +1278,6 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .brain-head { pointer-events: auto; }
 .brain-view[data-style="constellation"] .brain-scan, .brain-view[data-style="armillary"] .brain-scan { opacity: .12; }
 .brain-view[data-style="constellation"] .brain-title, .brain-view[data-style="armillary"] .brain-title { font-family: Cinzel, "Trajan Pro", Georgia, serif; animation: none; }
+
+.brain-hud { position: absolute; inset: 0; pointer-events: none; }
+.brain-view:not(.brain-3d) .brain-hud { display: none; }

@@ -8,7 +8,6 @@ import qrcode from './vendor/qrcode/qrcode.mjs';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf, mistakePrompt } from './study.js';
 import { hydrateGraphs } from './graph.js';
-import { openBrain, brainSignal } from './brain.js';
 import { initCanvas, openCanvas, closeCanvas, syncCanvas, canvasOpen, canvasForChat, applyCanvasReply } from './canvas.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -4716,8 +4715,16 @@ async function init() {
 init();
 
 // ------------------------------------------------------------ 🧠 Athena's Brain (holographic map of her mind)
-$('#openBrain').addEventListener('click', () => {
+// The 3D version (three.js) loads only when you open it; PCs without WebGL get the flat version.
+let brainMod = null;
+const brainSignal = (...args) => brainMod?.brainSignal(...args);
+$('#openBrain').addEventListener('click', async () => {
   if (isNarrow()) toggleSidebar(false);
-  openBrain({ api, toast, onAsk: (text) => sendMessage(text), style: state.settings.brain_style || 'holo',
-    onStyle: (k) => saveSettings({ brain_style: k }) });
+  const opts = { api, toast, onAsk: (text) => sendMessage(text), style: state.settings.brain_style || 'holo',
+    onStyle: (k) => saveSettings({ brain_style: k }) };
+  if (!brainMod) brainMod = await import('./brain3d.js').catch(() => null);
+  if (!brainMod || brainMod.openBrain(opts) === false) {
+    brainMod = await import('./brain.js');
+    brainMod.openBrain(opts);
+  }
 });

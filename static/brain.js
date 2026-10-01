@@ -4,7 +4,7 @@
 // thinks, uses a skill or pulls something from her library. Drag to turn, scroll to zoom, hover to read, click to
 // open (and delete) a node. The timeline slider shows how her mind grew.
 
-const CLUSTERS = {
+export const CLUSTERS = {
   about: { label: 'About you', color: [255, 186, 72], dir: [0, 0.75, 0.65] },
   lessons: { label: 'Lessons', color: [184, 140, 255], dir: [-0.95, 0.15, 0.05] },
   library: { label: 'Library', color: [64, 214, 255], dir: [0.95, 0.05, 0.1] },
@@ -14,9 +14,9 @@ const CLUSTERS = {
 // Looks to choose from (the switch at the top of the view). Hologram is Jarvis cyan; Constellation and Armillary use
 // Athena's own night-sky blue and gold.
 export const THEMES = {
-  holo: { name: 'Hologram', hud: [80, 210, 255], text: '#e6fbff', accent: '#4fd8ff', wire: [80, 200, 255], link: [120, 230, 255],
+  holo: { name: 'Jarvis', jarvis: true, orange: [255, 150, 50], hud: [70, 215, 255], text: '#e6fbff', accent: '#4fd8ff', wire: [80, 200, 255], link: [120, 230, 255],
     flow: [150, 240, 255], dust: [150, 230, 255], core: [[40, 160, 255], [60, 220, 255], [120, 90, 255], [235, 252, 255]],
-    clusters: { about: [255, 186, 72], lessons: [184, 140, 255], library: [64, 214, 255], reflections: [225, 250, 255], skills: [80, 140, 255] },
+    clusters: { about: [255, 160, 60], lessons: [130, 235, 255], library: [40, 200, 255], reflections: [235, 250, 255], skills: [70, 140, 255] },
     globe: true, rings: 'hud', floor: true, stars: false, node: 'dot', bg: 'radial-gradient(ellipse at 50% 42%, rgba(10,60,90,.55), rgba(2,8,16,.97) 62%), #01060d' },
   constellation: { name: 'Constellation', hud: [245, 197, 66], text: '#fff4d6', accent: '#f5c542', wire: [245, 197, 66], link: [245, 205, 110],
     flow: [255, 226, 150], dust: [255, 238, 200], core: [[240, 160, 40], [255, 205, 90], [255, 140, 90], [255, 250, 230]],
@@ -28,15 +28,15 @@ export const THEMES = {
     globe: false, rings: 'armillary', floor: false, stars: true, node: 'bead', bg: 'radial-gradient(ellipse at 50% 42%, rgba(70,55,40,.4), rgba(12,13,22,.98) 60%), #0c0d16' },
 };
 
-const KEY_OF = { memories: 'about', lessons: 'lessons', library: 'library', reflections: 'reflections', skills: 'skills' };
+export const KEY_OF = { memories: 'about', lessons: 'lessons', library: 'library', reflections: 'reflections', skills: 'skills' };
 const STOP = new Set('about after again also because before being could every from have here into just like make more most much need only other over same should some still such than that their them then there these they thing this those through very want what when where which while will with would your yours you\'re user users always never'.split(' '));
 
 let ui = null;
 
 function norm(v) { const l = Math.hypot(...v) || 1; return v.map((x) => x / l); }
 function cross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
-const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+export const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+export const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
 function keywords(text) {
   return new Set((String(text).toLowerCase().match(/[a-z][a-z0-9]{4,}/g) || []).filter((w) => !STOP.has(w)));
@@ -60,7 +60,7 @@ function capPoints(dir, n, r) {
   return pts;
 }
 
-function build(data, theme) {
+export function build(data, theme) {
   const nodes = [];
   const hubs = {};
   const colorOf = (key) => theme.clusters[key] || CLUSTERS[key].color;
@@ -84,9 +84,10 @@ function build(data, theme) {
   return { nodes, hubs, links, t0: times.length ? Math.min(...times) : Date.now() / 1000 };
 }
 
-function template() {
+export function template() {
   return `
   <canvas class="brain-canvas"></canvas>
+  <canvas class="brain-hud"></canvas>
   <div class="brain-scan"></div>
   <div class="brain-corner tl"></div><div class="brain-corner tr"></div><div class="brain-corner bl"></div><div class="brain-corner br"></div>
   <header class="brain-head">
