@@ -29,7 +29,7 @@ if not exist ".git" (
 )
 echo.
 echo Checking GitHub for updates...
-echo If a GitHub sign-in window opens, sign in. Your repo is private, and it only asks once.
+echo Downloading the newest version...
 git fetch origin %BRANCH% 2>nul || git fetch origin %OLD_BRANCH% || goto :fail
 rem Keep any changes Athena made to her own code ("fix yourself"): set them aside, update, then put them back.
 set "SELFCHANGES="
