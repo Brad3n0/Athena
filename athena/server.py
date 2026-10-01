@@ -713,6 +713,7 @@ async def chat(request: Request):
         if mode != "code" and not self_open and history and history[-1]["role"] == "user":
             if known := library.prompt_note(history[-1]["content"]):  # what she found out before about this
                 note = {**note, "content": note["content"] + "\n\n" + known}
+                yield _event("recall", count=known.count("\n- "))  # the Brain view lights up her library
         if user_mood:
             note = {**note, "content": note["content"] + " " + emotions.note(user_mood)}
         messages.insert(len(messages) - 1 if len(messages) > 1 else len(messages), note)
@@ -1557,6 +1558,43 @@ async def reflect_now():
     if r.get("error"):
         raise HTTPException(503, r["error"])
     return r
+
+
+SKILL_NAMES = {"core": "Time & timers", "tasks": "Tasks", "memory": "Memory", "files": "Files", "web": "Web search",
+               "pc": "PC control", "screen": "Screen vision", "code": "Code runner", "docs": "Documents", "images": "Pictures",
+               "home": "Smart home", "sports": "Sports"}
+
+
+@app.get("/api/brain")
+async def brain_map():
+    """Everything in Athena's mind, for the 🧠 Brain view: memories, lessons, library, reflections and skills."""
+    from . import engine, reflect
+
+    settings = store.get_settings()
+    groups: dict[str, int] = {}
+    for t in enabled_tools(settings):
+        groups[t.group] = groups.get(t.group, 0) + 1
+    eng = engine.status()
+    lib = library._load()[-400:]
+    return {
+        "core": {"brain": eng["brain_label"].split(":")[0] if eng["mode"] == "builtin" else "Ollama models",
+                 "engine": "Athena's Brain" if eng["mode"] == "builtin" else "Ollama", "state": eng["state"],
+                 "persona": settings.get("persona") or "assistant", "name": settings.get("user_name") or ""},
+        "memories": [{"id": m["id"], "text": m["text"], "time": m.get("created")} for m in store.list_memories()],
+        "lessons": [{"id": x["id"], "text": x["text"], "time": x.get("created"), "for": learning.lesson_persona(x) or "everyone",
+                     "source": x.get("source", "")} for x in learning.list_lessons()],
+        "library": [{"id": x["id"], "text": f"{x.get('topic', '')}: {x.get('text', '')[:300]}", "topic": x.get("topic", ""),
+                     "kind": x.get("kind", ""), "time": x.get("time")} for x in lib],
+        "reflections": [{"id": r.get("date"), "text": r.get("summary") or "", "time": r.get("time"), "lessons": r.get("lessons", [])}
+                        for r in reflect.log()],
+        "skills": [{"id": g, "text": f"{SKILL_NAMES.get(g, g)}: {n} tool{'s' if n != 1 else ''}", "time": None}
+                   for g, n in sorted(groups.items())],
+    }
+
+
+@app.delete("/api/library/{entry_id}")
+async def delete_library_entry(entry_id: str):
+    return {"deleted": await run_in_threadpool(library.remove, entry_id)}
 
 
 @app.delete("/api/library")

@@ -128,6 +128,19 @@ def stats() -> dict[str, Any]:
             "since": time.strftime("%b %d, %Y", time.localtime(items[0]["time"])) if items else None}
 
 
+def remove(entry_id: str) -> bool:
+    with _lock:
+        items = _load()
+        kept = [x for x in items if x.get("id") != entry_id]
+        if len(kept) == len(items):
+            return False
+        tmp = LIBRARY_FILE.with_suffix(".tmp")
+        tmp.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in kept), encoding="utf-8")
+        tmp.replace(LIBRARY_FILE)
+        _cache["mtime"] = -1.0
+    return True
+
+
 def clear() -> None:
     with _lock:
         LIBRARY_FILE.unlink(missing_ok=True)

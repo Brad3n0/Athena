@@ -8,6 +8,7 @@ import qrcode from './vendor/qrcode/qrcode.mjs';
 import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf, mistakePrompt } from './study.js';
 import { hydrateGraphs } from './graph.js';
+import { openBrain, brainSignal } from './brain.js';
 import { initCanvas, openCanvas, closeCanvas, syncCanvas, canvasOpen, canvasForChat, applyCanvasReply } from './canvas.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -1721,6 +1722,7 @@ async function generateReply({ voice = false, model = null, route = null, think 
         if (!line) continue;
         const ev = JSON.parse(line);
         if (reply.warming) delete reply.warming;
+        if (ev.type !== 'token' || Math.random() < 0.3) brainSignal(ev.type === 'tool_start' ? 'tool' : ev.type, ev.type === 'token' ? splitThinking(reply).content + ev.content : undefined);
         if (ev.type === 'token') {
           if (thinkStart && !reply.thinkSecs) reply.thinkSecs = Math.max(1, Math.round((Date.now() - thinkStart) / 1000));
           reply.content += ev.content;
@@ -1771,6 +1773,7 @@ async function generateReply({ voice = false, model = null, route = null, think 
           reply.error = ev.message;
         } else if (ev.type === 'done') {
           reply.stats = ev.stats;
+          brainSignal('token', splitThinking(reply).content);
         }
         paint();
       }
@@ -4711,3 +4714,9 @@ async function init() {
 }
 
 init();
+
+// ------------------------------------------------------------ 🧠 Athena's Brain (holographic map of her mind)
+$('#openBrain').addEventListener('click', () => {
+  if (isNarrow()) toggleSidebar(false);
+  openBrain({ api, toast, onAsk: (text) => sendMessage(text) });
+});
