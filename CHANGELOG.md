@@ -1,0 +1,36 @@
+# Changelog
+
+What's new in Athena, newest first. Most changes are built with [Claude Code](https://claude.ai/code).
+
+## October 2026
+
+- **Updates** use the branch's new name, `Athena-Ai`.
+- **README** rewritten shorter, with the newer features added.
+- **Athena's Brain view**
+  - A 3D, Jarvis-style map of her mind in gold and night blue.
+  - A see-through energy core with turning layers.
+  - Lines coloured by section, with sparks drifting along them.
+  - New memories always join the web of links.
+  - It pauses while you're in another window or a game.
+  - It's centred properly on phones and scaled screens.
+- **Athena grows**
+  - A library of everything she looks up.
+  - Nightly reflection that writes her own lessons.
+  - One-click brain upgrades.
+- **Athena's own engine**
+  - A built-in llama.cpp engine runs her brain, so Ollama isn't needed.
+  - One brain model (Qwen3-VL 8B) handles chat, code and pictures.
+  - Athena.exe opens her with no command windows.
+- **Phone away from home**
+  - A Tailscale address that works anywhere.
+  - A clear "can't reach your PC" message.
+
+## September 2026
+
+- **Sports research**: scores, stats and pick checks (`/scores`, `/pick`).
+- **Reliable picture making** and photo editing.
+- **Self-editing** that can change her own UI, like adding a Settings section.
+- **Game-safe hotkeys**: the desktop shortcut never pops up during games.
+- **New features**: offline mode, emotion tracking, adaptive voice, an auto task manager and live code error checking.
+- **Companion personality**: improved, and lessons stay with the personality they were learned in.
+- **Read aloud**: more reliable.
