@@ -27,7 +27,7 @@ Linux/macOS: use `./start.sh` and `./install-voice.sh`.
 
 ---
 
-## Athena's Brain (no Ollama needed)
+## Athena's Brain
 
 Athena runs her AI herself with a built-in engine that works on AMD and NVIDIA cards. One brain, **Qwen3-VL 8B**, handles chat, code, tools and pictures. Change it in **Settings → Models → Engine**, or switch to Ollama if you prefer. When a smarter brain comes out, a one-click **brain upgrade** keeps all her memories and settings.
 
