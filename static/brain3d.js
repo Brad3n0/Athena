@@ -137,7 +137,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
       const tmp = new THREE.Color();
       for (let i = 0; i < n; i++) {
         let p;
-        if (theme.spiral && i % 3) { // spiral arms in a tilted disc
+        if (false) { // (spiral arms: removed)
           const arm = i % 5, t = Math.pow(Math.random(), 0.7), a = arm * (Math.PI * 2 / 5) + t * 3.6 + (Math.random() - 0.5) * 0.5;
           const r = 0.35 + t * 3.4;
           p = [Math.cos(a) * r, (Math.random() - 0.5) * 0.35 * (1.2 - t), Math.sin(a) * r];
@@ -306,11 +306,13 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     }
     hx.restore();
     }
-    // 2. thick segmented arcs
+    // 2. thick segmented arcs (classic Jarvis only)
+    if (!theme.spiral) {
     hx.save(); hx.rotate(-t * 0.08);
     hx.lineWidth = 6; hx.lineCap = 'butt';
     for (let s = 0; s < 7; s++) { const s0 = (s / 7) * Math.PI * 2; hx.strokeStyle = a(C, (0.35 + 0.2 * (s % 2)) * boot); hx.beginPath(); hx.arc(0, 0, Rp * 1.32, s0, s0 + 0.62 * boot); hx.stroke(); }
     hx.restore();
+    }
     // 3. orange accent arcs and markers (classic Jarvis only)
     if (!theme.spiral) {
     hx.save(); hx.rotate(t * (0.25 + e * 0.6));
@@ -320,7 +322,8 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     for (const s0 of [0.3, 3.4]) { hx.save(); hx.rotate(s0); hx.beginPath(); hx.moveTo(Rp * 1.45, 0); hx.lineTo(Rp * 1.45 + 8, -4); hx.lineTo(Rp * 1.45 + 8, 4); hx.fill(); hx.restore(); }
     hx.restore();
     }
-    // 4. outer dashed ring with labels riding on it
+    // 4. outer dashed ring with labels riding on it (classic Jarvis only)
+    if (!theme.spiral) {
     hx.save(); hx.rotate(-t * 0.015);
     hx.setLineDash([2, 6]); hx.strokeStyle = a(C, 0.35 * boot); hx.lineWidth = 1; hx.beginPath(); hx.arc(0, 0, Rp * 1.55, 0, Math.PI * 2); hx.stroke(); hx.setLineDash([]);
     hx.font = '600 9px "Segoe UI", system-ui, sans-serif'; hx.fillStyle = a(C, 0.75 * boot);
@@ -329,6 +332,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
       hx.save(); hx.rotate(an); hx.translate(Rp * 1.55, 0); hx.rotate(Math.PI / 2); hx.fillText(txt, 0, -6); hx.restore();
     });
     hx.restore();
+    }
     // 5. radar sweep inside the globe
     if (hx.createConicGradient) {
       const sg = hx.createConicGradient((t * 0.8) % (Math.PI * 2), 0, 0);
