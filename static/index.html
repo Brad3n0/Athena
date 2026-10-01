@@ -356,14 +356,16 @@
         <label>Vision model <span class="muted small">(for "what's on my screen?", photos of worksheets and images)</span> <select id="setModelVision"></select></label>
         <label>Model for changing herself <span class="muted small">(“fix yourself”: one that fits on your graphics card is fastest and most reliable, e.g. qwen3:14b)</span> <select id="setSelfModel"></select></label>
 
-        <h3>Download a model</h3>
-        <p class="muted small">Needs internet once. Pick based on your graphics card memory (VRAM). Bigger = smarter but slower.</p>
+        <div id="ollamaDownloads">
+        <h3>Download an Ollama model</h3>
+        <p class="muted small">Only for the Ollama engine. Needs internet once. Pick based on your graphics card memory (VRAM). Bigger = smarter but slower.</p>
         <div class="recommend" id="recommend"></div>
         <div class="pull-row">
           <input id="pullName" placeholder="any model from ollama.com/library, e.g. qwen3:8b" />
           <button type="button" class="primary" id="pullBtn">Download</button>
         </div>
         <div class="progress" id="pullProgress" hidden><div class="bar"></div><span></span></div>
+        </div>
 
         <h3>Installed</h3>
         <ul class="installed" id="installed"></ul>

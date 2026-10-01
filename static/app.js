@@ -232,6 +232,7 @@ function fillEngine(eng) {
   $('#setBrain').innerHTML = Object.entries(eng.brains).map(([k, label]) => `<option value="${k}">${escapeHtml(label)}</option>`).join('');
   $('#setBrain').value = eng.brain;
   $('#brainRow').hidden = eng.mode !== 'builtin';
+  if ($('#ollamaDownloads')) $('#ollamaDownloads').hidden = eng.mode === 'builtin'; // her own brain needs no extra downloads
   $('#brainUpgrade').hidden = !(eng.mode === 'builtin' && eng.upgrade);
   if (eng.upgrade) $('#brainUpgrade').innerHTML = `✨ <b>A smarter brain is available:</b> ${escapeHtml(eng.upgrade.label)}. Her memories, lessons, library and settings all stay; the old brain is deleted once the new one works.
     <button type="button" class="primary" id="brainUpgradeBtn">Upgrade her brain</button>`;
