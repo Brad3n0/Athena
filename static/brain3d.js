@@ -51,8 +51,8 @@ function pointsMaterial(map, { size = 1, twinkle = 1 } = {}) {
         vec3 p = position * grow;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         float tw = 1.0 - twinkle * 0.45 * (0.5 + 0.5 * sin(time * (1.0 + seed * 2.0) + seed * 40.0));
-        gl_PointSize = size * scale * tw * (60.0 / -mv.z) * show;
-        vColor = color; vAlpha = clamp(1.4 - (-mv.z) / 14.0, 0.25, 1.0) * show;
+        gl_PointSize = size * scale * tw * (60.0 / -mv.z) * (0.55 + 0.45 * clamp(2.2 - (-mv.z) / 5.5, 0.0, 1.0)) * show;
+        vColor = color; vAlpha = clamp(2.2 - (-mv.z) / 5.5, 0.18, 1.0) * show;
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: `
@@ -109,7 +109,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     world.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
     world = new THREE.Group(); scene.add(world);
     scene.background = col3(theme.spiral ? [8, 10, 20] : theme.node === 'dot' ? [2, 7, 14] : [9, 11, 22]);
-    scene.fog = new THREE.FogExp2(scene.background, 0.035);
+    scene.fog = new THREE.FogExp2(scene.background, theme.spiral ? 0.075 : 0.035); // far lines fade into the dark: depth
     const cl = theme.clusters;
     const palette = Object.values(cl).map(col3);
 
@@ -160,7 +160,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
 
     // her core: a white-hot center, a soft shell and spinning rings
     const coreCol = col3(theme.core[1]);
-    const core = new THREE.Mesh(new THREE.SphereGeometry(theme.jarvis ? 0.22 : 0.16, 48, 48), new THREE.MeshBasicMaterial({ color: col3(theme.core[3]).multiplyScalar(theme.spiral ? 1.2 : theme.jarvis ? 2.2 : 1.3) }));
+    const core = new THREE.Mesh(new THREE.SphereGeometry(theme.jarvis ? 0.22 : 0.16, 48, 48), new THREE.MeshBasicMaterial({ color: col3(theme.core[3]).multiplyScalar(theme.spiral ? 1.7 : theme.jarvis ? 2.2 : 1.3) }));
     core.userData.kind = 'core'; world.add(core);
     const shell = new THREE.Mesh(new THREE.SphereGeometry(0.42, 48, 48), new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { c: { value: coreCol }, e: { value: 0.3 } },
@@ -247,7 +247,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
       const grp = new THREE.Group(); grp.rotation.set(tiltX, 0, tiltZ);
       for (let s = 0; s < segs; s++) {
         const arc = segs === 1 ? Math.PI * 2 : (Math.PI * 2 / segs) * (0.55 + 0.25 * ((s * 7) % 3) / 2);
-        const m = new THREE.Mesh(new THREE.TorusGeometry(R * r, tube, 6, 160, arc), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(theme.spiral ? 0.85 : 1.4), transparent: true, opacity: op * (theme.spiral ? 0.8 : 1), blending: THREE.AdditiveBlending, depthWrite: false }));
+        const m = new THREE.Mesh(new THREE.TorusGeometry(R * r, tube, 6, 160, arc), new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(theme.spiral ? 1.1 : 1.4), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }));
         m.rotation.z = (s / segs) * Math.PI * 2;
         grp.add(m);
       }
@@ -559,19 +559,19 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     view.boot = Math.min(1, view.boot + dt / 2.2);
     const boot = 1 - Math.pow(1 - view.boot, 3);
     view.energy = Math.max(0.15, view.energy - dt * 0.6);
-    if (!view.drag) view.yaw += dt * 0.05;
+    if (!view.drag) view.yaw += dt * (theme.spiral ? 0.14 : 0.05);
     view.dist += (view.targetDist - view.dist) * Math.min(1, dt * 2.5);
     if (innerWidth < innerHeight) view.targetDist = Math.max(view.targetDist, theme.spiral ? 8.5 : 10.5); // phones: the globe and its rings fit
     view.focus.lerp(view.focusTo, Math.min(1, dt * 2.5));
-    const bob = Math.sin(t * 0.3) * 0.08; // a slow cinematic drift
+    const bob = Math.sin(t * 0.3) * (theme.spiral ? 0.22 : 0.08); // a slow cinematic drift
     camera.position.set(
       view.focus.x + Math.cos(view.pitch + bob) * Math.sin(view.yaw) * view.dist,
       view.focus.y + Math.sin(view.pitch + bob) * view.dist,
       view.focus.z + Math.cos(view.pitch + bob) * Math.cos(view.yaw) * view.dist);
     camera.lookAt(view.focus);
-    bloom.strength = (theme.spiral ? 0.32 : theme.jarvis ? 0.75 : 0.45) + view.energy * (theme.spiral ? 0.3 : theme.jarvis ? 0.7 : 0.4);
-    bloom.threshold = theme.spiral ? 0.4 : 0.22;
-    renderer.toneMappingExposure = theme.spiral ? 0.8 : theme.jarvis ? 1.1 : 0.85;
+    bloom.strength = (theme.spiral ? 0.6 : theme.jarvis ? 0.75 : 0.45) + view.energy * (theme.spiral ? 0.5 : theme.jarvis ? 0.7 : 0.4);
+    bloom.threshold = theme.spiral ? 0.28 : 0.22;
+    renderer.toneMappingExposure = theme.spiral ? 1.05 : theme.jarvis ? 1.1 : 0.85;
     world.traverse((o) => {
       const k = o.userData?.kind;
       if (o.material?.uniforms?.time) o.material.uniforms.time.value = t;
