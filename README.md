@@ -1,8 +1,8 @@
 # ✦ Athena AI
 
-### Your own Jarvis. Private, offline, and running entirely on your PC.
+### Your own Jarvis. An evolving AI that's private, offline, and running entirely on your PC.
 
-Athena is a personal AI assistant that lives on your computer, not in the cloud. She talks, listens, learns who you are, and takes real action on your PC: opening apps, sending messages, writing code and helping with homework. Your conversations never leave your machine, and once she's set up she keeps working with the internet unplugged (only web search, sports and updates need it).
+Athena is an evolving personal AI assistant that lives on your computer, not in the cloud. The more you use her, the more she becomes *yours*. She talks, listens, learns who you are, and takes real action on your PC: opening apps, sending messages, writing code and helping with homework. Your conversations never leave your machine, and once she's set up she keeps working with the internet unplugged (only web search, sports and updates need it).
 
 | | |
 |---|---|
@@ -10,7 +10,7 @@ Athena is a personal AI assistant that lives on your computer, not in the cloud.
 | 🌌 **See her think** | A holographic 3D map of her mind that lights up live as she thinks, remembers and learns. |
 | 🎙️ **Hands-free voice** | Talk naturally and she answers out loud. Say *"Hey Athena"* from across the room, interrupt her mid-sentence, or just chat when you're bored. |
 | 🖥️ **Runs your PC** | *"Open Discord and Spotify"*, *"message Jake I'm on"*, *"snap Chrome left"*, *"goodnight"*: apps, windows, music, messages and routines on command. |
-| 📈 **Gets smarter every day** | Remembers what matters to you, learns from your feedback, keeps a library of everything she looks up, and reflects on her day each night. |
+| 🧬 **An evolving AI** | She grows with you: remembers what matters to you, learns lessons from your feedback, builds a library of everything she looks up, reflects on her day each night to improve, and upgrades to smarter brains as they come out, keeping everything she's learned. |
 | 🧑‍💻 **A real developer** | Builds websites, apps and games from scratch, runs them live in the chat, checks her own work and fixes what's broken. |
 | 📘 **Your study partner** | Turns your notes into study guides, flashcards that adapt to you, and clickable quizzes with step-by-step explanations. |
 | 🎨 **Creative tools** | Edits your photos, makes new pictures, and helps you write essays, emails and stories. |
