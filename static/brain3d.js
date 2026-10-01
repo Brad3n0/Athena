@@ -160,7 +160,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
 
     // her core: a white-hot center, a soft shell and spinning rings
     const coreCol = col3(theme.core[1]);
-    const core = new THREE.Mesh(new THREE.SphereGeometry(theme.jarvis ? 0.22 : 0.16, 48, 48), new THREE.MeshBasicMaterial({ color: col3(theme.core[3]).multiplyScalar(theme.jarvis ? 2.2 : 1.3) }));
+    const core = new THREE.Mesh(new THREE.SphereGeometry(theme.jarvis ? 0.22 : 0.16, 48, 48), new THREE.MeshBasicMaterial({ color: col3(theme.core[3]).multiplyScalar(theme.spiral ? 1.2 : theme.jarvis ? 2.2 : 1.3) }));
     core.userData.kind = 'core'; world.add(core);
     const shell = new THREE.Mesh(new THREE.SphereGeometry(0.42, 48, 48), new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { c: { value: coreCol }, e: { value: 0.3 } },
@@ -333,8 +333,8 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     });
     hx.restore();
     }
-    // 5. radar sweep inside the globe
-    if (hx.createConicGradient) {
+    // 5. radar sweep inside the globe (classic Jarvis only)
+    if (hx.createConicGradient && !theme.spiral) {
       const sg = hx.createConicGradient((t * 0.8) % (Math.PI * 2), 0, 0);
       sg.addColorStop(0, a(C, 0.16 * boot)); sg.addColorStop(0.07, a(C, 0)); sg.addColorStop(1, a(C, 0));
       hx.fillStyle = sg; hx.beginPath(); hx.arc(0, 0, Rp * 1.12, 0, Math.PI * 2); hx.fill();
@@ -391,7 +391,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     });
     const g = new THREE.BufferGeometry();
     for (const [k, arr, d] of [['position', pos, 3], ['size', size, 1], ['color', color, 3], ['seed', seed, 1], ['show', show, 1]]) g.setAttribute(k, new THREE.BufferAttribute(arr, d));
-    nodePoints = new THREE.Points(g, pointsMaterial(theme.node === 'star' ? starTex : nodeTex, { size: 0.85, twinkle: 0.35 }));
+    nodePoints = new THREE.Points(g, pointsMaterial(theme.node === 'star' ? starTex : nodeTex, { size: theme.spiral ? 1.15 : 0.85, twinkle: 0.25 }));
     nodePoints.userData.kind = 'nodes';
     world.add(nodePoints);
     // hubs
@@ -405,12 +405,12 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     const push = (a, b, c, alpha) => { lp.push(a.x, a.y, a.z, b.x, b.y, b.z); lc.push(c.r * alpha, c.g * alpha, c.b * alpha, c.r * alpha, c.g * alpha, c.b * alpha); };
     const zero = new THREE.Vector3();
     for (const hub of Object.values(map.hubs)) push(zero, hub.p3, col3(hub.color), 0.55);
-    for (const nd of nodes) push(map.hubs[nd.cluster].p3, nd.p3, col3(nd.color), theme.spiral ? 0.26 : 0.16);
+    for (const nd of nodes) push(map.hubs[nd.cluster].p3, nd.p3, col3(nd.color), theme.spiral ? 0.42 : 0.16);
     for (const [a, b] of map.links) {
       const mid = a.p3.clone().add(b.p3).multiplyScalar(0.32);
       const curve = new THREE.QuadraticBezierCurve3(a.p3, mid, b.p3);
       const pts = curve.getPoints(16);
-      for (let i = 0; i < pts.length - 1; i++) push(pts[i], pts[i + 1], col3(theme.flow), theme.spiral ? 0.38 : 0.22);
+      for (let i = 0; i < pts.length - 1; i++) push(pts[i], pts[i + 1], col3(theme.flow), theme.spiral ? 0.55 : 0.22);
     }
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
@@ -430,6 +430,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
   // ---------------------------------------------------------- panels (same as the flat version)
   function setStyle(key) {
     theme = THEMES[key] || THEMES.athena;
+    view.targetDist = theme.spiral ? 6.4 : 8.6; // Athena: closer, so her mind fills the screen
     el.dataset.style = THEMES[key] ? key : 'athena';
     el.style.setProperty('--hud', theme.hud.join(','));
     el.style.setProperty('--hud-text', theme.text);
@@ -471,7 +472,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
   function showCard(nd) {
     pinned = nd;
     const card = $b('card');
-    if (!nd) { card.hidden = true; view.focusTo.set(0, 0, 0); view.targetDist = 8.6; return; }
+    if (!nd) { card.hidden = true; view.focusTo.set(0, 0, 0); view.targetDist = theme.spiral ? 6.4 : 8.6; return; }
     view.focusTo.copy(nd.p3).multiplyScalar(0.55); view.targetDist = 6; // glide toward it
     const deletable = { memories: (id) => `/api/memories/${id}`, lessons: (id) => `/api/lessons/${id}`, library: (id) => `/api/library/${id}` }[nd.kind];
     const when = nd.time ? new Date(nd.time * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
@@ -560,7 +561,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     view.energy = Math.max(0.15, view.energy - dt * 0.6);
     if (!view.drag) view.yaw += dt * 0.05;
     view.dist += (view.targetDist - view.dist) * Math.min(1, dt * 2.5);
-    if (innerWidth < innerHeight) view.targetDist = Math.max(view.targetDist, 10.5); // phones: the globe and its rings fit
+    if (innerWidth < innerHeight) view.targetDist = Math.max(view.targetDist, theme.spiral ? 8.5 : 10.5); // phones: the globe and its rings fit
     view.focus.lerp(view.focusTo, Math.min(1, dt * 2.5));
     const bob = Math.sin(t * 0.3) * 0.08; // a slow cinematic drift
     camera.position.set(
@@ -568,7 +569,8 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
       view.focus.y + Math.sin(view.pitch + bob) * view.dist,
       view.focus.z + Math.cos(view.pitch + bob) * Math.cos(view.yaw) * view.dist);
     camera.lookAt(view.focus);
-    bloom.strength = (theme.spiral ? 0.6 : theme.jarvis ? 0.75 : 0.45) + view.energy * (theme.jarvis ? 0.7 : 0.4);
+    bloom.strength = (theme.spiral ? 0.32 : theme.jarvis ? 0.75 : 0.45) + view.energy * (theme.spiral ? 0.3 : theme.jarvis ? 0.7 : 0.4);
+    bloom.threshold = theme.spiral ? 0.4 : 0.22;
     renderer.toneMappingExposure = theme.spiral ? 0.8 : theme.jarvis ? 1.1 : 0.85;
     world.traverse((o) => {
       const k = o.userData?.kind;
