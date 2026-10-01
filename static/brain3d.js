@@ -19,8 +19,13 @@ function spriteTexture(kind = 'dot') {
   c.width = c.height = 128;
   const x = c.getContext('2d');
   const g = x.createRadialGradient(64, 64, 0, 64, 64, 64);
-  g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.18, 'rgba(255,255,255,.85)');
-  g.addColorStop(0.45, 'rgba(255,255,255,.18)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  if (kind === 'dot') {
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.18, 'rgba(255,255,255,.85)');
+    g.addColorStop(0.45, 'rgba(255,255,255,.18)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  } else { // her memory stars: a crisp bright point with only a small halo
+    g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.1, 'rgba(255,255,255,.95)');
+    g.addColorStop(0.22, 'rgba(255,255,255,.35)'); g.addColorStop(0.45, 'rgba(255,255,255,.06)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  }
   x.fillStyle = g; x.fillRect(0, 0, 128, 128);
   if (kind === 'star') { // a four-point twinkle
     for (const [w, h] of [[128, 5], [5, 128]]) {
@@ -89,7 +94,7 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
   resize();
   addEventListener('resize', resize);
 
-  const dotTex = spriteTexture('dot'), starTex = spriteTexture('star');
+  const dotTex = spriteTexture('dot'), starTex = spriteTexture('star'), nodeTex = spriteTexture('node');
   const view = { yaw: 0.5, pitch: 0.18, dist: 11, targetDist: 8.6, focus: new THREE.Vector3(), focusTo: new THREE.Vector3(),
     drag: null, energy: 0.2, hidden: new Set(), cutoff: Infinity, boot: 0 };
   let theme = THEMES[style] || THEMES.holo;
@@ -362,14 +367,15 @@ export function openBrain({ api, onAsk, toast, style = 'holo', onStyle } = {}) {
     const n = nodes.length;
     const pos = new Float32Array(n * 3), size = new Float32Array(n), color = new Float32Array(n * 3), seed = new Float32Array(n), show = new Float32Array(n);
     nodes.forEach((nd, i) => {
-      nd.p3 = new THREE.Vector3(...nd.pos).multiplyScalar(R);
+      const depth = 0.72 + ((i * 7919) % 97) / 97 * 0.55; // different distances from her core, so they don't bunch up
+      nd.p3 = new THREE.Vector3(...nd.pos).multiplyScalar(R * depth);
       pos.set([nd.p3.x, nd.p3.y, nd.p3.z], i * 3);
       size[i] = nd.size * 0.9; seed[i] = Math.random();
-      const c = col3(nd.color).multiplyScalar(1.6); color.set([c.r, c.g, c.b], i * 3);
+      const c = col3(nd.color).multiplyScalar(1.05); color.set([c.r, c.g, c.b], i * 3);
     });
     const g = new THREE.BufferGeometry();
     for (const [k, arr, d] of [['position', pos, 3], ['size', size, 1], ['color', color, 3], ['seed', seed, 1], ['show', show, 1]]) g.setAttribute(k, new THREE.BufferAttribute(arr, d));
-    nodePoints = new THREE.Points(g, pointsMaterial(theme.node === 'star' ? starTex : dotTex, { size: 1.05, twinkle: 0.35 }));
+    nodePoints = new THREE.Points(g, pointsMaterial(theme.node === 'star' ? starTex : nodeTex, { size: 0.85, twinkle: 0.35 }));
     nodePoints.userData.kind = 'nodes';
     world.add(nodePoints);
     // hubs

@@ -47,7 +47,7 @@ function capPoints(dir, n, r) {
   const d = norm(dir);
   const up = Math.abs(d[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0];
   const u = norm(cross(d, up)), v = cross(d, u);
-  const spread = Math.min(1.1, 0.25 + 0.09 * Math.sqrt(n));
+  const spread = Math.min(1.4, 0.45 + 0.12 * Math.sqrt(n)); // wide caps, so stars don't bunch up
   const pts = [];
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0 : Math.sqrt((i + 0.5) / n) * spread;
