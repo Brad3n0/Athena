@@ -8,7 +8,7 @@ if /i not "%~1"=="--from-temp" (
 setlocal
 cd /d "%~2"
 title Update Athena AI
-set "REPO=https://github.com/Dominationdrago/Athena.git"
+set "REPO=https://github.com/Brad3n0/Athena.git"
 set "BRANCH=Athena-Ai"
 rem The branch's old name, used if GitHub still has it under that name
 set "OLD_BRANCH=claude/athena-ai-offline-website-j31mcs"
@@ -27,6 +27,8 @@ if not exist ".git" (
   git init -q || goto :fail
   git remote add origin %REPO%
 )
+rem Always use the current address (it changes if the GitHub username or repo name changes)
+git remote set-url origin %REPO%
 echo.
 echo Checking GitHub for updates...
 echo Downloading the newest version...
