@@ -1461,6 +1461,43 @@ async def status():
     return info
 
 
+@app.post("/api/my-model")
+async def make_my_model(request: Request):
+    """Package a model as Athena's own: the base model plus her personality, what she knows about the user and her
+    lessons, saved in Ollama under its own name (e.g. "athena"). It then shows up in every model list, and works in any
+    app that uses Ollama (`ollama run athena`). Making it again with the same name updates it."""
+    body = await request.json()
+    base = str(body.get("base") or "").strip()
+    name = re.sub(r"[^a-z0-9._-]", "-", str(body.get("name") or "athena").strip().lower()).strip("-.") or "athena"
+    persona = str(body.get("persona") or "assistant")
+    if not base:
+        raise HTTPException(400, "Pick the model to build her on")
+    if name.split(":")[0] == base.split(":")[0]:
+        raise HTTPException(400, "Give her model a different name from the base model")
+    settings = store.get_settings()
+    system = build_system_prompt("assistant", {**settings, "persona": persona}, False)
+    system = system.replace("The current local date and time are in a note just before the user's latest message (only mention "
+                            "them when it's relevant, like when asked).", "").replace("\n\n\n\n", "\n\n").strip()
+    params = {"num_ctx": int(settings.get("context_size") or 16384), "temperature": 0.8}
+    try:
+        r = await client.post(f"{OLLAMA}/api/create", json={"model": name, "from": base, "system": system,
+                                                             "parameters": params, "stream": False}, timeout=600)
+        if r.status_code != 200 and "from" in r.text.lower():  # older Ollama: the Modelfile way
+            text = system.replace('"""', "'''")
+            modelfile = f'FROM {base}\nSYSTEM """{text}"""\n' + "".join(f"PARAMETER {k} {v}\n" for k, v in params.items())
+            r = await client.post(f"{OLLAMA}/api/create", json={"name": name, "modelfile": modelfile, "stream": False}, timeout=600)
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"Couldn't reach Ollama ({exc.__class__.__name__}). Is it running?") from exc
+    if r.status_code != 200:
+        try:
+            why = r.json().get("error") or r.text
+        except ValueError:
+            why = r.text
+        raise HTTPException(502, f"Ollama couldn't make the model: {str(why)[:300]}")
+    return {"created": name if ":" in name else f"{name}:latest", "base": base, "persona": persona,
+            "memories": len(store.list_memories()) if settings.get("memory_enabled") else 0}
+
+
 @app.get("/api/models")
 async def models():
     try:

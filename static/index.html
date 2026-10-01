@@ -339,6 +339,14 @@
         <label>Vision model <span class="muted small">(for "what's on my screen?", photos of worksheets and images)</span> <select id="setModelVision"></select></label>
         <label>Model for changing herself <span class="muted small">(“fix yourself”: one that fits on your graphics card is fastest and most reliable, e.g. qwen3:14b)</span> <select id="setSelfModel"></select></label>
 
+        <h3>✨ My own Athena model</h3>
+        <p class="muted small" style="margin-top:-6px">Bundle a model with Athena's personality, what she knows about you and her lessons into one model of her own. It shows up in every model list and works in any app that uses Ollama (<code>ollama run athena</code>). Make it again any time to update it with what she's learned since.</p>
+        <label>Build her on <select id="myModelBase"></select></label>
+        <label>Personality <select id="myModelPersona"></select></label>
+        <label>Name <input id="myModelName" value="athena" spellcheck="false" autocomplete="off" /></label>
+        <button type="button" class="primary" id="myModelMake">Make my Athena model</button>
+        <p class="muted small" id="myModelNote"></p>
+
         <h3>Download a model</h3>
         <p class="muted small">Needs internet once. Pick based on your graphics card memory (VRAM). Bigger = smarter but slower.</p>
         <div class="recommend" id="recommend"></div>
