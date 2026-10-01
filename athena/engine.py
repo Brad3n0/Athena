@@ -39,11 +39,11 @@ FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # The brains she can run. Each is one model file in GGUF format (Q4_K_M: a quarter of the size, nearly the same smarts).
 BRAINS: dict[str, dict[str, Any]] = {
-    "qwen3-vl-8b": {"label": "Qwen3-VL 8B: chat, code, tools and pictures, fast (about 6 GB)",
+    "qwen3-vl-8b": {"name": "ATH-X", "label": "ATH-X: chat, code, tools and pictures, fast (about 6 GB, built on Qwen3-VL 8B)",
                     "repo": "ggml-org/Qwen3-VL-8B-Instruct-GGUF", "params": "8B", "family": "qwen3vl"},
-    "gemma3-12b": {"label": "Gemma 3 12B: chat, writing and pictures (about 8 GB)",
+    "gemma3-12b": {"name": "Gemma 3 12B", "label": "Gemma 3 12B: chat, writing and pictures (about 8 GB)",
                    "repo": "ggml-org/gemma-3-12b-it-GGUF", "params": "12B", "family": "gemma3"},
-    "qwen3-14b": {"label": "Qwen3 14B: smartest at code, math and tools; can't see pictures (about 9 GB)",
+    "qwen3-14b": {"name": "Qwen3 14B", "label": "Qwen3 14B: smartest at code, math and tools; can't see pictures (about 9 GB)",
                   "repo": "Qwen/Qwen3-14B-GGUF", "params": "14B", "family": "qwen3"},
 }
 DEFAULT_BRAIN = "qwen3-vl-8b"
@@ -101,6 +101,7 @@ def status() -> dict[str, Any]:
     s["mode"] = "builtin" if wanted() else "ollama"
     s["brain"] = brain_key()
     s["brain_label"] = BRAINS[brain_key()]["label"]
+    s["brain_name"] = BRAINS[brain_key()].get("name") or s["brain_label"].split(":")[0]
     s["brains"] = {k: v["label"] for k, v in BRAINS.items()}
     if s["total"]:
         s["percent"] = round(100 * s["done"] / s["total"])
