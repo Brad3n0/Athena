@@ -1,6 +1,6 @@
 # ✦ Athena AI
 
-A private, **fully offline** AI assistant for your home PC. It looks and works like ChatGPT, but it runs local AI models through [Ollama](https://ollama.com), so your chats never leave your computer.
+A private, **fully offline** AI assistant for your home PC.
 
 - 💬 **Assistant mode**: everyday chat, writing, planning and questions
 - 🧑‍💻 **Code mode**: a coding model with syntax-highlighted code blocks, one-click copy, and file attachments (attach your source files and ask about them)
@@ -28,7 +28,7 @@ Linux/macOS: use `./pull-models.sh`, `./install-voice.sh` and `./start.sh` inste
 
 ## Updating Athena
 
-Double-click **`update.bat`** to get the newest version. The first time, it installs Git and asks you to sign in to GitHub once (the repo is private). After that it just downloads what changed. Your chats, settings and installed parts stay exactly as they are. Close Athena's black window and double-click `start` afterwards.
+Double-click **`update.bat`** or click update in Athena Ai's settings to get the newest version. The first time, it installs Git and asks you to sign in to GitHub once (the repo is private). After that it just downloads what changed. Your chats, settings and installed parts stay exactly as they are. Close Athena's black window and double-click `start` afterwards.
 
 - **Update button:** after running update.bat once, Athena checks GitHub when she opens and shows *Update available → Update now*. It backs up your data, downloads the new version and restarts her by itself. Also in Settings → General → Updates.
 
