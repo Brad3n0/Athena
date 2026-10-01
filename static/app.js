@@ -176,7 +176,7 @@ async function refreshStatus() {
   el.classList.toggle('ok', !!state.status.ollama);
   el.classList.toggle('bad', !state.status.ollama);
   $('#statusText').textContent = state.status.ollama
-    ? `${eng.in_use ? 'Athena engine' : `Ollama ${state.status.ollama_version || ''}`} · ${state.settings.offline_mode ? '✈️ Offline mode' : 'offline & private'}`
+    ? `${eng.in_use ? `${eng.brain_name || "Athena's Brain"}` : `Ollama ${state.status.ollama_version || ''}`} · ${state.settings.offline_mode ? '✈️ Offline mode' : 'offline & private'}`
     : own ? engineLine(eng) : 'Ollama not running';
   const banner = $('#banner');
   watchEngine(eng);
@@ -317,7 +317,7 @@ function currentModel() {
 
 function renderModelButton() {
   if (!state.chat) return;
-  $('#modelName').textContent = state.pcReachable === false ? "Can't reach your PC" : autoOn() && state.models.length ? '✨ Auto' : currentModel() || (state.models.length ? 'Select a model' : 'No models installed');
+  $('#modelName').textContent = state.pcReachable === false ? "Can't reach your PC" : autoOn() && state.models.length ? '✨ Auto' : shownModel(currentModel()) || (state.models.length ? 'Select a model' : 'No models installed');
   $('#modelBtn').title = autoOn() ? `Auto picks the best model for each message (usually ${currentModel()})` : '';
   renderReadyDot();
 }
@@ -356,6 +356,9 @@ function preloadCurrentModel() {
 }
 $('#input').addEventListener('focus', preloadCurrentModel); // you're about to type: get her ready
 
+/** The name to show for a model: her built-in brain shows as its own name (ATH-X), not the engine's internal id. */
+function shownModel(name) { return name === 'athena' ? state.status?.engine?.brain_name || "Athena's Brain" : name || ''; }
+
 function openModelMenu() {
   const menu = $('#modelMenu');
   const cur = currentModel();
@@ -365,8 +368,8 @@ function openModelMenu() {
   menu.innerHTML = state.models.length
     ? autoRow + state.models.map((m) => `
       <button class="opt" data-model="${escapeHtml(m.name)}">
-        <div><div>${escapeHtml(m.name)}</div><div class="meta">${escapeHtml([m.parameters, m.family, fmtSize(m.size)].filter(Boolean).join(' · '))}</div></div>
-        ${m.name === cur && !autoOn() ? `<span class="check">${ICONS.check}</span>` : `<span class="cmp-btn" data-compare="${escapeHtml(m.name)}" title="Compare side by side with ${escapeHtml(cur)}">⚖</span>`}
+        <div><div>${escapeHtml(shownModel(m.name))}</div><div class="meta">${escapeHtml([m.parameters, m.family, fmtSize(m.size)].filter(Boolean).join(' · '))}</div></div>
+        ${m.name === cur && !autoOn() ? `<span class="check">${ICONS.check}</span>` : `<span class="cmp-btn" data-compare="${escapeHtml(m.name)}" title="Compare side by side with ${escapeHtml(shownModel(cur))}">⚖</span>`}
       </button>`).join('') + '<div class="hint">⚖ answers your next messages with two models side by side · download more in Settings → Models</div>'
     : '<div class="hint">No models yet. Open Settings → Models to download one.</div>';
   menu.hidden = false;
@@ -1168,7 +1171,7 @@ function updateAssistantEl(el, m) {
   if (content) html += `<div class="md">${renderMarkdown(content)}</div>`;
   if (m.error) html += `<p class="error-text">⚠ ${escapeHtml(m.error)}</p>`;
   if (m.streaming && !content && !m.error && !stillThinking && !(m.tools || []).length && m.warming) {
-    html += `<span class="warming"><span class="spin"></span>Waking up ${escapeHtml(m.model || 'the model')}… the first reply takes a moment</span>`;
+    html += `<span class="warming"><span class="spin"></span>Waking up ${escapeHtml(shownModel(m.model) || 'the model')}… the first reply takes a moment</span>`;
   } else if (m.streaming && !content && !m.error && !stillThinking) html += '<span class="typing"><i></i><i></i><i></i></span>';
   if (m.streaming && stillThinking && !thinking.trim()) html += '<span class="typing"><i></i><i></i><i></i></span>';
   el.querySelector('.content').innerHTML = html;
@@ -1192,7 +1195,7 @@ function updateAssistantEl(el, m) {
     <button data-msg-act="deeper" title="Think harder: redo this answer, thinking longer and double-checking">${ICONS.brain}</button>
     <button data-msg-act="up" title="Good answer" class="${m.rating === 'up' ? 'rated' : ''}">${ICONS.up}</button>
     <button data-msg-act="down" title="Bad answer — tell Athena what to do better" class="${m.rating === 'down' ? 'rated' : ''}">${ICONS.down}</button>
-    <span class="stats">${m.think === 'deep' ? '<span class="think-tag" title="Thought harder about this one">🧠 Deep</span>' : ''}${m.route ? `<span class="route-tag" title="Auto picked ${escapeHtml(m.model || '')} for this">${ROUTE_LABEL[m.route] || ''}</span>` : ''}${escapeHtml([m.time && fmtTime(m.time), m.model, tps].filter(Boolean).join(' · '))}</span>`;
+    <span class="stats">${m.think === 'deep' ? '<span class="think-tag" title="Thought harder about this one">🧠 Deep</span>' : ''}${m.route ? `<span class="route-tag" title="Auto picked ${escapeHtml(shownModel(m.model))} for this">${ROUTE_LABEL[m.route] || ''}</span>` : ''}${escapeHtml([m.time && fmtTime(m.time), shownModel(m.model), tps].filter(Boolean).join(' · '))}</span>`;
   const idx = Number(el.dataset.idx);
   const isLast = state.chat && idx === state.chat.messages.length - 1;
   if (isLast && content && !m.error && !m.voice) {

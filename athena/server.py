@@ -1577,7 +1577,7 @@ async def brain_map():
     eng = engine.status()
     lib = library._load()[-400:]
     return {
-        "core": {"brain": eng["brain_label"].split(":")[0] if eng["mode"] == "builtin" else "Ollama models",
+        "core": {"brain": eng["brain_name"] if eng["mode"] == "builtin" else "Ollama models",
                  "engine": "Athena's Brain" if eng["mode"] == "builtin" else "Ollama", "state": eng["state"],
                  "persona": settings.get("persona") or "assistant", "name": settings.get("user_name") or ""},
         "memories": [{"id": m["id"], "text": m["text"], "time": m.get("created")} for m in store.list_memories()],
