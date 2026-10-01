@@ -176,19 +176,46 @@ def server_exe() -> Path | None:
     return hits[0] if hits else None
 
 
+def _releases_without_api(client: httpx.Client) -> list[dict[str, Any]]:
+    """The newest release's engine file, found without GitHub's API (which allows only 60 checks an hour per PC)."""
+    try:
+        r = client.get("https://github.com/ggml-org/llama.cpp/releases/latest", timeout=30, follow_redirects=True)
+        tag = str(r.url).rstrip("/").rsplit("/", 1)[-1]
+        if not re.fullmatch(r"b\d+", tag):
+            return []
+        assets = []
+        for name in (f"llama-{tag}-bin-win-vulkan-x64.zip", f"llama-{tag}-bin-macos-arm64.zip",
+                     f"llama-{tag}-bin-ubuntu-vulkan-x64.zip", f"llama-{tag}-bin-ubuntu-x64.zip"):
+            url = f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{name}"
+            if re.search(_engine_asset(), name) and client.head(url, timeout=30, follow_redirects=True).status_code == 200:
+                assets.append({"name": name, "browser_download_url": url})
+        return [{"tag_name": tag, "assets": assets}]
+    except httpx.HTTPError:
+        return []
+
+
 def ensure_engine(client: httpx.Client) -> Path:
     exe = server_exe()
     if exe:
         return exe
     _set(state="downloading", what="the engine", done=0, total=0)
-    r = client.get("https://api.github.com/repos/ggml-org/llama.cpp/releases/latest", timeout=30,
+    # The newest release is sometimes published before all its files have finished uploading, so if it doesn't
+    # have this PC's engine yet, use the newest recent release that does.
+    r = client.get("https://api.github.com/repos/ggml-org/llama.cpp/releases", params={"per_page": 15}, timeout=30,
                    headers={"Accept": "application/vnd.github+json"})
-    if r.status_code != 200:
-        raise EngineError(f"Couldn't find the engine download (GitHub answered {r.status_code})")
-    release = r.json()
-    asset = next((a for a in release.get("assets") or [] if re.search(_engine_asset(), a.get("name", ""))), None)
+    releases = r.json() if r.status_code == 200 and isinstance(r.json(), list) else []
+    if not releases:  # GitHub's API is busy or limiting this PC: work it out from the releases page instead
+        releases = _releases_without_api(client)
+    release, asset = {}, None
+    for rel in releases:
+        if rel.get("draft") or rel.get("prerelease"):
+            continue
+        asset = next((a for a in rel.get("assets") or [] if re.search(_engine_asset(), a.get("name", ""))), None)
+        if asset:
+            release = rel
+            break
     if not asset:
-        raise EngineError("No engine download for this kind of PC")
+        raise EngineError("Couldn't find an engine download for this PC right now. Try again in a few minutes")
     zpath = ENGINE_DIR / asset["name"]
     _download(client, asset["browser_download_url"], zpath, "the engine")
     with zipfile.ZipFile(zpath) as z:
