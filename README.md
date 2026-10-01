@@ -5,14 +5,14 @@ A private, **fully offline** AI assistant for your home PC.
 - 💬 **Assistant mode**: everyday chat, writing, planning and questions
 - 🧑‍💻 **Code mode**: a coding model with syntax-highlighted code blocks, one-click copy, and file attachments (attach your source files and ask about them)
 - 📘 **Study mode**: study guides, interactive **flashcards** (flip, shuffle, mark as known), clickable **practice quizzes** with scores, step-by-step homework help and study plans. Attach your notes as PDF, Word, PowerPoint or photos
-- 🎙️ **Voice mode**: talk to Athena hands-free. She listens, answers out loud in a natural offline voice, and you can tap to interrupt
+- 🎙️ **Voice mode**: talk to Athena hands-free. Ask her any questions you may have or just converse with her if your ever bored.
 - 🟡 **Voice orb**: a living gold orb that reacts to her voice and yours
 - 🧠 **Memory**: say *"remember that my sister's birthday is June 3rd"* and she knows it in every future chat
 - 📁 **Files**: *"find my resume"*, *"organize my Downloads"*, *"move the PDFs on my Desktop into Documents/Taxes"*, *"write my shopping list to a file"*, *"undo that"*
-- 🌐 **Web search** (when you're online): *"what's the weather in Chicago this weekend?"*, *"look up the newest Ollama models"*
-- 👀 **Watch her work**: every step shows up live in the chat, and she opens folders in File Explorer and pages in your browser as she works
-- ✅ **Tasks & timers**: say *"remind me to pay rent Friday"*, *"what's on my list?"*, *"I finished the laundry"* or *"set a 10 minute timer for the pasta"*
-- 🗂️ Chat history with search inside every message (**Ctrl+K**, and she can look through past chats herself: *"what did we decide about my resume last week?"*), rename and delete, plus a model picker, dark/light themes, image understanding (with a vision model) and a phone-friendly layout
+- 🌐 **Web search** (when you're online): *"what's the weather in Tampa this weekend?"*, *"Pull up YouTube"*
+- 👀 **Watch her work**: every step shows up live in the chat and on screen, and she opens folders in File Explorer and pages in your browser as she works
+- ✅ **Tasks & timers**: say *"remind me to turn in Fridays homework on Friday"*, *"what's on my to-do list?"*, *"I finished my homework"* or *"set a 10 minute timer for the lasagna"*
+- 🗂️ Chat history with search inside every message (**Ctrl+K**, and she can look through past chats herself: *"what did we decide about my study guide last week"*), rename and delete, plus a model picker, different light & color themes, image understanding (with a vision model) and a phone-friendly layout
 
 ---
 
@@ -21,7 +21,7 @@ A private, **fully offline** AI assistant for your home PC.
 1. **Install Ollama:** https://ollama.com/download. It runs quietly in your system tray.
 2. **Install Python 3.10+:** https://www.python.org/downloads/. On Windows, tick **"Add python.exe to PATH"**.
 3. **Get Athena:** download this repo (Code → Download ZIP) and unzip it, or `git clone` it.
-4. **Download AI models:** double-click **`pull-models.bat`** and choose your graphics card size. You can also do this later inside Athena under **Settings → Models**.
+4. **Download AI models:** double-click **`pull-models.bat`** and choose your graphics card size. You can also do this  inside Athena later under **Settings → Models**.
 5. **Enable offline voice (recommended):** double-click **`install-voice.bat`**. It installs [faster-whisper](https://github.com/SYSTRAN/faster-whisper) so Athena can hear you, and [Kokoro](https://github.com/thewh1teagle/kokoro-onnx) so she can talk in a natural voice. Together they download about 500 MB.
 
 Linux/macOS: use `./pull-models.sh`, `./install-voice.sh` and `./start.sh` instead.
