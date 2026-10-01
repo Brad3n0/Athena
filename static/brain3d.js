@@ -243,7 +243,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     // segmented rings orbiting at different tilts (orange accents)
     for (const [r, tube, segs, tiltX, tiltZ, spin, color, op] of [
       [1.32, 0.012, 5, 1.2, 0.3, 0.25, cyan, 0.75], [1.42, 0.006, 9, 1.75, -0.4, -0.18, cyan, 0.55],
-      [1.5, 0.018, 2, 0.5, 0.9, 0.35, orange, 0.9], [1.25, 0.004, 1, 1.57, 0, 0.1, cyan, 0.4]]) {
+      [1.5, 0.018, 2, 0.5, 0.9, 0.35, orange, 0.9], [1.25, 0.004, 1, 1.57, 0, 0.1, cyan, 0.4]].filter((r) => !(theme.spiral && r[6] === orange))) {
       const grp = new THREE.Group(); grp.rotation.set(tiltX, 0, tiltZ);
       for (let s = 0; s < segs; s++) {
         const arc = segs === 1 ? Math.PI * 2 : (Math.PI * 2 / segs) * (0.55 + 0.25 * ((s * 7) % 3) / 2);
@@ -294,7 +294,8 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     const Rp = Math.abs((edge.x - c.x) / 2 * innerWidth) || 200;
     hx.save(); hx.translate(cx, cy);
     const e = view.energy;
-    // 1. degree ring with ticks and numbers
+    // 1. degree ring with ticks and numbers (classic Jarvis only)
+    if (!theme.spiral) {
     hx.save(); hx.rotate(t * 0.03);
     hx.strokeStyle = a(C, 0.5 * boot); hx.lineWidth = 1; hx.beginPath(); hx.arc(0, 0, Rp * 1.18, 0, Math.PI * 2 * boot); hx.stroke();
     hx.font = '600 9px "Segoe UI", system-ui, sans-serif'; hx.textAlign = 'center'; hx.fillStyle = a(C, 0.7 * boot);
@@ -304,18 +305,21 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
       if (i % 15 === 0) { hx.save(); hx.rotate(an + Math.PI / 2); hx.fillText(String(i * 2).padStart(3, '0'), 0, -r1 - 14); hx.restore(); }
     }
     hx.restore();
+    }
     // 2. thick segmented arcs
     hx.save(); hx.rotate(-t * 0.08);
     hx.lineWidth = 6; hx.lineCap = 'butt';
     for (let s = 0; s < 7; s++) { const s0 = (s / 7) * Math.PI * 2; hx.strokeStyle = a(C, (0.35 + 0.2 * (s % 2)) * boot); hx.beginPath(); hx.arc(0, 0, Rp * 1.32, s0, s0 + 0.62 * boot); hx.stroke(); }
     hx.restore();
-    // 3. orange accent arcs and markers
+    // 3. orange accent arcs and markers (classic Jarvis only)
+    if (!theme.spiral) {
     hx.save(); hx.rotate(t * (0.25 + e * 0.6));
     hx.lineWidth = 3; hx.strokeStyle = a(O, 0.9 * boot);
     for (const s0 of [0.3, 3.4]) { hx.beginPath(); hx.arc(0, 0, Rp * 1.4, s0, s0 + 0.5); hx.stroke(); }
     hx.fillStyle = a(O, 0.9 * boot);
     for (const s0 of [0.3, 3.4]) { hx.save(); hx.rotate(s0); hx.beginPath(); hx.moveTo(Rp * 1.45, 0); hx.lineTo(Rp * 1.45 + 8, -4); hx.lineTo(Rp * 1.45 + 8, 4); hx.fill(); hx.restore(); }
     hx.restore();
+    }
     // 4. outer dashed ring with labels riding on it
     hx.save(); hx.rotate(-t * 0.015);
     hx.setLineDash([2, 6]); hx.strokeStyle = a(C, 0.35 * boot); hx.lineWidth = 1; hx.beginPath(); hx.arc(0, 0, Rp * 1.55, 0, Math.PI * 2); hx.stroke(); hx.setLineDash([]);
