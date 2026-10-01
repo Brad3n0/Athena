@@ -5,3 +5,6 @@ data/
 backups/
 models/
 .venv-voiceclone/
+engine/
+brain/
+Athena.exe

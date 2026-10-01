@@ -53,6 +53,10 @@ def _set_user_env(values: dict[str, str]) -> None:
 
 def restart_ollama(ollama_url: str) -> bool:
     """Restart Ollama (it crashed or froze), then wait until it answers. False if it can't be restarted from here."""
+    from . import engine
+
+    if ollama_url == engine.SHIM_URL:  # her own engine, not Ollama
+        return engine.restart()
     if not sys.platform.startswith("win"):
         return False
     return _restart_ollama(ollama_url)

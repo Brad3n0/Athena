@@ -34,8 +34,7 @@ if not exist ".venv\athena-ready" (
   ".venv\Scripts\python.exe" -m pip install -q -r requirements.txt >nul 2>nul
 )
 
-where ollama >nul 2>nul
-if errorlevel 1 echo [!] Ollama was not found. Install it from https://ollama.com/download
+rem Athena runs her own engine and downloads her brain by herself the first time (no Ollama needed).
 
 :run
 ".venv\Scripts\python.exe" -m athena %*

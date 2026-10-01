@@ -180,6 +180,49 @@ def set_autostart(enabled: bool) -> bool:
     return autostart_enabled()
 
 
+EXE = store.ROOT / "Athena.exe"
+
+
+def build_exe() -> dict[str, Any]:
+    """Make Athena.exe (a double-click app with her icon) in the Athena folder, then point the shortcuts at it."""
+    if not WIN:
+        return {"error": "Athena.exe can only be made on Windows"}
+    py = Path(sys.executable)
+    py = py.with_name("python.exe") if py.name.lower() == "pythonw.exe" else py
+    work = store.DATA_DIR / "exe-build"
+    try:
+        subprocess.run([str(py), "-m", "pip", "install", "-q", "pyinstaller"], capture_output=True, text=True,
+                       creationflags=0x08000000, timeout=600, check=True)
+        r = subprocess.run([str(py), "-m", "PyInstaller", "--onefile", "--noconsole", "--noconfirm", "--name", "Athena",
+                            "--icon", str(ensure_ico()), "--distpath", str(store.ROOT), "--workpath", str(work / "build"),
+                            "--specpath", str(work), str(store.ROOT / "launcher" / "athena_launcher.py")],
+                           capture_output=True, text=True, creationflags=0x08000000, timeout=900, cwd=str(store.ROOT))
+    except (subprocess.SubprocessError, OSError) as exc:
+        return {"error": f"Couldn't make Athena.exe: {exc}"}
+    if r.returncode != 0 or not EXE.exists():
+        return {"error": "Couldn't make Athena.exe: " + " ".join((r.stderr or r.stdout).strip().splitlines()[-3:])}
+    shutil.rmtree(work, ignore_errors=True)
+    try:
+        made = create_shortcuts()
+    except Exception:  # noqa: BLE001
+        made = []
+    return {"exe": str(EXE), "shortcuts": made,
+            "note": f"Made {EXE}. Double-click it (or the Athena AI shortcut on your Desktop) to open Athena."}
+
+
+def ensure_exe_once() -> None:
+    """First start on Windows: make Athena.exe and a Desktop shortcut by herself (once; a button redoes it)."""
+    flag = store.DATA_DIR / "exe-made"
+    if not WIN or EXE.exists() or flag.exists():
+        return
+    try:
+        flag.parent.mkdir(parents=True, exist_ok=True)
+        flag.write_text(time.strftime("%Y-%m-%d"), encoding="utf-8")
+        build_exe()
+    except Exception:  # noqa: BLE001  # a convenience: never let it stop Athena
+        pass
+
+
 def create_shortcuts() -> list[str]:
     """Put 'Athena AI' shortcuts on the Desktop and in the Start menu (Windows)."""
     if not WIN:
@@ -192,8 +235,9 @@ def create_shortcuts() -> list[str]:
         if not place.is_dir():
             continue
         lnk = place / "Athena AI.lnk"
+        target, args = (str(EXE), "") if EXE.exists() else (_pythonw(), "-m athena --desktop")  # Athena.exe once it's made
         ps = (f"$s=(New-Object -ComObject WScript.Shell).CreateShortcut('{lnk}');"
-              f"$s.TargetPath='{_pythonw()}';$s.Arguments='-m athena --desktop';"
+              f"$s.TargetPath='{target}';$s.Arguments='{args}';"
               f"$s.WorkingDirectory='{store.ROOT}';$s.IconLocation='{icon}';"
               "$s.Description='Athena AI — your offline assistant';$s.Save()")
         r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],

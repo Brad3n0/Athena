@@ -310,6 +310,18 @@
       </section>
 
       <section data-panel="models" hidden>
+        <div id="engineBox" style="margin-bottom:18px">
+          <h3 style="margin-top:0">🧠 Engine</h3>
+          <label>What runs Athena's brain
+            <select id="setEngine">
+              <option value="builtin">Athena's own engine (no Ollama needed)</option>
+              <option value="ollama">Ollama</option>
+            </select>
+          </label>
+          <label id="brainRow">Her brain <span class="muted small">(one model that does everything; downloads once)</span> <select id="setBrain"></select></label>
+          <p class="muted small" id="engineNote"></p>
+          <button type="button" class="ghost" id="engineCleanup">Free space: delete brains I'm not using</button>
+        </div>
         <label class="check"><input type="checkbox" id="setAutoRoute" /> <span><b>✨ Auto</b>: in the Assistant tab, pick the best model for each message (code → Code model, math &amp; school → Study model, pictures → Vision model, everything else → Assistant model)</span></label>
         <label class="check"><input type="checkbox" id="setPreload" /> Load my model in the background when Athena opens (so the first reply is fast)</label>
         <label>Keep models loaded after use
@@ -506,6 +518,8 @@
         <p class="muted small" style="margin-top:-8px">Format: <code>&lt;ctrl&gt;+&lt;alt&gt;+&lt;space&gt;</code>, <code>&lt;ctrl&gt;+&lt;alt&gt;+a</code>, <code>&lt;cmd&gt;+&lt;shift&gt;+a</code>. Takes effect right away in the desktop app. Leave a box empty to turn that shortcut off. Shortcuts are ignored while a fullscreen game is in front.</p>
         <label class="check"><input type="checkbox" id="setAutostart" /> Start Athena when Windows starts (quietly, in the tray)</label>
         <button type="button" class="ghost" id="makeShortcuts">Create desktop &amp; Start menu shortcuts</button>
+        <button type="button" class="ghost" id="buildExe">Make Athena.exe (double-click app)</button>
+        <p class="muted small">Athena.exe is in your Athena folder: double-click it to open her, no command windows. She makes it by herself the first time she runs; this button makes it again.</p>
 
         <h3>📱 Use Athena on your phone</h3>
         <p class="muted small" style="margin-top:-6px">Chat with Athena from your phone while she runs on this PC. Your phone needs to be on the same Wi-Fi. Everything still runs on the PC, so "open Spotify" opens it on the PC.</p>

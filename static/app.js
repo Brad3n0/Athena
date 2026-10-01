@@ -171,14 +171,71 @@ async function refreshStatus() {
   }
   if (!state.pcReachable) { showUnreachable(); return; }
   const el = $('#status');
+  const eng = state.status.engine || {};
+  const own = eng.mode === 'builtin';
   el.classList.toggle('ok', !!state.status.ollama);
   el.classList.toggle('bad', !state.status.ollama);
-  $('#statusText').textContent = state.status.ollama ? `Ollama ${state.status.ollama_version || ''} · ${state.settings.offline_mode ? '✈️ Offline mode' : 'offline & private'}` : 'Ollama not running';
+  $('#statusText').textContent = state.status.ollama
+    ? `${eng.in_use ? 'Athena engine' : `Ollama ${state.status.ollama_version || ''}`} · ${state.settings.offline_mode ? '✈️ Offline mode' : 'offline & private'}`
+    : own ? engineLine(eng) : 'Ollama not running';
   const banner = $('#banner');
-  if (!state.status.ollama) {
+  watchEngine(eng);
+  if (own && (eng.state === 'downloading' || eng.state === 'error' || (!eng.in_use && eng.state !== 'ready'))) {
+    banner.innerHTML = engineBanner(eng);
+    banner.hidden = false;
+    $('#engineRetry')?.addEventListener('click', () => api('/api/engine', json('POST', { engine: 'builtin' })).then(refreshStatus));
+  } else if (!state.status.ollama) {
     banner.innerHTML = `<b>Can't reach Ollama.</b> Start the Ollama app (or run <code>ollama serve</code>), then this will connect automatically. Looking at <code>${escapeHtml(state.status.ollama_url || 'http://127.0.0.1:11434')}</code>.`;
     banner.hidden = false;
   } else banner.hidden = true;
+}
+
+// ------------------------------------------------ Athena's own engine (her brain downloads and runs by itself)
+const gb = (n) => (n / 1e9).toFixed(1);
+function engineLine(eng) {
+  if (eng.state === 'downloading') return `Downloading ${eng.what}… ${eng.percent ?? 0}%`;
+  if (eng.state === 'starting') return 'Loading Athena’s brain…';
+  if (eng.state === 'error') return 'Athena’s engine needs attention';
+  return 'Starting Athena’s engine…';
+}
+function engineBanner(eng) {
+  if (eng.state === 'downloading') {
+    const size = eng.total ? ` (${gb(eng.done)} of ${gb(eng.total)} GB)` : '';
+    return `<b>Setting up Athena's own brain, one time only:</b> downloading ${escapeHtml(eng.what)} ${eng.percent ?? 0}%${size}.
+      <div class="engine-bar"><div style="width:${eng.percent ?? 0}%"></div></div>
+      After this she runs entirely on your PC with no Ollama. ${state.status.ollama ? 'You can keep chatting with Ollama meanwhile.' : 'She’ll be ready by herself when it finishes.'}`;
+  }
+  if (eng.state === 'error') {
+    return `<b>Athena's engine couldn't start:</b> ${escapeHtml(eng.error || 'unknown problem')}
+      <button type="button" class="ghost" id="engineRetry">Try again</button>
+      <span class="muted small">Or switch to Ollama in Settings → Models → Engine.</span>`;
+  }
+  return '<b>Loading Athena’s brain…</b> this takes a few seconds.';
+}
+let engineTimer = null, engineWas = '';
+function watchEngine(eng) {
+  clearTimeout(engineTimer);
+  if (eng.mode === 'builtin' && (eng.state !== 'ready' || !eng.in_use) && eng.state !== 'error') {
+    engineTimer = setTimeout(refreshStatus, 2000); // keep the progress moving
+  }
+  if (eng.in_use && eng.state === 'ready' && engineWas !== 'ready') {
+    if (engineWas) toast('✨ Athena’s own brain is ready. She no longer needs Ollama.');
+    refreshModels();
+  }
+  engineWas = eng.in_use ? eng.state : (eng.state || '');
+  if (!$('#settings').open || !$('#engineBox')) return;
+  fillEngine(eng);
+}
+function fillEngine(eng) {
+  if (!eng.brains) return;
+  $('#setEngine').value = eng.mode;
+  $('#setBrain').innerHTML = Object.entries(eng.brains).map(([k, label]) => `<option value="${k}">${escapeHtml(label)}</option>`).join('');
+  $('#setBrain').value = eng.brain;
+  $('#brainRow').hidden = eng.mode !== 'builtin';
+  $('#engineNote').innerHTML = eng.mode !== 'builtin' ? 'Using the Ollama app. The models below are Ollama’s.'
+    : eng.in_use && eng.state === 'ready' ? `✓ Running on her own engine${eng.build ? ` (llama.cpp ${escapeHtml(eng.build)})` : ''}. The Ollama model lists below aren't used.`
+    : eng.state === 'off' && eng.in_use ? '✓ Her brain is unloaded to free the graphics card; it loads again on your next message.'
+    : engineLine(eng);
 }
 
 let reconnectTimer = null;
@@ -635,7 +692,9 @@ function renderWelcome() {
   const hour = new Date().getHours();
   const greet = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   let body;
-  if (!state.status.ollama) {
+  if (!state.status.ollama && state.status.engine?.mode === 'builtin') {
+    body = `<div class="setup-card"><h3>Getting Athena ready</h3><p>${engineBanner(state.status.engine)}</p></div>`;
+  } else if (!state.status.ollama) {
     body = `<div class="setup-card"><h3>Almost there!</h3>
       <p>Athena needs <b>Ollama</b> running on this PC.</p>
       <ol><li>Install it from <code>ollama.com/download</code> (one time).</li><li>Open the Ollama app — it runs in your system tray.</li><li>This page connects automatically.</li></ol></div>`;
@@ -2697,6 +2756,7 @@ function openSettings(tab = 'general') {
   $('#setSounds').checked = !!s.sound_effects;
   $('#setBirthday').value = s.birthday ? `${new Date().getFullYear()}-${s.birthday}` : '';
   fillDataSettings();
+  if (state.status.engine) fillEngine(state.status.engine);
   $('#setBargeIn').checked = s.voice_barge_in !== false;
   $('#setVoiceSleep').checked = s.voice_sleep !== false;
   $('#setPc').checked = !!s.pc_enabled;
@@ -2830,6 +2890,27 @@ function fillModelSelects() {
     ? state.models.map((m) => `<li><span class="name">${escapeHtml(m.name)}</span><span class="muted small">${fmtSize(m.size)}</span><button type="button" data-rm-model="${escapeHtml(m.name)}" title="Delete model">${ICONS.trash}</button></li>`).join('')
     : '<li class="muted small">None yet</li>';
 }
+
+$('#setEngine').addEventListener('change', async (e) => {
+  const mode = e.target.value;
+  try {
+    const r = await api('/api/engine', json('POST', { engine: mode }));
+    state.status.engine = r;
+    toast(mode === 'builtin' ? 'Switching to Athena’s own engine…' : 'Using Ollama.');
+    await refreshStatus(); await refreshModels(); fillModelSelects();
+  } catch (err) { toast(err.message, 'error'); }
+});
+$('#setBrain').addEventListener('change', async (e) => {
+  try {
+    await api('/api/engine', json('POST', { engine: 'builtin', brain: e.target.value }));
+    toast('Switching brains. A new brain downloads once; the old one stays until you free the space.');
+    refreshStatus();
+  } catch (err) { toast(err.message, 'error'); }
+});
+$('#engineCleanup').addEventListener('click', async () => {
+  const r = await api('/api/engine/cleanup', json('POST', {})).catch((e) => ({ error: e.message }));
+  toast(r.error || (r.freed_gb ? `Freed ${r.freed_gb} GB` : 'Nothing to free'));
+});
 
 function fillVoices() {
   const voices = listVoices();
@@ -3741,7 +3822,18 @@ async function refreshDesktop() {
   $('#setAutostart').checked = d.autostart;
   $('#setAutostart').disabled = !win;
   $('#makeShortcuts').disabled = !win;
+  $('#buildExe').disabled = !win;
+  $('#buildExe').textContent = d.exe ? 'Remake Athena.exe' : 'Make Athena.exe (double-click app)';
 }
+$('#buildExe').onclick = async () => {
+  const btn = $('#buildExe');
+  btn.disabled = true; btn.textContent = 'Making Athena.exe… (about a minute)';
+  try {
+    const r = await api('/api/desktop', json('POST', { build_exe: true }));
+    toast(r.note || 'Made Athena.exe');
+  } catch (e) { toast(e.message, 'error'); }
+  refreshDesktop();
+};
 $('#setAutostart').onchange = async (e) => {
   try { await api('/api/desktop', json('POST', { autostart: e.target.checked })); toast(e.target.checked ? 'Athena will start with Windows' : 'Athena won’t start with Windows'); }
   catch (err) { toast(err.message, 'error'); e.target.checked = !e.target.checked; }
@@ -4210,10 +4302,19 @@ async function renderWizard() {
     await refreshStatus();
     body.innerHTML = `<div class="big-logo">${logoSvg()}</div><h2>Welcome to Athena</h2>
       <p class="lead">Let's get you set up. It takes a few minutes, and after this everything runs offline on your PC.</p>
-      ${state.status.ollama ? wzStatus('ok', `Ollama is running (version ${escapeHtml(state.status.ollama_version || '?')})`, 'This is the engine that runs the AI models.')
+      ${state.status.engine?.mode === 'builtin'
+        ? (state.status.engine.in_use && state.status.ollama ? wzStatus('ok', 'Athena’s own engine is running', 'Her brain runs on your PC. No Ollama needed.')
+          : wzStatus('warn', engineLine(state.status.engine), 'One-time download of her engine and brain. It carries on in the background; you can keep going.'))
+        : state.status.ollama ? wzStatus('ok', `Ollama is running (version ${escapeHtml(state.status.ollama_version || '?')})`, 'This is the engine that runs the AI models.')
         : wzStatus('bad', 'Ollama isn’t running yet', 'Install it from ollama.com/download (one time), open it, then click Check again.')}
       ${state.status.ollama ? '' : '<button type="button" class="ghost" id="wzRecheck">Check again</button>'}`;
     $('#wzRecheck')?.addEventListener('click', renderWizard);
+  } else if (name === 'models' && state.status.engine?.mode === 'builtin') {
+    const eng = state.status.engine;
+    body.innerHTML = `<h2>Athena's brain</h2>
+      <p class="lead">Athena runs one brain of her own: it chats, codes, uses her tools${/pictures/.test(eng.brain_label) ? ' and sees pictures' : ''}. It downloads by itself, once.</p>
+      ${wzStatus(eng.state === 'ready' ? 'ok' : 'warn', escapeHtml(eng.brain_label), eng.state === 'ready' ? 'Downloaded and ready.' : engineLine(eng))}
+      <p class="muted small">You can pick a different brain later in Settings → Models → Engine.</p>`;
   } else if (name === 'models') {
     body.innerHTML = '<h2>Your AI models</h2><p class="lead">Checking your PC…</p>';
     wiz.hw = wiz.hw || await api('/api/system').catch(() => null);

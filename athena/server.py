@@ -38,6 +38,19 @@ def _ollama_url() -> str:
 
 
 OLLAMA = _ollama_url()
+
+
+def use_engine() -> None:
+    """Talk to Athena's built-in engine instead of Ollama (called once her brain is loaded)."""
+    global OLLAMA
+    from . import engine
+
+    OLLAMA = engine.SHIM_URL
+
+
+def use_ollama() -> None:
+    global OLLAMA
+    OLLAMA = _ollama_url()
 MAX_TOOL_ROUNDS = 25
 APPROVAL_TIMEOUT = 300
 _approvals: dict[str, asyncio.Future] = {}
@@ -178,8 +191,17 @@ async def lifespan(_app: FastAPI):
     client = OllamaClient(timeout=httpx.Timeout(10.0, read=None))
     from . import speedup
 
-    # Once, when it changes: set Ollama's speed options and restart it so they take effect.
-    await run_in_threadpool(speedup.apply, store.get_settings().get("ollama_boost", True), OLLAMA)
+    from . import engine
+
+    if engine.wanted():
+        # Her own engine: if her brain is already downloaded, use it straight away (it loads in a few seconds);
+        # otherwise keep using Ollama, if it's installed, while the brain downloads in the background.
+        if engine.brain_files()[0] and engine.server_exe():
+            use_engine()
+        engine.start(on_ready=use_engine)
+    else:
+        # Once, when it changes: set Ollama's speed options and restart it so they take effect.
+        await run_in_threadpool(speedup.apply, store.get_settings().get("ollama_boost", True), OLLAMA)
     from . import maintenance
 
     maintenance.start_backups()  # a copy of your data once a day
@@ -188,6 +210,7 @@ async def lifespan(_app: FastAPI):
 
         # Existing "Athena AI" shortcuts might point at an older copy of Athena: point them at this one.
         threading.Thread(target=desktop.refresh_shortcuts, daemon=True).start()
+        threading.Thread(target=desktop.ensure_exe_once, daemon=True).start()  # Athena.exe, made once by herself
     events.bind_loop(asyncio.get_running_loop())
     scheduler.start()
     from . import monitor
@@ -201,6 +224,7 @@ async def lifespan(_app: FastAPI):
     for hook in startup_hooks:
         hook()
     yield
+    engine.stop()
     await client.aclose()
 
 
@@ -1452,6 +1476,9 @@ async def status():
         "kokoro_voices": tts.VOICES,
         "athena_root": str(store.ROOT),  # "fix yourself" opens this folder in Code mode
     }
+    from . import engine
+
+    info["engine"] = {**engine.status(), "in_use": OLLAMA == engine.SHIM_URL}
     try:
         resp = await client.get(f"{OLLAMA}/api/version", timeout=3)
         info["ollama"] = resp.status_code == 200
@@ -1459,6 +1486,39 @@ async def status():
     except Exception:
         pass
     return info
+
+
+@app.post("/api/engine")
+async def set_engine(request: Request):
+    """Settings → Models → Engine: Athena's own engine (and which brain), or Ollama."""
+    from . import engine
+
+    body = await request.json()
+    mode = body.get("engine")
+    if mode not in ("builtin", "ollama"):
+        raise HTTPException(400, "engine must be builtin or ollama")
+    store.update_settings({"engine": mode})
+    if mode == "ollama":
+        await run_in_threadpool(engine.stop)
+        use_ollama()
+    else:
+        if body.get("brain") and body["brain"] != engine.brain_key():
+            try:
+                await run_in_threadpool(engine.switch_brain, str(body["brain"]))
+            except engine.EngineError as exc:
+                raise HTTPException(400, str(exc)) from exc
+        if engine.brain_files()[0] and engine.server_exe():
+            use_engine()
+        engine.start(on_ready=use_engine)
+    return {**engine.status(), "in_use": OLLAMA == engine.SHIM_URL}
+
+
+@app.post("/api/engine/cleanup")
+async def engine_cleanup():
+    from . import engine
+
+    freed = await run_in_threadpool(engine.remove_other_brains)
+    return {"freed_gb": round(freed / 1e9, 1)}
 
 
 @app.get("/api/models")
@@ -1987,7 +2047,7 @@ async def selftest():
     async def ollama():
         r = await client.get(f"{OLLAMA}/api/version", timeout=4)
         return "ok", f"Running · version {r.json().get('version')}"
-    await check("Ollama", ollama())
+    await check("Athena's engine" if OLLAMA.endswith(":11435") else "Ollama", ollama())
     names: list[str] = []
     try:
         names = [m["name"] for m in (await client.get(f"{OLLAMA}/api/tags", timeout=5)).json().get("models", [])]
@@ -2697,6 +2757,7 @@ async def desktop_status():
     from . import desktop
 
     return {"platform": sys.platform, "desktop_app": desktop.running["active"], "autostart": desktop.autostart_enabled(),
+            "exe": desktop.EXE.exists(),
             "browser": bool(desktop.find_browser())}
 
 
@@ -2711,6 +2772,11 @@ async def desktop_action(request: Request):
         if body.get("shortcuts"):
             made = await run_in_threadpool(desktop.create_shortcuts)
             return {"shortcuts": made}
+        if body.get("build_exe"):
+            r = await run_in_threadpool(desktop.build_exe)
+            if r.get("error"):
+                raise HTTPException(400, r["error"])
+            return r
     except RuntimeError as exc:
         raise HTTPException(400, str(exc)) from exc
     raise HTTPException(400, "Nothing to do")

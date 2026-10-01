@@ -1190,3 +1190,7 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .pick-table { border-collapse: collapse; margin: 4px 0 6px; font-size: 13px; }
 .pick-table th, .pick-table td { padding: 3px 10px 3px 0; text-align: left; }
 .pick-table th { color: var(--text-3); font-weight: 600; }
+
+/* Athena's own engine: brain download progress */
+.engine-bar { height: 6px; border-radius: 3px; background: var(--bg-active); margin: 6px 0; overflow: hidden; }
+.engine-bar div { height: 100%; background: var(--accent, #d4a537); transition: width .6s ease; }
