@@ -222,6 +222,7 @@ def _releases_without_api(client: httpx.Client) -> list[dict[str, Any]]:
 
 
 _lookup_cache: dict[str, Any] = {"time": 0.0, "found": None}
+KNOWN_GOOD_ENGINE = "b11327"  # tested with Athena; used if the newest release can't be found
 
 
 def _find_engine(client: httpx.Client) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -250,6 +251,16 @@ def _find_engine(client: httpx.Client) -> tuple[dict[str, Any], dict[str, Any]]:
                 return rel, asset
         if attempt:
             _log("engine lookup: no recent release has this PC's engine file; trying the releases page")
+    # Last resort: a release known to work, downloaded straight from its address (no lookups needed)
+    tag = KNOWN_GOOD_ENGINE
+    for name in (f"llama-{tag}-bin-win-vulkan-x64.zip", f"llama-{tag}-bin-macos-arm64.tar.gz",
+                 f"llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz", f"llama-{tag}-bin-ubuntu-x64.tar.gz"):
+        if re.search(_engine_asset(), name):
+            _log(f"engine lookup: using the known-good release {tag}")
+            found = ({"tag_name": tag}, {"name": name,
+                     "browser_download_url": f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{name}"})
+            _lookup_cache.update(time=time.time(), found=found)
+            return found
     raise EngineError("Couldn't find an engine download for this PC right now. Try again in a few minutes")
 
 
