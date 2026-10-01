@@ -139,8 +139,8 @@ launcher/      Athena.exe
 - **Recommended specs** run bigger brains like Qwen3 14B, and leave room for image generation.
 - **Mac:** Apple Silicon (M1 or newer) with 16 GB memory. PC control features are Windows only.
 
-## Athena Ai is not perfect, she is still under construction, so please post any problems or suggestion on the discussions page (https://github.com/Dominationdrago/Athena/discussions/1) -Thank You
+## Athena Ai is not perfect, she is still under construction, so please post any problems or suggestion on the discussions page (https://github.com/Brad3n0/Athena/discussions/1) -Thank You
 
 ## License
 
-© 2026 Dominationdrago. All rights reserved. You're welcome to download Athena and use her on your own PC, but please don't copy, re-upload or sell the code. See [LICENSE](LICENSE).
+© 2026 Brad3n0. All rights reserved. You're welcome to download Athena and use her on your own PC, but please don't copy, re-upload or sell the code. See [LICENSE](LICENSE).

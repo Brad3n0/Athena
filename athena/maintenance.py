@@ -109,6 +109,12 @@ def _branches() -> list[str]:
 
 def _fetch() -> None:
     """Download the newest version (into FETCH_HEAD) from whichever branch name GitHub has."""
+    try:  # point at the repo address in update.bat (it changes if the username or repo name changes)
+        m = re.search(r'set "REPO=([^"]+)"', (store.ROOT / "update.bat").read_text(encoding="utf-8", errors="replace"))
+        if m:
+            _git("remote", "set-url", "origin", m.group(1))
+    except (OSError, RuntimeError):
+        pass
     names = _branches()
     for i, name in enumerate(names):
         try:
