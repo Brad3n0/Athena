@@ -578,6 +578,15 @@ def to_request(body: dict[str, Any], stream: bool) -> dict[str, Any]:
                             ("num_predict", "max_tokens"), ("min_p", "min_p"), ("presence_penalty", "presence_penalty")):
         if opts.get(ollama_key) is not None:
             req[key] = opts[ollama_key]
+    # Everyday chat (no temperature chosen): the sampling settings each brain's makers recommend. Qwen's
+    # presence penalty is what stops it repeating whole replies and catchphrases.
+    if "temperature" not in opts:
+        fam = BRAINS.get(brain_key(), {}).get("family", "")
+        defaults = ({"temperature": 1.0, "top_k": 64, "top_p": 0.95, "presence_penalty": 0.6} if fam == "gemma3"
+                    else {"temperature": 0.7, "top_k": 20, "top_p": 0.8, "presence_penalty": 1.5})
+        for key, value in defaults.items():
+            req.setdefault(key, value)
+        req.pop("repeat_penalty", None)  # the presence penalty does this job better; both together garble words
     fmt = body.get("format")
     if fmt == "json":
         req["response_format"] = {"type": "json_object"}
