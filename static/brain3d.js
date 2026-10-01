@@ -113,8 +113,8 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     const cl = theme.clusters;
     const palette = Object.values(cl).map(col3);
 
-    // far background stars
-    {
+    // far background stars (not in the Athena style: a clean background)
+    if (!theme.spiral) {
       const n = 2600, pos = new Float32Array(n * 3), size = new Float32Array(n), color = new Float32Array(n * 3), seed = new Float32Array(n), show = new Float32Array(n).fill(1);
       for (let i = 0; i < n; i++) {
         const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = 40 + Math.random() * 40;
@@ -132,7 +132,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     if (theme.jarvis) buildJarvis();
     // the nebula: thousands of particles around her core, so her mind always looks full
     // (a galaxy spiral in the Athena style, a soft round cloud otherwise)
-    if (!theme.jarvis || theme.spiral) {
+    if (!theme.jarvis) {
       const n = small ? 5000 : 11000, pos = new Float32Array(n * 3), size = new Float32Array(n), color = new Float32Array(n * 3), seed = new Float32Array(n), show = new Float32Array(n).fill(1);
       const tmp = new THREE.Color();
       for (let i = 0; i < n; i++) {
@@ -287,7 +287,7 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
       hex(26, 15, 15); hex(0, 60, 15); hex(52, 60, 15);
       hexPattern = hx.createPattern(p, 'repeat');
     }
-    hx.fillStyle = hexPattern; hx.fillRect(0, 0, innerWidth, innerHeight);
+    if (!theme.spiral) { hx.fillStyle = hexPattern; hx.fillRect(0, 0, innerWidth, innerHeight); }
     // where her globe is on screen
     const c = new THREE.Vector3(0, 0, 0).project(camera), edge = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).multiplyScalar(R * 1.12).add(view.focus).project(camera);
     const cx = (c.x + 1) / 2 * innerWidth, cy = (1 - c.y) / 2 * innerHeight;
