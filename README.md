@@ -138,3 +138,4 @@ launcher/      Athena.exe
 - **No graphics card?** She still runs on the processor, but replies are much slower.
 - **Recommended specs** run bigger brains like Qwen3 14B, and leave room for image generation.
 - **Mac:** Apple Silicon (M1 or newer) with 16 GB memory. PC control features are Windows only.
+- **Athena Ai is not perfect, she is still under construction, so please post any problems or suggestion on the discussions page (https://github.com/Dominationdrago/Athena/discussions/1) -Thank You**
