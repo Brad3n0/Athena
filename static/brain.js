@@ -139,9 +139,9 @@ export function openBrain({ api, onAsk, toast } = {}) {
     const cy = Math.cos(view.yaw), sy = Math.sin(view.yaw), cp = Math.cos(view.pitch), sp = Math.sin(view.pitch);
     const x1 = p[0] * cy - p[2] * sy, z1 = p[0] * sy + p[2] * cy;
     const y2 = p[1] * cp - z1 * sp, z2 = p[1] * sp + z1 * cp;
-    const R = Math.min(innerWidth, innerHeight) * 0.33 * view.zoom;
+    const R = Math.min(innerWidth, innerHeight * 0.92) * 0.28 * view.zoom;
     const f = 3.2, s = f / (f + z2);
-    return { x: innerWidth / 2 + x1 * R * s, y: innerHeight * 0.47 - y2 * R * s, s, z: z2 };
+    return { x: innerWidth / 2 + x1 * R * s, y: innerHeight * 0.41 - y2 * R * s, s, z: z2 };
   }
   const visible = (n) => !view.hidden.has(n.cluster) && (!n.time || n.time <= view.cutoff);
 
@@ -155,67 +155,131 @@ export function openBrain({ api, onAsk, toast } = {}) {
     }
   }
 
+  // floating dust in the space around her (fixed seed so it doesn't jump between opens)
+  const dust = Array.from({ length: 170 }, (_, i) => {
+    const a = i * 2.39996, y = 1 - (i / 169) * 2, r = Math.sqrt(1 - y * y) * (1.15 + ((i * 37) % 23) / 23 * 0.6);
+    return { p: [Math.cos(a) * r, y * (1.2 + ((i * 13) % 7) / 14), Math.sin(a) * r], tw: (i * 0.37) % 6.28 };
+  });
+  const ease = (x) => 1 - Math.pow(1 - Math.min(1, Math.max(0, x)), 3);
+
+  function glowDot(x, y, r, color, a) {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, rgba(color, a)); g.addColorStop(0.35, rgba(color, a * 0.35)); g.addColorStop(1, rgba(color, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+
   function draw(now) {
     if (el.hidden) { raf = 0; return; } // closed: stop drawing until it opens again
     const dt = Math.min(50, now - last); last = now;
     if (!view.drag && !reduce) view.yaw += dt * 0.00012;
     view.energy = Math.max(0.15, view.energy * 0.985);
+    view.boot = Math.min(1, (view.boot ?? 0) + dt / 1700); // her mind assembles itself when the view opens
     ctx.clearRect(0, 0, innerWidth, innerHeight);
     const c = project([0, 0, 0]);
-    const R = Math.min(innerWidth, innerHeight) * 0.33 * view.zoom;
+    const R = Math.min(innerWidth, innerHeight * 0.92) * 0.28 * view.zoom;
     const t = now / 1000;
+    const boot = ease(view.boot);
 
-    // HUD rings around the sphere
+    // ---- the hologram projector under her, and its beam of light
+    const baseY = c.y + R * 1.18, baseW = R * 0.95, baseH = R * 0.2;
     ctx.save();
-    ctx.translate(c.x, c.y);
-    for (const [r, w, speed, dash, a] of [[1.32, 1, 0.08, [2, 10], 0.35], [1.42, 2, -0.05, [40, 18], 0.22], [1.5, 1, 0.03, [], 0.12], [1.58, 6, -0.02, [1, 7], 0.18]]) {
-      ctx.rotate(t * speed);
-      ctx.beginPath(); ctx.setLineDash(dash); ctx.lineWidth = w;
-      ctx.strokeStyle = `rgba(80,210,255,${a})`;
-      ctx.arc(0, 0, R * r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter';
+    const beam = ctx.createLinearGradient(0, baseY, 0, c.y - R);
+    beam.addColorStop(0, `rgba(70,200,255,${0.16 * boot})`); beam.addColorStop(0.6, `rgba(70,200,255,${0.05 * boot})`); beam.addColorStop(1, 'rgba(70,200,255,0)');
+    ctx.fillStyle = beam;
+    ctx.beginPath(); ctx.moveTo(c.x - baseW * 0.8, baseY); ctx.lineTo(c.x - R * 1.15, c.y - R * 0.9);
+    ctx.lineTo(c.x + R * 1.15, c.y - R * 0.9); ctx.lineTo(c.x + baseW * 0.8, baseY); ctx.closePath(); ctx.fill();
+    for (let i = 0; i < 4; i++) { // the projector disc: rings
+      ctx.beginPath(); ctx.ellipse(c.x, baseY, baseW * (1 - i * 0.2), baseH * (1 - i * 0.2), 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(90,215,255,${(0.32 - i * 0.05) * boot})`; ctx.lineWidth = i === 0 ? 2 : 1;
+      ctx.setLineDash(i % 2 ? [6, 6] : []); ctx.lineDashOffset = t * (i % 2 ? 20 : -12); ctx.stroke();
     }
     ctx.setLineDash([]);
+    ctx.save(); // a hex grid on the disc
+    ctx.beginPath(); ctx.ellipse(c.x, baseY, baseW * 0.95, baseH * 0.95, 0, 0, Math.PI * 2); ctx.clip();
+    const hs = R * 0.07;
+    ctx.strokeStyle = `rgba(90,215,255,${0.1 * boot})`; ctx.lineWidth = 0.7;
+    for (let gx = -14; gx <= 14; gx++) {
+      for (let gy = -4; gy <= 4; gy++) {
+        const hx = c.x + (gx + (gy % 2 ? 0.5 : 0)) * hs * 1.75, hy = baseY + gy * hs * 0.33;
+        ctx.beginPath();
+        for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; const px = hx + Math.cos(a) * hs, py = hy + Math.sin(a) * hs * 0.21; k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+        ctx.closePath(); ctx.stroke();
+      }
+    }
     ctx.restore();
+    glowDot(c.x, baseY, baseW * 0.55, [70, 200, 255], 0.22 * boot);
 
-    // a faint wireframe globe
+    // ---- HUD: segmented arcs and tick rings around the sphere
+    ctx.translate(c.x, c.y);
+    const arcs = [[1.3, 1.2, 0.11, 6, 0.55], [1.4, 2.4, -0.06, 3, 0.4], [1.52, 1, 0.035, 12, 0.3], [1.6, 4, -0.025, 2, 0.22]];
+    for (const [r, w, speed, segs, a] of arcs) {
+      ctx.save(); ctx.rotate(t * speed);
+      ctx.lineWidth = w; ctx.strokeStyle = `rgba(80,210,255,${a * boot})`;
+      for (let i = 0; i < segs; i++) {
+        const s0 = (i / segs) * Math.PI * 2, len = (Math.PI * 2 / segs) * (0.55 + 0.3 * ((i * 7) % 3) / 2);
+        ctx.beginPath(); ctx.arc(0, 0, R * r, s0, s0 + len * boot); ctx.stroke();
+      }
+      ctx.restore();
+    }
+    ctx.save(); ctx.rotate(-t * 0.02);
+    for (let i = 0; i < 120; i++) { // tick ring
+      const a = (i / 120) * Math.PI * 2, long = i % 10 === 0;
+      const r1 = R * 1.7, r2 = r1 + (long ? 10 : 4);
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1); ctx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+      ctx.strokeStyle = `rgba(80,210,255,${(long ? 0.45 : 0.18) * boot})`; ctx.lineWidth = long ? 1.4 : 1; ctx.stroke();
+    }
+    ctx.restore();
+    // a scanning sweep
+    const sweep = (t * 0.6) % (Math.PI * 2);
+    const sg = ctx.createConicGradient ? ctx.createConicGradient(sweep, 0, 0) : null;
+    if (sg) {
+      sg.addColorStop(0, `rgba(90,220,255,${0.07 * boot})`); sg.addColorStop(0.08, 'rgba(90,220,255,0)'); sg.addColorStop(1, 'rgba(90,220,255,0)');
+      ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(0, 0, R * 1.62, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.translate(-c.x, -c.y);
+
+    // ---- wireframe globe
     ctx.lineWidth = 0.6;
+    const wire = (pts, a) => { ctx.beginPath(); pts.forEach((q, k) => { const p = project(q); k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }); ctx.strokeStyle = `rgba(80,200,255,${a * boot})`; ctx.stroke(); };
     for (let i = 1; i < 6; i++) {
       const lat = -Math.PI / 2 + (i * Math.PI) / 6;
-      ctx.beginPath();
-      for (let k = 0; k <= 48; k++) {
-        const lon = (k / 48) * Math.PI * 2;
-        const p = project([Math.cos(lat) * Math.cos(lon) * 1.05, Math.sin(lat) * 1.05, Math.cos(lat) * Math.sin(lon) * 1.05]);
-        k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
-      }
-      ctx.strokeStyle = 'rgba(80,200,255,0.06)'; ctx.stroke();
+      wire(Array.from({ length: 49 }, (_, k) => { const lon = (k / 48) * Math.PI * 2; return [Math.cos(lat) * Math.cos(lon) * 1.05, Math.sin(lat) * 1.05, Math.cos(lat) * Math.sin(lon) * 1.05]; }), 0.07);
     }
     for (let i = 0; i < 8; i++) {
       const lon = (i / 8) * Math.PI;
-      ctx.beginPath();
-      for (let k = 0; k <= 48; k++) {
-        const lat = (k / 48) * Math.PI * 2;
-        const p = project([Math.cos(lat) * Math.cos(lon) * 1.05, Math.sin(lat) * 1.05, Math.cos(lat) * Math.sin(lon) * 1.05]);
-        k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
-      }
-      ctx.strokeStyle = 'rgba(80,200,255,0.045)'; ctx.stroke();
+      wire(Array.from({ length: 49 }, (_, k) => { const lat = (k / 48) * Math.PI * 2; return [Math.cos(lat) * Math.cos(lon) * 1.05, Math.sin(lat) * 1.05, Math.cos(lat) * Math.sin(lon) * 1.05]; }), 0.05);
     }
 
-    // links: core → hubs → nodes, and between related nodes
+    // ---- floating dust
+    for (const d of dust) {
+      const p = project(d.p.map((v) => v * (0.6 + 0.4 * boot)));
+      const a = (0.25 + 0.25 * Math.sin(t * 1.3 + d.tw)) * (1 - (p.z + 1.6) / 3.2) * boot;
+      ctx.fillStyle = `rgba(150,230,255,${Math.max(0, a)})`;
+      ctx.fillRect(p.x, p.y, 1.3, 1.3);
+    }
+
+    // ---- links: core → hubs → nodes (flowing signals), and between related nodes
     const P = new Map();
-    for (const n of map.nodes) P.set(n, project(n.pos));
+    map.nodes.forEach((n, i) => {
+      const k = ease(view.boot * 1.6 - (i % 25) / 40); // nodes fly out from the core one after another
+      P.set(n, project(n.pos.map((v) => v * k)));
+    });
     for (const hub of Object.values(map.hubs)) {
       if (view.hidden.has(hub.key)) continue;
-      const h = project(hub.pos);
+      const h = project(hub.pos.map((v) => v * boot));
       hub.p = h;
       ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(h.x, h.y);
-      ctx.strokeStyle = rgba(hub.color, 0.35 + view.energy * 0.3); ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.strokeStyle = rgba(hub.color, 0.25 + view.energy * 0.25); ctx.lineWidth = 1; ctx.stroke();
+      ctx.setLineDash([3, 12]); ctx.lineDashOffset = -t * (30 + view.energy * 60);
+      ctx.strokeStyle = rgba(hub.color, 0.8); ctx.lineWidth = 2; ctx.stroke(); ctx.setLineDash([]);
     }
     ctx.lineWidth = 0.6;
     for (const n of map.nodes) {
       if (!visible(n)) continue;
       const p = P.get(n), h = map.hubs[n.cluster].p;
       ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(p.x, p.y);
-      ctx.strokeStyle = rgba(n.color, 0.06 + 0.1 * (1 - (p.z + 1) / 2) + n.glow * 0.4); ctx.stroke();
+      ctx.strokeStyle = rgba(n.color, 0.05 + 0.09 * (1 - (p.z + 1) / 2) + n.glow * 0.4); ctx.stroke();
     }
     for (const [a, b] of map.links) {
       if (!visible(a) || !visible(b)) continue;
@@ -223,23 +287,28 @@ export function openBrain({ api, onAsk, toast } = {}) {
       const lit = hover === a || hover === b || pinned === a || pinned === b;
       ctx.beginPath(); ctx.moveTo(pa.x, pa.y);
       ctx.quadraticCurveTo(c.x + (pa.x + pb.x - 2 * c.x) * 0.25, c.y + (pa.y + pb.y - 2 * c.y) * 0.25, pb.x, pb.y);
-      ctx.strokeStyle = lit ? 'rgba(255,255,255,0.7)' : 'rgba(120,230,255,0.10)'; ctx.lineWidth = lit ? 1.2 : 0.7; ctx.stroke();
+      ctx.strokeStyle = lit ? 'rgba(255,255,255,0.75)' : 'rgba(120,230,255,0.07)'; ctx.lineWidth = lit ? 1.3 : 0.7; ctx.stroke();
+      ctx.setLineDash([2, 18]); ctx.lineDashOffset = -t * 22;
+      ctx.strokeStyle = lit ? 'rgba(255,255,255,0.9)' : 'rgba(150,240,255,0.35)'; ctx.lineWidth = 1.4; ctx.stroke(); ctx.setLineDash([]);
     }
 
-    // nodes, far ones first
+    // ---- nodes, far ones first (far ones softer, like a camera's depth of field)
     const order = map.nodes.filter(visible).sort((a, b) => P.get(b).z - P.get(a).z);
     let best = null, bestD = 14;
     for (const n of order) {
       const p = P.get(n);
       n.glow *= 0.96;
-      const depth = 0.35 + 0.65 * (1 - (p.z + 1.2) / 2.4);
-      const r = n.size * p.s * view.zoom * (1 + n.glow * 1.6) * (hover === n || pinned === n ? 1.8 : 1);
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 5);
-      g.addColorStop(0, rgba(n.color, Math.min(1, 0.55 * depth + n.glow)));
-      g.addColorStop(1, rgba(n.color, 0));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, r * 5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = `rgba(255,255,255,${0.5 * depth + n.glow})`;
-      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.8, r * 0.55), 0, Math.PI * 2); ctx.fill();
+      const depth = 0.3 + 0.7 * (1 - (p.z + 1.2) / 2.4);
+      const focus = hover === n || pinned === n;
+      const r = n.size * p.s * view.zoom * (1 + n.glow * 1.6) * (focus ? 1.8 : 1);
+      glowDot(p.x, p.y, r * (5 + (1 - depth) * 3), n.color, Math.min(1, 0.5 * depth + n.glow));
+      ctx.fillStyle = `rgba(255,255,255,${0.45 * depth + n.glow})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.7, r * 0.5), 0, Math.PI * 2); ctx.fill();
+      if (focus) { // a targeting reticle on the node you're looking at
+        ctx.strokeStyle = rgba(n.color, 0.9); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r * 4, t * 2, t * 2 + 1.2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(p.x, p.y, r * 4, t * 2 + Math.PI, t * 2 + Math.PI + 1.2); ctx.stroke();
+      }
       if (view.mouse) {
         const d = Math.hypot(view.mouse.x - p.x, view.mouse.y - p.y);
         if (d < bestD) { bestD = d; best = n; }
@@ -247,44 +316,50 @@ export function openBrain({ api, onAsk, toast } = {}) {
     }
     if (!view.drag) hover = best;
 
-    // cluster hubs
+    // ---- cluster hubs
     for (const hub of Object.values(map.hubs)) {
       if (view.hidden.has(hub.key) || !hub.p) continue;
       const h = hub.p;
-      ctx.fillStyle = rgba(hub.color, 0.9);
-      ctx.beginPath(); ctx.arc(h.x, h.y, 3.5, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = rgba(hub.color, 0.6); ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(h.x, h.y, 9 + Math.sin(t * 2 + h.x) * 1.5, 0, Math.PI * 2); ctx.stroke();
+      glowDot(h.x, h.y, 16, hub.color, 0.7);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.beginPath(); ctx.arc(h.x, h.y, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgba(hub.color, 0.7); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(h.x, h.y, 10 + Math.sin(t * 2 + h.x) * 1.5, t, t + Math.PI * 1.4); ctx.stroke();
     }
 
-    // signals travelling through her mind
+    // ---- signals travelling through her mind
     particles = particles.filter((q) => q.t < 1);
     for (const q of particles) {
       q.t += q.speed * (dt / 16);
       const seg = q.t < 0.5 ? [q.from, q.via, q.t * 2] : [q.via, q.to, (q.t - 0.5) * 2];
       const pos = seg[0].map((v, k) => v + (seg[1][k] - v) * seg[2]);
       const p = project(pos);
-      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 10);
-      g.addColorStop(0, rgba(q.color, 0.95)); g.addColorStop(1, rgba(q.color, 0));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2); ctx.fill();
+      glowDot(p.x, p.y, 12, q.color, 0.95);
       if (q.t >= 1 && q.target) q.target.glow = 1;
     }
 
-    // her core
+    // ---- her core: swirling plasma, a white-hot center, energy rings and a lens flare
     const pulse = 1 + Math.sin(t * 3) * 0.04 * (1 + view.energy * 3);
-    const cr = R * 0.17 * pulse;
-    const core = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, cr * 2.6);
-    core.addColorStop(0, `rgba(230,252,255,${0.9})`);
-    core.addColorStop(0.25, `rgba(90,220,255,${0.55 + view.energy * 0.4})`);
-    core.addColorStop(1, 'rgba(40,160,255,0)');
-    ctx.fillStyle = core; ctx.beginPath(); ctx.arc(c.x, c.y, cr * 2.6, 0, Math.PI * 2); ctx.fill();
+    const cr = R * 0.16 * pulse * (0.3 + 0.7 * boot);
+    glowDot(c.x, c.y, cr * 3.2, [40, 160, 255], 0.5 + view.energy * 0.3);
+    for (let i = 0; i < 4; i++) {
+      const a = t * (0.9 + i * 0.4) * (i % 2 ? -1 : 1) + i * 1.6;
+      glowDot(c.x + Math.cos(a) * cr * 0.45, c.y + Math.sin(a * 1.3) * cr * 0.35, cr * 1.3, i % 2 ? [120, 90, 255] : [60, 220, 255], 0.45 + view.energy * 0.3);
+    }
+    glowDot(c.x, c.y, cr * 1.1, [235, 252, 255], 0.95);
     ctx.save(); ctx.translate(c.x, c.y);
     for (let i = 0; i < 3; i++) {
       ctx.rotate(t * (0.6 + i * 0.35) * (i % 2 ? -1 : 1) * (1 + view.energy));
-      ctx.beginPath(); ctx.ellipse(0, 0, cr * 1.5, cr * (0.35 + i * 0.12), 0, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(140,235,255,${0.35 + view.energy * 0.4})`; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(0, 0, cr * 1.6, cr * (0.32 + i * 0.13), 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(150,240,255,${0.3 + view.energy * 0.45})`; ctx.lineWidth = 1.2; ctx.stroke();
     }
     ctx.restore();
+    const flare = ctx.createLinearGradient(c.x - R * 1.4, 0, c.x + R * 1.4, 0);
+    flare.addColorStop(0, 'rgba(90,220,255,0)'); flare.addColorStop(0.5, `rgba(200,245,255,${0.35 + view.energy * 0.3})`); flare.addColorStop(1, 'rgba(90,220,255,0)');
+    ctx.fillStyle = flare; ctx.fillRect(c.x - R * 1.4, c.y - 1, R * 2.8, 2);
+    glowDot(c.x + R * 0.55, c.y + R * 0.22, R * 0.06, [120, 200, 255], 0.18); // flare ghosts
+    glowDot(c.x - R * 0.35, c.y - R * 0.14, R * 0.035, [180, 140, 255], 0.15);
+    ctx.restore(); // back to normal blending
 
     // hover tooltip
     const tip = $b('tip');
@@ -361,7 +436,7 @@ export function openBrain({ api, onAsk, toast } = {}) {
   el.querySelector('.brain-close').onclick = close;
   addEventListener('keydown', (e) => { if (e.key === 'Escape' && !el.hidden) { if (pinned) showCard(null); else close(); } });
 
-  const start = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(draw); } };
+  const start = () => { view.boot = 0; if (!raf) { last = performance.now(); raf = requestAnimationFrame(draw); } };
   ui = { el, reload, fire, view, start, feed: $b('feed') };
   reload();
 }

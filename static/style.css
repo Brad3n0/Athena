@@ -1198,7 +1198,7 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .row-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 /* ------------------------------------------------ 🧠 Athena's Brain: holographic, Jarvis-style */
-.brain-view { position: fixed; inset: 0; z-index: 900; overflow: hidden; color: #bfefff;
+.brain-view { position: fixed; inset: 0; z-index: 900; overflow: hidden; color: #bfefff; text-shadow: -.5px 0 rgba(255,60,120,.25), .5px 0 rgba(60,220,255,.3);
   font-family: "Segoe UI", system-ui, sans-serif; letter-spacing: .04em;
   background: radial-gradient(ellipse at 50% 45%, rgba(10,60,90,.55), rgba(2,8,16,.97) 62%), #01060d;
   animation: brain-in .5s ease-out; }
@@ -1216,7 +1216,9 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .brain-corner.bl { bottom: 14px; left: 14px; border-right: 0; border-top: 0; }
 .brain-corner.br { bottom: 14px; right: 14px; border-left: 0; border-top: 0; }
 .brain-head { position: absolute; top: 26px; left: 34px; pointer-events: none; }
-.brain-title { font-size: 20px; font-weight: 700; color: #e6fbff; text-shadow: 0 0 12px rgba(80,210,255,.8); letter-spacing: .25em; }
+.brain-title { font-size: 20px; font-weight: 700; color: #e6fbff; letter-spacing: .25em; animation: brain-glitch 7s infinite;
+  text-shadow: 0 0 12px rgba(80,210,255,.8), -1px 0 rgba(255,60,120,.35), 1px 0 rgba(60,220,255,.45); }
+@keyframes brain-glitch { 0%, 96%, 100% { transform: none; } 97% { transform: translateX(2px) skewX(-6deg); } 98% { transform: translateX(-2px); } }
 .brain-title span { color: #4fd8ff; font-weight: 400; letter-spacing: .15em; }
 .brain-sub { font-size: 11px; color: #6fd9ff; margin-top: 4px; letter-spacing: .2em; animation: brain-flicker 4s infinite; }
 @keyframes brain-flicker { 0%, 92%, 100% { opacity: 1; } 94% { opacity: .4; } 96% { opacity: .9; } }
@@ -1268,4 +1270,4 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
   .brain-head { left: 22px; } .brain-title { font-size: 16px; }
   .brain-card { right: 16px; left: 16px; top: 90px; width: auto; }
 }
-@media (prefers-reduced-motion: reduce) { .brain-scan::after, .brain-sub { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .brain-scan::after, .brain-sub, .brain-title { animation: none; } }
