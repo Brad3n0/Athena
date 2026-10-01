@@ -7,3 +7,7 @@ or any work based on it, without written permission from the author.
 
 This software is provided "as is", without warranty of any kind. The author is not liable for any
 damage or loss arising from its use.
+
+Third-party parts keep their own licenses and are not covered by the terms above: the files in
+static/vendor (three.js, KaTeX, the QR code library and the Cinzel font, each with its own LICENSE
+file there), and anything Athena downloads when she runs (the llama.cpp engine, AI models, voices).
