@@ -4720,7 +4720,7 @@ let brainMod = null;
 const brainSignal = (...args) => brainMod?.brainSignal(...args);
 $('#openBrain').addEventListener('click', async () => {
   if (isNarrow()) toggleSidebar(false);
-  const opts = { api, toast, onAsk: (text) => sendMessage(text), style: state.settings.brain_style || 'athena',
+  const opts = { api, toast, onAsk: (text) => sendMessage(text), style: 'athena', // her own look; the other styles are kept in brain.js but not offered
     onStyle: (k) => saveSettings({ brain_style: k }) };
   if (!brainMod) brainMod = await import('./brain3d.js').catch(() => null);
   if (!brainMod || brainMod.openBrain(opts) === false) {
