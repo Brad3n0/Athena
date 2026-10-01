@@ -2820,14 +2820,6 @@ function fillModelSelects() {
   $('#setSelfModel').innerHTML = `<option value="">Automatic${autoSelf ? ` (${escapeHtml(autoSelf)})` : ' (the model that\'s loaded)'}</option>` +
     state.models.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
   $('#setSelfModel').value = modelNames().includes(saved) ? saved : '';
-  const baseNow = $('#myModelBase').value;
-  const bases = state.models.filter((m) => !/embed/.test(m.name));
-  $('#myModelBase').innerHTML = bases.map((m) => `<option value="${escapeHtml(m.name)}">${escapeHtml(m.name)}</option>`).join('');
-  $('#myModelBase').value = bases.some((m) => m.name === baseNow) ? baseNow : (pickDefaultModel('assistant') || bases[0]?.name || '');
-  const custom = state.settings.personas || [];
-  $('#myModelPersona').innerHTML = Object.entries(BUILTIN_PERSONAS).map(([id, label]) => `<option value="${id}">${escapeHtml(label)}</option>`).join('') +
-    custom.map((p) => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join('');
-  $('#myModelPersona').value = state.settings.persona || 'assistant';
   const have = new Set(modelNames().flatMap((n) => [n, n.replace(/:latest$/, '')]));
   $('#recommend').innerHTML = RECOMMENDED.map((r) => `
     <div class="rec${have.has(r.name) ? ' have' : ''}">
@@ -2838,23 +2830,6 @@ function fillModelSelects() {
     ? state.models.map((m) => `<li><span class="name">${escapeHtml(m.name)}</span><span class="muted small">${fmtSize(m.size)}</span><button type="button" data-rm-model="${escapeHtml(m.name)}" title="Delete model">${ICONS.trash}</button></li>`).join('')
     : '<li class="muted small">None yet</li>';
 }
-
-$('#myModelMake').onclick = async () => {
-  const btn = $('#myModelMake'), note = $('#myModelNote');
-  const base = $('#myModelBase').value, name = $('#myModelName').value.trim() || 'athena';
-  if (!base) { toast('Download a model first', 'error'); return; }
-  btn.disabled = true;
-  note.textContent = `Making ${name} from ${base}… (a few seconds: it reuses ${base}, nothing new is downloaded)`;
-  try {
-    const r = await api('/api/my-model', json('POST', { base, name, persona: $('#myModelPersona').value }));
-    await refreshModels();
-    fillModelSelects();
-    note.innerHTML = `✓ Made <b>${escapeHtml(r.created)}</b> (${escapeHtml(r.base)} + her personality${r.memories ? `, ${r.memories} memories` : ''} and lessons).
-      Pick it as your Assistant model above, or run <code>ollama run ${escapeHtml(r.created.replace(/:latest$/, ''))}</code> in a terminal.`;
-    toast(`Made your own model: ${r.created}`);
-  } catch (e) { note.textContent = e.message; toast(e.message, 'error'); }
-  btn.disabled = false;
-};
 
 function fillVoices() {
   const voices = listVoices();
