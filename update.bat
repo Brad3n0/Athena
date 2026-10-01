@@ -9,7 +9,9 @@ setlocal
 cd /d "%~2"
 title Update Athena AI
 set "REPO=https://github.com/Dominationdrago/Athena.git"
-set "BRANCH=claude/athena-ai-offline-website-j31mcs"
+set "BRANCH=Athena-Ai"
+rem The branch's old name, used if GitHub still has it under that name
+set "OLD_BRANCH=claude/athena-ai-offline-website-j31mcs"
 
 where git >nul 2>nul
 if errorlevel 1 (
@@ -28,7 +30,7 @@ if not exist ".git" (
 echo.
 echo Checking GitHub for updates...
 echo If a GitHub sign-in window opens, sign in. Your repo is private, and it only asks once.
-git fetch origin %BRANCH% || goto :fail
+git fetch origin %BRANCH% 2>nul || git fetch origin %OLD_BRANCH% || goto :fail
 rem Keep any changes Athena made to her own code ("fix yourself"): set them aside, update, then put them back.
 set "SELFCHANGES="
 git rev-parse -q --verify HEAD >nul 2>nul && (git diff --quiet HEAD || set "SELFCHANGES=1")

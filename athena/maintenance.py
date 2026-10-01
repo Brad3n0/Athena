@@ -97,14 +97,26 @@ def start_backups() -> None:
 
 # ------------------------------------------------------------------ updates
 
-def _branch() -> str:
+def _branches() -> list[str]:
+    """The update branch named in update.bat, then its old name (used until GitHub has the new one)."""
     try:
-        m = re.search(r'set "BRANCH=([^"]+)"', (store.ROOT / "update.bat").read_text(encoding="utf-8", errors="replace"))
-        if m:
-            return m.group(1)
+        text = (store.ROOT / "update.bat").read_text(encoding="utf-8", errors="replace")
     except OSError:
-        pass
-    return "main"
+        return ["main"]
+    names = [m.group(1) for key in ("BRANCH", "OLD_BRANCH") if (m := re.search(rf'set "{key}=([^"]+)"', text))]
+    return names or ["main"]
+
+
+def _fetch() -> None:
+    """Download the newest version (into FETCH_HEAD) from whichever branch name GitHub has."""
+    names = _branches()
+    for i, name in enumerate(names):
+        try:
+            _git("fetch", "-q", "origin", name)
+            return
+        except RuntimeError:
+            if i == len(names) - 1:
+                raise
 
 
 def _git(*args: str, timeout: int = 60) -> str:
@@ -123,7 +135,7 @@ def check_update() -> dict[str, Any]:
     if not (store.ROOT / ".git").exists():
         return {"available": False, "reason": "Run update.bat once to connect Athena to GitHub; after that she updates herself."}
     try:
-        _git("fetch", "-q", "origin", _branch())
+        _fetch()
         here, there = _git("rev-parse", "HEAD"), _git("rev-parse", "FETCH_HEAD")
         if here == there:
             return {"available": False, "reason": "You have the newest version."}
@@ -144,7 +156,7 @@ def apply_update() -> dict[str, Any]:
     from . import selfedit
 
     try:
-        _git("fetch", "-q", "origin", _branch())
+        _fetch()
         # Changes Athena made to her own code are carried over to the new version when they fit.
         note = selfedit.keep_through_update(lambda: _git("reset", "-q", "--hard", "FETCH_HEAD"))
         subject = _git("log", "-1", "--format=%s")
