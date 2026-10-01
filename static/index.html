@@ -320,6 +320,7 @@
           </label>
           <label id="brainRow">Her brain <span class="muted small">(one model that does everything; downloads once)</span> <select id="setBrain"></select></label>
           <p class="muted small" id="engineNote"></p>
+          <p class="small" id="brainUpgrade" hidden></p>
           <button type="button" class="ghost" id="engineCleanup">Free space: delete brains I'm not using</button>
         </div>
         <label class="check"><input type="checkbox" id="setAutoRoute" /> <span><b>✨ Auto</b>: in the Assistant tab, pick the best model for each message (code → Code model, math &amp; school → Study model, pictures → Vision model, everything else → Assistant model)</span></label>
@@ -400,6 +401,14 @@
         <div class="about-add" id="lessonAdd"><input id="lessonNew" placeholder="Add a rule, e.g. “Always show the final answer in bold”" maxlength="240" /><button type="button" class="ghost">Add</button></div>
         <ul class="memories" id="lessonList"></ul>
         <button type="button" class="ghost danger" id="forgetAll">Forget everything she's learned</button>
+
+        <h3>🌱 How Athena grows</h3>
+        <label class="check"><input type="checkbox" data-setting="library_enabled" data-default-on /> <span><b>Her library</b>: keep what she looks up (searches, pages, research, sports stats) and answers you 👍, so she already knows it next time</span></label>
+        <label class="check"><input type="checkbox" data-setting="reflection_enabled" data-default-on /> <span><b>Nightly reflection</b>: once a day, in the evening when the PC is idle (never during games), she reviews the day's chats and writes lessons above for what to do better</span></label>
+        <p class="small" id="growthInfo"></p>
+        <ul class="memories" id="reflectionList"></ul>
+        <div class="row-buttons"><button type="button" class="ghost" id="reflectNow">Reflect on today now</button>
+          <button type="button" class="ghost danger" id="libraryClear">Clear her library</button></div>
 
         <h3>Your mood <span class="muted small" id="moodCount"></span></h3>
         <label class="check"><input type="checkbox" id="setEmotions" /> <span>Notice how I seem in each message and adapt to it (it's worked out on this PC from my words and emoji; nothing is sent anywhere)</span></label>

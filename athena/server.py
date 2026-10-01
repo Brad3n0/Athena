@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import decks, events, files, knowledge, learning, research, scheduler, security, speech, store, tts, workspace
+from . import decks, events, files, knowledge, learning, library, research, scheduler, security, speech, store, tts, workspace
 from .tools import BY_NAME, approval_summary, arun_tool, enabled_tools, parse_args, run_tool
 
 STATIC_DIR = store.ROOT / "static"
@@ -221,6 +221,9 @@ async def lifespan(_app: FastAPI):
     if store.get_settings().get("wake_enabled"):
         from . import wake
         wake.start()
+    from . import reflect
+
+    reflect.start(lambda: OLLAMA)  # tonight's reflection on the day's chats, when the PC is idle
     for hook in startup_hooks:
         hook()
     yield
@@ -604,6 +607,9 @@ async def chat(request: Request):
         raise HTTPException(400, "No model selected")
 
     settings = store.get_settings()
+    from . import reflect
+
+    reflect.touch()
     no_tools = bool(body.get("no_tools"))  # side-by-side model comparisons answer without tools
     use_tools = model not in _no_tool_models and bool(enabled_tools(settings)) and not no_tools
     auto_approve = bool(body.get("auto_approve"))
@@ -704,6 +710,9 @@ async def chat(request: Request):
         system = {"role": "system", "content": build_system_prompt(mode, settings, use_tools, self_open) + extra_prompt}
         messages: list[dict[str, Any]] = [system, *history]
         note = time_note()
+        if mode != "code" and not self_open and history and history[-1]["role"] == "user":
+            if known := library.prompt_note(history[-1]["content"]):  # what she found out before about this
+                note = {**note, "content": note["content"] + "\n\n" + known}
         if user_mood:
             note = {**note, "content": note["content"] + " " + emotions.note(user_mood)}
         messages.insert(len(messages) - 1 if len(messages) > 1 else len(messages), note)
@@ -953,6 +962,7 @@ async def chat(request: Request):
                     result = await arun_tool(name, args, ctx)
                 else:
                     result = await run_in_threadpool(run_tool, name, args)
+                library.from_tool(name, args, result)  # keep what she found out, so she knows it next time
                 yield _event("tool", id=step, name=name, args=args, result=result)
                 if name == "work_on_myself" and isinstance(result, dict) and result.get("open_self"):
                     # The app opens her own code and asks again in Code mode, with the tools to really change it.
@@ -1215,6 +1225,7 @@ async def _quick_stream(calls: list[tuple[str, dict[str, Any]]], settings: dict[
                 result = await run_in_threadpool(run_tool, name, args)
         except Exception as exc:  # never leave the chat hanging
             result = {"error": str(exc)}
+        library.from_tool(name, args, result)
         yield _event("tool", id=step, name=name, args=args, result=result)
         results.append((name, args, result))
         if isinstance(result, dict) and result.get("error"):
@@ -1258,6 +1269,7 @@ async def _research_stream(model: str, mode: str, settings: dict[str, Any], hist
     if think is not None:
         payload["think"] = think
     stats: dict[str, Any] = {}
+    report = ""
     for _attempt in range(2):
         async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload) as resp:
             if resp.status_code != 200:
@@ -1278,10 +1290,13 @@ async def _research_stream(model: str, mode: str, settings: dict[str, Any], hist
                 if msg.get("thinking"):
                     yield _event("thinking", content=msg["thinking"])
                 if msg.get("content"):
+                    report += msg["content"]
                     yield _event("token", content=msg["content"])
                 if chunk.get("done"):
                     stats = {k: chunk.get(k) for k in ("eval_count", "eval_duration", "total_duration")}
         break
+    if report:
+        library.from_research(question, report)
     yield _event("token", content=research.sources_markdown(sources))
     yield _event("done", stats=stats)
 
@@ -1417,6 +1432,8 @@ async def feedback(request: Request):
     settings = store.get_settings()
     rating = "up" if body.get("rating") == "up" else "down"
     model = str(body.get("model") or "")
+    if rating == "up" and body.get("user") and body.get("reply"):
+        library.from_answer(str(body["user"]), str(body["reply"]))  # a good answer: worth knowing next time
     if not settings.get("auto_learn", True) or not model:
         return {"lesson": None}
     try:
@@ -1511,6 +1528,41 @@ async def set_engine(request: Request):
             use_engine()
         engine.start(on_ready=use_engine)
     return {**engine.status(), "in_use": OLLAMA == engine.SHIM_URL}
+
+
+@app.post("/api/engine/upgrade")
+async def engine_upgrade():
+    from . import engine
+
+    try:
+        await run_in_threadpool(engine.upgrade)
+    except engine.EngineError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return engine.status()
+
+
+@app.get("/api/growth")
+async def growth():
+    """How Athena has grown: her library, and her nightly reflections."""
+    from . import reflect
+
+    return {"library": library.stats(), "reflections": reflect.log()[-7:][::-1]}
+
+
+@app.post("/api/growth/reflect")
+async def reflect_now():
+    from . import reflect
+
+    r = await run_in_threadpool(reflect.run, OLLAMA)
+    if r.get("error"):
+        raise HTTPException(503, r["error"])
+    return r
+
+
+@app.delete("/api/library")
+async def clear_library():
+    await run_in_threadpool(library.clear)
+    return {"ok": True}
 
 
 @app.post("/api/engine/cleanup")

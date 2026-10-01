@@ -1194,3 +1194,5 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 /* Athena's own engine: brain download progress */
 .engine-bar { height: 6px; border-radius: 3px; background: var(--bg-active); margin: 6px 0; overflow: hidden; }
 .engine-bar div { height: 100%; background: var(--accent, #d4a537); transition: width .6s ease; }
+
+.row-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

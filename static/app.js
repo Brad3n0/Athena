@@ -232,6 +232,9 @@ function fillEngine(eng) {
   $('#setBrain').innerHTML = Object.entries(eng.brains).map(([k, label]) => `<option value="${k}">${escapeHtml(label)}</option>`).join('');
   $('#setBrain').value = eng.brain;
   $('#brainRow').hidden = eng.mode !== 'builtin';
+  $('#brainUpgrade').hidden = !(eng.mode === 'builtin' && eng.upgrade);
+  if (eng.upgrade) $('#brainUpgrade').innerHTML = `✨ <b>A smarter brain is available:</b> ${escapeHtml(eng.upgrade.label)}. Her memories, lessons, library and settings all stay; the old brain is deleted once the new one works.
+    <button type="button" class="primary" id="brainUpgradeBtn">Upgrade her brain</button>`;
   $('#engineNote').innerHTML = eng.mode !== 'builtin' ? 'Using the Ollama app. The models below are Ollama’s.'
     : eng.in_use && eng.state === 'ready' ? `✓ Running on her own engine${eng.build ? ` (llama.cpp ${escapeHtml(eng.build)})` : ''}. The Ollama model lists below aren't used.`
     : eng.state === 'off' && eng.in_use ? '✓ Her brain is unloaded to free the graphics card; it loads again on your next message.'
@@ -2836,7 +2839,7 @@ async function loadStats() {
 function switchTab(tab) {
   if (tab === 'stats') loadStats();
   if (tab === 'jarvis') loadJarvis();
-  if (tab === 'about') loadMemories();
+  if (tab === 'about') { loadMemories(); loadGrowth(); }
   if (tab === 'privacy') loadBackups();
   if (tab === 'integrations') { findImageGenerator(); loadGithub(); }
   if (tab === 'desktop') loadPhone();
@@ -2907,9 +2910,40 @@ $('#setBrain').addEventListener('change', async (e) => {
     refreshStatus();
   } catch (err) { toast(err.message, 'error'); }
 });
+$('#engineBox').addEventListener('click', async (e) => {
+  if (e.target.id !== 'brainUpgradeBtn') return;
+  try { await api('/api/engine/upgrade', json('POST', {})); toast('Upgrading her brain. It downloads once, then she switches by herself.'); refreshStatus(); }
+  catch (err) { toast(err.message, 'error'); }
+});
 $('#engineCleanup').addEventListener('click', async () => {
   const r = await api('/api/engine/cleanup', json('POST', {})).catch((e) => ({ error: e.message }));
   toast(r.error || (r.freed_gb ? `Freed ${r.freed_gb} GB` : 'Nothing to free'));
+});
+
+async function loadGrowth() {
+  const g = await api('/api/growth').catch(() => null);
+  if (!g) return;
+  const lib = g.library;
+  $('#growthInfo').innerHTML = lib.entries
+    ? `📚 Her library: <b>${lib.entries}</b> thing${lib.entries === 1 ? '' : 's'} she's found out since ${escapeHtml(lib.since)} (${lib.size_kb} KB).`
+    : '📚 Her library is empty so far. It fills up as she looks things up for you.';
+  $('#reflectionList').innerHTML = g.reflections.map((r) => `<li><span><b>${escapeHtml(r.date)}</b> ${escapeHtml(r.summary || '')}${
+    r.lessons?.length ? `<br><span class="muted small">Learned: ${r.lessons.map(escapeHtml).join(' · ')}</span>` : ''}</span></li>`).join('');
+}
+$('#reflectNow').addEventListener('click', async () => {
+  const btn = $('#reflectNow');
+  btn.disabled = true; btn.textContent = 'Reflecting…';
+  try {
+    const r = await api('/api/growth/reflect', json('POST', {}));
+    toast(r.lessons?.length ? `Learned ${r.lessons.length} lesson${r.lessons.length === 1 ? '' : 's'} from today` : (r.summary || r.note || 'Nothing new to learn today'));
+    loadMemories(); loadGrowth();
+  } catch (e) { toast(e.message, 'error'); }
+  btn.disabled = false; btn.textContent = 'Reflect on today now';
+});
+$('#libraryClear').addEventListener('click', async () => {
+  if (!confirm('Clear everything in her library? Memories and lessons are kept.')) return;
+  await api('/api/library', { method: 'DELETE' }).catch(() => {});
+  toast('Her library is cleared'); loadGrowth();
 });
 
 function fillVoices() {

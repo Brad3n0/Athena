@@ -47,6 +47,10 @@ BRAINS: dict[str, dict[str, Any]] = {
                   "repo": "Qwen/Qwen3-14B-GGUF", "params": "14B", "family": "qwen3"},
 }
 DEFAULT_BRAIN = "qwen3-vl-8b"
+# Brain upgrades: when a better brain comes out, an Athena update adds it above and sets "replaced_by" on the old one.
+# She then offers the upgrade; memories, lessons, library and settings all stay, and the old brain is deleted once
+# the new one works.
+_cleanup_after_ready = [False]
 
 _lock = threading.RLock()
 _proc: subprocess.Popen | None = None
@@ -100,6 +104,9 @@ def status() -> dict[str, Any]:
     s["brains"] = {k: v["label"] for k, v in BRAINS.items()}
     if s["total"]:
         s["percent"] = round(100 * s["done"] / s["total"])
+    newer = BRAINS[brain_key()].get("replaced_by")
+    if newer in BRAINS:
+        s["upgrade"] = {"brain": newer, "label": BRAINS[newer]["label"]}
     return s
 
 
@@ -308,6 +315,9 @@ def _start() -> None:
             raise EngineError("The engine stopped while loading her brain. " + _tail_log())
         _set(state="ready", what="", error="")
         _log("ready")
+        if _cleanup_after_ready[0]:  # an upgrade worked: the old brain isn't needed any more
+            _cleanup_after_ready[0] = False
+            _log(f"upgrade done; freed {remove_other_brains() / 1e9:.1f} GB")
         for hook in list(_ready_hooks):
             try:
                 hook()
@@ -392,6 +402,15 @@ def switch_brain(key: str) -> None:
     unload()
     _set(state="off", error="")
     start()
+
+
+def upgrade() -> None:
+    """Move to the newer brain (downloads once); the old one is deleted after the new one is running."""
+    newer = BRAINS[brain_key()].get("replaced_by")
+    if newer not in BRAINS:
+        raise EngineError("Athena already has her newest brain")
+    _cleanup_after_ready[0] = True
+    switch_brain(newer)
 
 
 def remove_other_brains() -> int:
