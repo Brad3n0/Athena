@@ -2567,6 +2567,8 @@ async def phone_info(request: Request):
     return {"enabled": bool(store.get_settings().get("phone_access")), "pin_set": security.pin_set(),
             "listening": phone.listening_on_network(), "urls": await run_in_threadpool(phone.lan_urls, port),
             "secure_urls": await run_in_threadpool(phone.secure_urls), "secure": request.url.scheme == "https",
+            "anywhere_urls": [f"https://{ip}:{phone.https_port(port)}" if phone.secure_urls() else f"http://{ip}:{port}"
+                              for ip in await run_in_threadpool(phone.tailscale_ips)],
             "this_is_phone": not _from_this_pc(request)}
 
 

@@ -163,7 +163,13 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme
 
 // --------------------------------------------------------------- status
 async function refreshStatus() {
-  try { state.status = await api('/api/status'); } catch { state.status = { ollama: false }; }
+  try { state.status = await api('/api/status'); state.pcReachable = true; } catch (e) {
+    // fetch itself failing (not an error reply) means this device can't reach the PC at all, e.g. a phone that left
+    // home Wi-Fi: say that, instead of "no models installed".
+    state.pcReachable = !(e instanceof TypeError);
+    state.status = { ollama: false };
+  }
+  if (!state.pcReachable) { showUnreachable(); return; }
   const el = $('#status');
   el.classList.toggle('ok', !!state.status.ollama);
   el.classList.toggle('bad', !state.status.ollama);
@@ -173,6 +179,24 @@ async function refreshStatus() {
     banner.innerHTML = `<b>Can't reach Ollama.</b> Start the Ollama app (or run <code>ollama serve</code>), then this will connect automatically. Looking at <code>${escapeHtml(state.status.ollama_url || 'http://127.0.0.1:11434')}</code>.`;
     banner.hidden = false;
   } else banner.hidden = true;
+}
+
+let reconnectTimer = null;
+function showUnreachable() {
+  const banner = $('#banner');
+  banner.innerHTML = `<b>Can't reach Athena on your PC.</b> Athena runs on your PC, and this device can't see it right now
+    (for example, your phone left your home Wi-Fi). Make sure the PC is on with Athena running. To use her from school or on
+    mobile data, install the free <b>Tailscale</b> app on the PC and this phone (same account), then open the
+    “From anywhere” address shown in Settings → Desktop app on the PC. This reconnects by itself.`;
+  banner.hidden = false;
+  $('#statusText').textContent = 'Not connected to your PC';
+  $('#status').classList.add('bad'); $('#status').classList.remove('ok');
+  if ($('#modelName')) $('#modelName').textContent = "Can't reach your PC";
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(async () => {
+    await refreshStatus();
+    if (state.pcReachable) { await refreshModels(); }
+  }, 5000);
 }
 
 async function refreshModels() {
@@ -233,7 +257,7 @@ function currentModel() {
 
 function renderModelButton() {
   if (!state.chat) return;
-  $('#modelName').textContent = autoOn() && state.models.length ? '✨ Auto' : currentModel() || (state.models.length ? 'Select a model' : 'No models installed');
+  $('#modelName').textContent = state.pcReachable === false ? "Can't reach your PC" : autoOn() && state.models.length ? '✨ Auto' : currentModel() || (state.models.length ? 'Select a model' : 'No models installed');
   $('#modelBtn').title = autoOn() ? `Auto picks the best model for each message (usually ${currentModel()})` : '';
   renderReadyDot();
 }
@@ -1435,6 +1459,7 @@ async function sendMessage(text, { voice = false, display = null, research = fal
   research = !voice && (research || state.researchNext);
   if (research) setResearch(false);
   if (!state.status.ollama) { await refreshStatus(); }
+  if (state.pcReachable === false) { toast("Can't reach Athena on your PC from here. See the note at the top.", 'error'); return; }
   let model = voice ? pickDefaultModel('voice') : currentModel();
   if (!model) { toast('Download a model first (Settings → Models).', 'error'); openSettings('models'); return; }
   let route = null;
@@ -1963,7 +1988,13 @@ async function loadPhone() {
       address is secured by your own PC, not a company. Tap <b>Advanced → Proceed</b> (Android) or <b>Show Details → visit this
       website</b> (iPhone). Then enter your PIN, and voice chat works on your phone too.</p>`
       : '<p class="muted small">Then enter your PIN. Typing works; for voice on the phone, update Athena so she can make her secure address.</p>'}
-      <p class="muted small">Tip: use your browser's <b>Add to Home Screen</b> and Athena opens like an app.</p></div>`;
+      <p class="muted small">Tip: use your browser's <b>Add to Home Screen</b> and Athena opens like an app.</p>
+      ${info.anywhere_urls?.length
+        ? `<p class="small"><b>🌍 From anywhere (school, mobile data):</b> <code>${info.anywhere_urls.map(escapeHtml).join('</code> <code>')}</code><br>
+           <span class="muted">Works while Tailscale is on on both this PC and your phone. Use this one when you're away from home.</span></p>`
+        : `<p class="small"><b>🌍 Away from home?</b> The address above only works on your home Wi-Fi. Install the free
+           <b>Tailscale</b> app (tailscale.com) on this PC and your phone, sign in to both with the same account, then come back
+           here: a “From anywhere” address appears that works from school or mobile data. The PC must stay on with Athena running.</p>`}</div>`;
 }
 $('#setWebAddress').addEventListener('change', (e) => saveSettings({ web_address: e.target.value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '') }));
 $('#setPhone').addEventListener('change', async (e) => {

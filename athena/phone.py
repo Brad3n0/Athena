@@ -26,6 +26,27 @@ def lan_ips() -> list[str]:
     return private or [ip for ip in ips if not ip.startswith("127.")]
 
 
+def _tailscale(ip: str) -> bool:
+    """Tailscale gives each device an address in 100.64.0.0 – 100.127.255.255 that works from anywhere."""
+    parts = ip.split(".")
+    return len(parts) == 4 and parts[0] == "100" and parts[1].isdigit() and 64 <= int(parts[1]) <= 127
+
+
+def tailscale_ips() -> list[str]:
+    """This PC's Tailscale address, if Tailscale is installed and on (the phone can reach it from school, data, anywhere)."""
+    found = [ip for ip in lan_ips() if _tailscale(ip)]
+    try:
+        import psutil
+
+        for addrs in psutil.net_if_addrs().values():
+            for a in addrs:
+                if a.family == socket.AF_INET and _tailscale(a.address) and a.address not in found:
+                    found.append(a.address)
+    except Exception:
+        pass
+    return found
+
+
 def lan_urls(port: int) -> list[str]:
     return [f"http://{ip}:{port}" for ip in lan_ips()]
 
@@ -62,7 +83,7 @@ def ensure_cert() -> tuple[str, str] | None:
     except ImportError:
         return None
     cert_file, key_file = cert_paths()
-    ips = sorted(set(lan_ips()) | {"127.0.0.1"})
+    ips = sorted(set(lan_ips()) | set(tailscale_ips()) | {"127.0.0.1"})
     names = sorted({"localhost", socket.gethostname(), socket.gethostname().lower() + ".local"})
     stamp = cert_file.with_suffix(".for")
     wanted = ",".join(ips + names)
