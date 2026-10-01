@@ -121,3 +121,20 @@ static/        The app (plain HTML/CSS/JS, works offline)
   brain3d.js   Athena's Brain 3D view
 launcher/      Athena.exe
 ```
+
+## System requirements
+
+| | **Minimum** | **Recommended** |
+|---|---|---|
+| **OS** | Windows 10 64-bit | Windows 11 64-bit |
+| **Processor** | 4 cores (Ryzen 3 3100 / Core i3-10100) | 6–8 cores (Ryzen 5 5600 / Core i5-12400) |
+| **Memory** | 16 GB RAM | 32 GB RAM |
+| **Graphics** | 8 GB VRAM (Radeon RX 6600 / GeForce RTX 3050 8 GB) | 12–16 GB VRAM (Radeon RX 9060 XT 16 GB / GeForce RTX 4060 Ti 16 GB) |
+| **Storage** | 15 GB free | 40 GB free on an SSD |
+| **Network** | Internet for the first setup | Internet for web search, sports and updates |
+| **Extras** | | Microphone and speakers for voice chat |
+
+- **AMD and NVIDIA** cards both work. Intel Arc should too, but hasn't been tested.
+- **No graphics card?** She still runs on the processor, but replies are much slower.
+- **Recommended specs** run bigger brains like Qwen3 14B, and leave room for image generation.
+- **Mac:** Apple Silicon (M1 or newer) with 16 GB memory. PC control features are Windows only.
