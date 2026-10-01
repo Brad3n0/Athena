@@ -375,7 +375,9 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     }
     // 6. crosshair brackets
     hx.strokeStyle = a(C, 0.6 * boot); hx.lineWidth = 1.2;
-    for (let k = 0; k < 4; k++) { hx.save(); hx.rotate(k * Math.PI / 2); hx.beginPath(); hx.moveTo(Rp * 1.66, 0); hx.lineTo(Rp * 1.82, 0); hx.moveTo(Rp * 1.66, -6); hx.lineTo(Rp * 1.66, 6); hx.stroke(); hx.restore(); }
+    for (let k = 0; k < 4; k++) {
+      if (k % 2 && innerWidth < innerHeight) continue; // phones: the top and bottom ticks would cross the title and timeline
+      hx.save(); hx.rotate(k * Math.PI / 2); hx.beginPath(); hx.moveTo(Rp * 1.66, 0); hx.lineTo(Rp * 1.82, 0); hx.moveTo(Rp * 1.66, -6); hx.lineTo(Rp * 1.66, 6); hx.stroke(); hx.restore(); }
     hx.restore();
     // 7. neural activity bars (left)
     const bx = 34, by = innerHeight - 250;
@@ -399,13 +401,14 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     }
     // 9. boot sequence text
     if (view.boot < 1) {
+      const bootY = Math.max(innerHeight * 0.55, el.querySelector('.brain-foot').getBoundingClientRect().top - 4 * 16 - 10); // just above the timeline
       const lines = ['INITIALIZING NEURAL MAP', 'LOADING MEMORY BANKS', 'LINKING KNOWLEDGE GRAPH', 'ATHENA ONLINE'];
       hx.font = '600 11px "Segoe UI", system-ui, sans-serif'; hx.textAlign = 'center';
       lines.forEach((ln, i) => {
         const p = view.boot * 5 - i;
         if (p <= 0) return;
         hx.fillStyle = i === lines.length - 1 ? a(O, Math.min(1, p) * (1 - view.boot * 0.6)) : a(C, Math.min(1, p) * (1 - view.boot));
-        hx.fillText(ln.slice(0, Math.floor(ln.length * Math.min(1, p))) + (p < 1 ? '▌' : ''), innerWidth / 2, innerHeight * 0.8 + i * 16);
+        hx.fillText(ln.slice(0, Math.floor(ln.length * Math.min(1, p))) + (p < 1 ? '▌' : ''), innerWidth / 2, bootY + i * 16);
       });
     }
   }
@@ -613,8 +616,13 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
   // ---------------------------------------------------------- the loop
   const clock = new THREE.Clock();
   let raf = 0;
+  // switched to another window (a game, say) or minimized: stop drawing completely, so she uses no graphics power
+  const asleep = () => document.hidden || !document.hasFocus();
+  const wake = () => { if (!el.hidden && !raf && !asleep()) { clock.getDelta(); raf = requestAnimationFrame(frame); } };
+  addEventListener('focus', wake);
+  document.addEventListener('visibilitychange', wake);
   function frame() {
-    if (el.hidden) { raf = 0; return; }
+    if (el.hidden || asleep()) { raf = 0; return; }
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, clock.getDelta()), t = clock.elapsedTime;
     view.boot = Math.min(1, view.boot + dt / 2.2);

@@ -1204,7 +1204,7 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
   animation: brain-in .5s ease-out; }
 .brain-view[hidden] { display: none; }
 @keyframes brain-in { from { opacity: 0; transform: scale(1.03); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
-.brain-canvas { position: absolute; inset: 0; touch-action: none; }
+.brain-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 .brain-scan { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; opacity: .5;
   background: repeating-linear-gradient(to bottom, rgba(var(--hud),.05) 0 1px, transparent 1px 3px); }
 .brain-scan::after { content: ""; position: absolute; left: 0; right: 0; height: 120px; top: -120px;
@@ -1286,7 +1286,7 @@ dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s 
 .brain-view[data-style="constellation"] .brain-scan, .brain-view[data-style="armillary"] .brain-scan { opacity: .12; }
 .brain-view[data-style="constellation"] .brain-title, .brain-view[data-style="armillary"] .brain-title { font-family: Cinzel, "Trajan Pro", Georgia, serif; animation: none; }
 
-.brain-hud { position: absolute; inset: 0; pointer-events: none; }
+.brain-hud { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .brain-view:not(.brain-3d) .brain-hud { display: none; }
 
 .brain-styles { display: none !important; } /* one look for her brain: the Athena style */

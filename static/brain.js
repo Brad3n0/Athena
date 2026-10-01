@@ -76,15 +76,39 @@ export function build(data, theme) {
     items.forEach((it, i) => nodes.push({ ...it, kind: field, cluster: key, pos: pts[i], color: colorOf(key),
       words: keywords(it.text), glow: 0, size: field === 'skills' ? 3.2 : field === 'reflections' ? 2.6 : 2.2 }));
   }
-  // Related things across her mind: share a meaningful word ("Lakers" in a memory and in her library)
-  const links = [];
-  for (let i = 0; i < nodes.length && links.length < 140; i++) {
-    for (let j = i + 1; j < nodes.length && links.length < 140; j++) {
-      const a = nodes[i], b = nodes[j];
-      if (a.cluster === b.cluster || a.kind === 'skills' || b.kind === 'skills') continue;
-      for (const w of a.words) if (b.words.has(w)) { links.push([a, b, w]); break; }
+  // Related things across her mind: they share a meaningful word ("Lakers" in a memory and in her library).
+  // Rarer shared words count more. Every star first gets its best match, then the strongest of the rest are added,
+  // with a few lines per star at most, so new things she learns join the web instead of the oldest stars hogging it.
+  const index = new Map();
+  nodes.forEach((nd, i) => { if (nd.kind !== 'skills') for (const w of nd.words) (index.get(w) || index.set(w, []).get(w)).push(i); });
+  // a word on lots of stars (a topic you talk about all the time) only links each star to its nearest few in time,
+  // which keeps it fast however big her mind gets
+  const common = Math.min(60, Math.max(6, nodes.length * 0.2));
+  const pairs = new Map();
+  for (const [w, list] of index) {
+    if (list.length < 2) continue;
+    const weight = Math.log(nodes.length / list.length) + 0.5;
+    const span = list.length > common ? 3 : list.length;
+    for (let x = 0; x < list.length; x++) {
+      for (let y = x + 1; y < Math.min(list.length, x + 1 + span); y++) {
+        const key = list[x] * 100000 + list[y], cur = pairs.get(key);
+        const same = nodes[list[x]].cluster === nodes[list[y]].cluster ? 0.6 : 1; // links across sections first
+        if (!cur) pairs.set(key, { i: list[x], j: list[y], score: weight * same, word: w, best: weight });
+        else { cur.score += weight * same; if (weight > cur.best) { cur.best = weight; cur.word = w; } }
+      }
     }
   }
+  const ranked = [...pairs.values()].sort((a, b) => b.score - a.score);
+  const MAX_EACH = 4, MAX_LINKS = Math.min(700, 40 + nodes.length);
+  const degree = new Array(nodes.length).fill(0), used = new Set(), links = [];
+  const take = (pr) => {
+    if (used.has(pr) || degree[pr.i] >= MAX_EACH || degree[pr.j] >= MAX_EACH || links.length >= MAX_LINKS) return;
+    used.add(pr); degree[pr.i]++; degree[pr.j]++; links.push([nodes[pr.i], nodes[pr.j], pr.word]);
+  };
+  const bestOf = new Map(); // each star's strongest match
+  for (const pr of ranked) for (const k of [pr.i, pr.j]) if (!bestOf.has(k)) bestOf.set(k, pr);
+  for (const pr of bestOf.values()) take(pr);
+  for (const pr of ranked) take(pr);
   const times = nodes.map((n) => n.time).filter(Boolean);
   return { nodes, hubs, links, t0: times.length ? Math.min(...times) : Date.now() / 1000 };
 }
@@ -233,8 +257,13 @@ export function openBrain({ api, onAsk, toast, style = 'athena', onStyle } = {})
     }
   }
 
+  // closed, minimized or another window in front (a game, say): stop drawing until she's back in front
+  const asleep = () => document.hidden || !document.hasFocus();
+  const wake = () => { if (!el.hidden && !raf && !asleep()) { last = performance.now(); raf = requestAnimationFrame(draw); } };
+  addEventListener('focus', wake);
+  document.addEventListener('visibilitychange', wake);
   function draw(now) {
-    if (el.hidden) { raf = 0; return; } // closed: stop drawing until it opens again
+    if (el.hidden || asleep()) { raf = 0; return; }
     const dt = Math.min(50, now - last); last = now;
     if (!view.drag && !reduce) view.yaw += dt * 0.00012;
     view.energy = Math.max(0.15, view.energy * 0.985);
