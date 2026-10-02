@@ -588,10 +588,15 @@ def ensure_running(timeout: float = 300) -> bool:
     return False
 
 
-def unload() -> None:
-    """Free the graphics card (the brain loads again on the next message)."""
+def unload(force: bool = False) -> None:
+    """Free the graphics card (the brain loads again on the next message). While her brain is still loading, this
+    does nothing unless forced (switching brains, closing Athena): killing a load halfway is what used to leave the
+    "engine stopped while loading her brain" error, especially right after a PC restart when loading is slower."""
     global _proc
     with _lock:
+        if not force and _state["state"] in ("starting", "downloading"):
+            _log("unload skipped: her brain is still loading")
+            return
         if _proc and _proc.poll() is None:
             _proc.terminate()
             try:
@@ -604,20 +609,20 @@ def unload() -> None:
 
 
 def restart() -> bool:
-    """Restart the engine (it crashed or ran out of memory)."""
+    """Restart the engine (it crashed or ran out of memory). If it's still loading, just wait for it instead."""
     unload()
     return ensure_running()
 
 
 def stop() -> None:
-    unload()
+    unload(force=True)
 
 
 def switch_brain(key: str) -> None:
     if key not in BRAINS:
         raise EngineError("Unknown brain")
     store.update_settings({"brain": key})
-    unload()
+    unload(force=True)
     _set(state="off", error="")
     start()
 

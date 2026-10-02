@@ -4,6 +4,7 @@ What's new in Athena, newest first. Most changes are built with [Claude Code](ht
 
 ## October 2026
 
+- **Engine start-up fixes**: nothing can stop her brain while it's still loading (this caused "the engine stopped while loading her brain", mostly right after a PC restart); opening Athena twice shows the one that's running; she uses the tested engine version, repairs a crashing one, and falls back to the processor if the graphics driver crashes.
 - **ATH-X**: Athena's brain has its own name, shown under her replies, in the model menu, in Settings and in Athena's Brain view.
 - **Engine download** is more reliable: it uses the newest release that has your PC's file, remembers the lookup, and works even when GitHub's API is busy.
 - **Security fixes** from GitHub's code scanning: safer chat and picture file paths, a stricter search link check, no error details sent to the page, faster text matching, and a safety net on the writing canvas.
