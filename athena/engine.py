@@ -355,16 +355,53 @@ def _brain_with_fallback(client: httpx.Client) -> tuple[Path, Path | None]:
 
 # ------------------------------------------------------------------ running
 
-def _launch(exe: Path, model: Path, eyes: Path | None) -> subprocess.Popen:
-    ctx = int(store.get_settings().get("context_size") or 16384)
+def _launch(exe: Path, model: Path, eyes: Path | None, ctx: int | None = None, gpu_layers: int = 999) -> subprocess.Popen:
+    ctx = ctx or int(store.get_settings().get("context_size") or 16384)
     args = [str(exe), "-m", str(model), "--host", "127.0.0.1", "--port", str(LLAMA_PORT), "-c", str(ctx),
-            "-ngl", "999", "-np", "1", "--jinja", "--alias", MODEL_NAME]
+            "-ngl", str(gpu_layers), "-np", "1", "--jinja", "--alias", MODEL_NAME]
     if eyes:
         args += ["--mmproj", str(eyes)]
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     log = LOG_FILE.open("a", encoding="utf-8")
     _log("starting: " + " ".join(args))
     return subprocess.Popen(args, cwd=str(exe.parent), stdout=log, stderr=subprocess.STDOUT, creationflags=FLAGS)
+
+
+def _stop_leftovers() -> None:
+    """Close engines left running by an earlier Athena (a crash, or a second Athena window): they hold the port
+    and the graphics card memory, so a new one can't start."""
+    try:
+        import psutil
+    except ImportError:
+        return
+    mine = _proc.pid if _proc and _proc.poll() is None else None
+    root = str(ENGINE_DIR.resolve()).lower()
+    for p in psutil.process_iter(["pid", "name", "exe"]):
+        try:
+            if p.info["pid"] == mine or "llama-server" not in (p.info["name"] or "").lower():
+                continue
+            if (p.info["exe"] or "").lower().startswith(root):
+                _log(f"closing a leftover engine (pid {p.info['pid']})")
+                p.kill()
+                p.wait(5)
+        except (psutil.Error, OSError):
+            continue
+
+
+_FAIL_HINTS = ("error", "failed", "out of memory", "unable", "cannot", "can't", "bind", "exception", "abort")
+
+
+def _failure_reason(since: int) -> str:
+    """The lines the engine wrote about why it stopped (not just the command that started it)."""
+    try:
+        with LOG_FILE.open("rb") as f:
+            f.seek(since)
+            text = f.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().split(" ", 2)[-1].startswith("starting:")]
+    bad = [ln for ln in lines if any(h in ln.lower() for h in _FAIL_HINTS)]
+    return " | ".join((bad or lines)[-3:])[-300:]
 
 
 def _wait_healthy(proc: subprocess.Popen, seconds: float = 300) -> bool:
@@ -398,13 +435,46 @@ def _start() -> None:
             model, eyes = _brain_with_fallback(client)
         _set(state="starting", what="Loading Athena's brain", done=0, total=0,
              build=(ENGINE_DIR / "version.txt").read_text(encoding="utf-8").strip() if (ENGINE_DIR / "version.txt").exists() else "")
-        with _lock:
-            if _proc and _proc.poll() is None:
-                _proc.terminate()
-            _proc = _launch(exe, model, eyes)
-            proc = _proc
-        if not _wait_healthy(proc):
-            raise EngineError("The engine stopped while loading her brain. " + _tail_log())
+        _stop_leftovers()
+        # Try the full setup first; if the engine stops (usually not enough graphics memory), step down:
+        # a shorter chat memory, then without her eyes for pictures, then part of the brain on the processor.
+        ctx = int(store.get_settings().get("context_size") or 16384)
+        attempts = [(ctx, eyes, 999), (min(ctx, 8192), eyes, 999), (min(ctx, 8192), None, 999), (8192, None, 24)]
+        seen, reasons, ok = set(), [], False
+        for a_ctx, a_eyes, a_ngl in attempts:
+            if (a_ctx, a_eyes, a_ngl) in seen:
+                continue
+            seen.add((a_ctx, a_eyes, a_ngl))
+            since = LOG_FILE.stat().st_size if LOG_FILE.exists() else 0
+            with _lock:
+                if _proc and _proc.poll() is None:
+                    _proc.terminate()
+                _proc = _launch(exe, model, a_eyes, a_ctx, a_ngl)
+                proc = _proc
+            if _wait_healthy(proc):
+                ok = True
+                note = []
+                if a_ctx < ctx:
+                    note.append(f"a shorter chat memory ({a_ctx // 1024}K)")
+                if eyes and not a_eyes:
+                    note.append("without seeing pictures")
+                if a_ngl != 999:
+                    note.append("partly on the processor (slower)")
+                if note:
+                    _set(note=(_state.get("note") or "") + " Her brain didn't fit on the graphics card with everything "
+                         "else running, so she's using " + ", ".join(note) + ". Close games or other big apps and press "
+                         "Try again for the full setup.")
+                break
+            reasons.append(_failure_reason(since))
+            _log(f"engine stopped (ctx {a_ctx}, eyes {'on' if a_eyes else 'off'}, gpu layers {a_ngl}); trying a lighter setup")
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            _stop_leftovers()
+        if not ok:
+            raise EngineError("The engine stopped while loading her brain: " + (reasons[0] if reasons else "no reason given")
+                              + ". Restarting the PC usually fixes this; if not, send the end of data\\engine.log.")
         _set(state="ready", what="", error="")
         _log("ready")
         if _cleanup_after_ready[0]:  # an upgrade worked: the old brain isn't needed any more

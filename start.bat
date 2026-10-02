@@ -38,6 +38,7 @@ rem Athena runs her own engine and downloads her brain by herself the first time
 
 :run
 ".venv\Scripts\python.exe" -m athena %*
+if errorlevel 4 (pause & exit /b 1)
 if errorlevel 3 goto :broken
 exit /b 0
 
@@ -45,6 +46,11 @@ exit /b 0
 rem Athena couldn't load her own code, most likely after a change she made to herself ("fix yourself").
 echo.
 echo Athena couldn't start. It's most likely because of a change she made to her own code.
+if not exist ".git" (
+  echo Run update.bat to get a fresh copy, or download Athena again. Your chats and settings in "data" are kept.
+  pause
+  exit /b 1
+)
 choice /c YN /m "Undo her changes to her own code and start again (they're kept aside, not deleted)"
 if errorlevel 2 (
   pause

@@ -50,6 +50,19 @@ def main() -> None:
     parser.add_argument("--hidden", action="store_true", help="With --desktop: start in the tray without opening a window")
     args = parser.parse_args()
 
+    # Already open (a second double-click, or the desktop app is in the tray)? Show that one instead of starting a
+    # second Athena: it can't get her address, and it would fight the first one over the brain and graphics card.
+    # Checked before anything else loads, so the second copy never starts an engine of its own.
+    if not (args.desktop or args.download_voice or args.preload_whisper) and _port_busy(args.port):
+        url = f"http://localhost:{args.port}"
+        if _is_athena(url):
+            print(f"\n  Athena is already running. Opening {url}")
+            if not args.no_browser:
+                webbrowser.open(url)
+            return
+        print(f"\n  Another program is using port {args.port}, so Athena can't start there.\n"
+              f"  Close it, or start Athena on another port: start.bat --port {args.port + 1}")
+        sys.exit(4)
     # Load the server first: if a change Athena made to her own code broke it, say so clearly, and exit with
     # code 3 so start.bat can offer to undo those changes.
     try:
@@ -125,6 +138,23 @@ def main() -> None:
         await asyncio.gather(*(srv.serve() for srv in servers))
 
     asyncio.run(serve_all())
+
+
+def _port_busy(port: int) -> bool:
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.5)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _is_athena(url: str) -> bool:
+    try:
+        import httpx
+
+        return httpx.get(f"{url}/api/status", timeout=3).status_code in (200, 401, 403)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _default_host() -> str:
