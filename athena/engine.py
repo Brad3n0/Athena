@@ -224,6 +224,7 @@ def _releases_without_api(client: httpx.Client) -> list[dict[str, Any]]:
 
 
 _lookup_cache: dict[str, Any] = {"time": 0.0, "found": None}
+_swapped_engine = [False]
 KNOWN_GOOD_ENGINE = "b11327"  # tested with Athena; used if the newest release can't be found
 
 
@@ -232,6 +233,11 @@ def _find_engine(client: httpx.Client) -> tuple[dict[str, Any], dict[str, Any]]:
     GitHub's limit of 60 checks an hour."""
     if _lookup_cache["found"] and time.time() - _lookup_cache["time"] < 900:
         return _lookup_cache["found"]
+    # The version tested with Athena comes first: llama.cpp publishes new versions several times a day, and a fresh
+    # one can crash on some graphics cards. Only if it can't be downloaded does she look for the newest.
+    pinned = _known_good(client)
+    if pinned:
+        return pinned
     # The newest release is sometimes published before all its files have finished uploading, so if it doesn't
     # have this PC's engine yet, use the newest recent release that does.
     releases: list[dict[str, Any]] = []
@@ -253,17 +259,30 @@ def _find_engine(client: httpx.Client) -> tuple[dict[str, Any], dict[str, Any]]:
                 return rel, asset
         if attempt:
             _log("engine lookup: no recent release has this PC's engine file; trying the releases page")
-    # Last resort: a release known to work, downloaded straight from its address (no lookups needed)
+    raise EngineError("Couldn't find an engine download for this PC right now. Try again in a few minutes")
+
+
+def _known_good(client: httpx.Client | None) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """The tested engine version's download for this PC (checked to exist when a client is given)."""
     tag = KNOWN_GOOD_ENGINE
     for name in (f"llama-{tag}-bin-win-vulkan-x64.zip", f"llama-{tag}-bin-macos-arm64.tar.gz",
                  f"llama-{tag}-bin-ubuntu-vulkan-x64.tar.gz", f"llama-{tag}-bin-ubuntu-x64.tar.gz"):
         if re.search(_engine_asset(), name):
-            _log(f"engine lookup: using the known-good release {tag}")
-            found = ({"tag_name": tag}, {"name": name,
-                     "browser_download_url": f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{name}"})
+            url = f"https://github.com/ggml-org/llama.cpp/releases/download/{tag}/{name}"
+            if client is not None:
+                try:
+                    with client.stream("GET", url, timeout=30, follow_redirects=True) as check:
+                        if check.status_code != 200:
+                            _log(f"engine lookup: tested version {tag} answered {check.status_code}")
+                            return None
+                except httpx.HTTPError as exc:
+                    _log(f"engine lookup: tested version {tag} unreachable: {exc!r}")
+                    return None
+            _log(f"engine lookup: using the tested version {tag}")
+            found = ({"tag_name": tag}, {"name": name, "browser_download_url": url})
             _lookup_cache.update(time=time.time(), found=found)
             return found
-    raise EngineError("Couldn't find an engine download for this PC right now. Try again in a few minutes")
+    return None
 
 
 def ensure_engine(client: httpx.Client) -> Path:
@@ -474,6 +493,19 @@ def _start() -> None:
             except OSError:
                 pass
             _stop_leftovers()
+        installed = (ENGINE_DIR / "version.txt").read_text(encoding="utf-8").strip() if (ENGINE_DIR / "version.txt").exists() else ""
+        if not ok and installed != KNOWN_GOOD_ENGINE and not _swapped_engine[0]:
+            # A different engine version that won't run here: swap it for the tested one and try once more
+            _swapped_engine[0] = True
+            _log(f"engine {installed or '?'} won't start here; switching to the tested version {KNOWN_GOOD_ENGINE}")
+            _stop_leftovers()
+            with _lock:
+                if _proc and _proc.poll() is None:
+                    _proc.kill()
+            shutil.rmtree(ENGINE_DIR, ignore_errors=True)
+            _lookup_cache.update(time=0.0, found=None)
+            _set(state="downloading", what="the tested engine")
+            return _start()
         if not ok:
             raise EngineError("The engine stopped while loading her brain: " + (reasons[0] if reasons else "no reason given")
                               + ". Restarting the PC usually fixes this; if not, send the end of data\\engine.log.")
