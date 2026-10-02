@@ -378,6 +378,8 @@ def _launch(exe: Path, model: Path, eyes: Path | None, ctx: int | None = None, g
     ctx = ctx or int(store.get_settings().get("context_size") or 16384)
     args = [str(exe), "-m", str(model), "--host", "127.0.0.1", "--port", str(LLAMA_PORT), "-c", str(ctx),
             "-ngl", str(gpu_layers), "-np", "1", "--jinja", "--alias", MODEL_NAME]
+    if gpu_layers == 0:
+        args += ["--device", "none"]  # processor only: don't even open the graphics driver
     if eyes:
         args += ["--mmproj", str(eyes)]
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -408,6 +410,17 @@ def _stop_leftovers() -> None:
             continue
 
 
+def _exit_meaning(code: int | None) -> str:
+    """What a Windows crash code means, in plain words."""
+    if code is None or code == 0:
+        return ""
+    c = code & 0xFFFFFFFF
+    known = {0xC0000005: "it crashed (often the graphics driver)", 0xC0000135: "a file it needs is missing",
+             0xC0000409: "it crashed (often the graphics driver)", 0xC000001D: "this processor can't run this build",
+             0xC0000017: "not enough memory"}
+    return f" (exit code {c:#010x}: {known[c]})" if c in known else f" (exit code {code})"
+
+
 _FAIL_HINTS = ("error", "failed", "out of memory", "unable", "cannot", "can't", "bind", "exception", "abort")
 
 
@@ -422,7 +435,7 @@ def _failure_reason(since: int) -> str:
     lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().split(" ", 2)[-1].startswith("starting:")]
     bad = [ln for ln in lines if any(h in ln.lower() for h in _FAIL_HINTS)]
     out = " | ".join((bad or lines)[-3:])[-300:]
-    return out or "it closed without saying why (often a leftover engine, or the graphics driver)"
+    return out or "it closed without saying why"
 
 
 def _wait_healthy(proc: subprocess.Popen, seconds: float = 300) -> bool:
@@ -460,7 +473,8 @@ def _start() -> None:
         # Try the full setup first; if the engine stops (usually not enough graphics memory), step down:
         # a shorter chat memory, then without her eyes for pictures, then part of the brain on the processor.
         ctx = int(store.get_settings().get("context_size") or 16384)
-        attempts = [(ctx, eyes, 999), (min(ctx, 8192), eyes, 999), (min(ctx, 8192), None, 999), (8192, None, 24)]
+        attempts = [(ctx, eyes, 999), (min(ctx, 8192), eyes, 999), (min(ctx, 8192), None, 999), (8192, None, 24),
+                    (8192, None, 0)]  # last: processor only, in case the graphics driver itself is what crashes
         seen, reasons, ok = set(), [], False
         for a_ctx, a_eyes, a_ngl in attempts:
             if (a_ctx, a_eyes, a_ngl) in seen:
@@ -479,14 +493,22 @@ def _start() -> None:
                     note.append(f"a shorter chat memory ({a_ctx // 1024}K)")
                 if eyes and not a_eyes:
                     note.append("without seeing pictures")
-                if a_ngl != 999:
+                if a_ngl == 0:
+                    note.append("only the processor, because the graphics card crashed the engine (much slower; restarting "
+                                "the PC or updating the AMD/NVIDIA driver usually fixes it)")
+                elif a_ngl != 999:
                     note.append("partly on the processor (slower)")
-                if note:
+                if a_ngl == 0:
+                    _set(note=(_state.get("note") or "") + " The graphics card kept crashing the engine, so she's running "
+                         "on the processor only for now (much slower). Restart the PC, or update the AMD/NVIDIA graphics "
+                         "driver, then press Try again.")
+                elif note:
                     _set(note=(_state.get("note") or "") + " Her brain didn't fit on the graphics card with everything "
                          "else running, so she's using " + ", ".join(note) + ". Close games or other big apps and press "
                          "Try again for the full setup.")
                 break
-            reasons.append(_failure_reason(since))
+            code = proc.poll()
+            reasons.append(_failure_reason(since) + _exit_meaning(code))
             _log(f"engine stopped (ctx {a_ctx}, eyes {'on' if a_eyes else 'off'}, gpu layers {a_ngl}); trying a lighter setup")
             try:
                 proc.kill()
