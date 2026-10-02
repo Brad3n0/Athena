@@ -375,12 +375,13 @@ def _stop_leftovers() -> None:
     except ImportError:
         return
     mine = _proc.pid if _proc and _proc.poll() is None else None
-    root = str(ENGINE_DIR.resolve()).lower()
-    for p in psutil.process_iter(["pid", "name", "exe"]):
+    # Any engine Athena started, from this folder or an older copy of Athena (it holds her port and graphics memory)
+    for p in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             if p.info["pid"] == mine or "llama-server" not in (p.info["name"] or "").lower():
                 continue
-            if (p.info["exe"] or "").lower().startswith(root):
+            cmd = " ".join(p.info["cmdline"] or [])
+            if f"--alias {MODEL_NAME}" in cmd or f"--port {LLAMA_PORT}" in cmd:
                 _log(f"closing a leftover engine (pid {p.info['pid']})")
                 p.kill()
                 p.wait(5)
@@ -401,7 +402,8 @@ def _failure_reason(since: int) -> str:
         return ""
     lines = [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().split(" ", 2)[-1].startswith("starting:")]
     bad = [ln for ln in lines if any(h in ln.lower() for h in _FAIL_HINTS)]
-    return " | ".join((bad or lines)[-3:])[-300:]
+    out = " | ".join((bad or lines)[-3:])[-300:]
+    return out or "it closed without saying why (often a leftover engine, or the graphics driver)"
 
 
 def _wait_healthy(proc: subprocess.Popen, seconds: float = 300) -> bool:
