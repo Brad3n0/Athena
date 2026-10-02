@@ -46,6 +46,22 @@ def use_engine() -> None:
     from . import engine
 
     OLLAMA = engine.SHIM_URL
+    engine._set(fallback="")
+
+
+def engine_failed() -> None:
+    """Her engine couldn't start: if the Ollama app is installed with a chat model, answer with that meanwhile,
+    so Athena keeps working. Her engine is tried again on Try again or the next start."""
+    global OLLAMA
+    from . import engine
+
+    try:
+        names = [m.get("name", "") for m in httpx.get(f"{_ollama_url()}/api/tags", timeout=3).json().get("models", [])]
+    except (httpx.HTTPError, ValueError):
+        return
+    if any(n and "embed" not in n for n in names):
+        OLLAMA = _ollama_url()
+        engine._set(fallback="ollama")
 
 
 def use_ollama() -> None:
@@ -198,6 +214,7 @@ async def lifespan(_app: FastAPI):
         # otherwise keep using Ollama, if it's installed, while the brain downloads in the background.
         if engine.brain_files()[0] and engine.server_exe():
             use_engine()
+        engine.on_error(engine_failed)
         engine.start(on_ready=use_engine)
     else:
         # Once, when it changes: set Ollama's speed options and restart it so they take effect.
@@ -1543,6 +1560,7 @@ async def set_engine(request: Request):
                 raise HTTPException(400, str(exc)) from exc
         if engine.brain_files()[0] and engine.server_exe():
             use_engine()
+        engine.on_error(engine_failed)
         engine.start(on_ready=use_engine)
     return {**engine.status(), "in_use": OLLAMA == engine.SHIM_URL}
 
@@ -2155,6 +2173,14 @@ async def selftest():
         r = await client.get(f"{OLLAMA}/api/version", timeout=4)
         return "ok", f"Running · version {r.json().get('version')}"
     await check("Athena's engine" if OLLAMA.endswith(":11435") else "Ollama", ollama())
+    from . import engine
+
+    if engine.wanted():
+        await check("Graphics card", run_in_threadpool(engine.graphics_check))
+    brain_name = engine.status().get("brain_name") or "Athena's brain"
+
+    def shown(name: str) -> str:  # her built-in brain by its name (ATH-X), not the engine's internal id
+        return brain_name if name == engine.MODEL_NAME else name
     names: list[str] = []
     try:
         names = [m["name"] for m in (await client.get(f"{OLLAMA}/api/tags", timeout=5)).json().get("models", [])]
@@ -2166,7 +2192,7 @@ async def selftest():
             return "fail", "No models downloaded yet — run the setup wizard or Settings → Models"
         chosen = {k: v for k, v in (settings.get("models") or {}).items() if v}
         missing = [f"{k}: {v}" for k, v in chosen.items() if v not in names]
-        detail = f"{len(names)} installed: {', '.join(names[:8])}{'…' if len(names) > 8 else ''}"
+        detail = f"{len(names)} installed: {', '.join(shown(n) for n in names[:8])}{'…' if len(names) > 8 else ''}"
         return ("warn", detail + f" · chosen but missing → {', '.join(missing)}") if missing else ("ok", detail)
     await check("AI models", models())
 
@@ -2184,7 +2210,7 @@ async def selftest():
         if data.get("error"):
             return "fail", data["error"]
         secs = (data.get("total_duration") or 0) / 1e9
-        return "ok", f"{test_model} answered in {secs:.1f}s" + (" (first load is slower)" if secs > 20 else "")
+        return "ok", f"{shown(test_model)} answered in {secs:.1f}s" + (" (first load is slower)" if secs > 20 else "")
     await check("Chat reply", reply())
 
     async def tools_check():
@@ -2196,10 +2222,10 @@ async def selftest():
             "messages": [{"role": "user", "content": "What time is it? Use your tool."}]}, timeout=httpx.Timeout(10, read=240))
         data = r.json()
         if data.get("error"):
-            return "fail", f"{test_model} can't use tools — pick gpt-oss or qwen3 for tasks, files, web and more"
+            return "fail", f"{shown(test_model)} can't use tools — pick gpt-oss or qwen3 for tasks, files, web and more"
         if (data.get("message") or {}).get("tool_calls"):
-            return "ok", f"{test_model} can use Athena's abilities"
-        return "warn", f"{test_model} answered without using its tool — abilities may be unreliable with this model"
+            return "ok", f"{shown(test_model)} can use Athena's abilities"
+        return "warn", f"{shown(test_model)} answered without using its tool — abilities may be unreliable with this model"
     await check("Abilities (tool use)", tools_check())
 
     async def web_check():
