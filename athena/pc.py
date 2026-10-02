@@ -201,8 +201,22 @@ def set_clipboard(text: str) -> dict[str, Any]:
 
 # ------------------------------------------------------------ screenshots
 
+def _no_screen(exc: Exception) -> PCError:
+    return PCError(f"Couldn't capture the screen right now ({exc.__class__.__name__}). If the PC is locked or "
+                   "you're connected through Remote Desktop, unlock it or use it directly, then try again.")
+
+
 def screenshot(max_width: int = 1600) -> str:
     """Capture the main screen and return a base64 PNG/JPEG."""
+    try:
+        return _screenshot(max_width)
+    except PCError:
+        raise
+    except Exception as exc:  # noqa: BLE001  # locked screen, no display, driver hiccup: a clear message, not a crash
+        raise _no_screen(exc) from exc
+
+
+def _screenshot(max_width: int) -> str:
     try:
         import mss
         import mss.tools
@@ -227,6 +241,15 @@ def screenshot(max_width: int = 1600) -> str:
 def screenshot_for_pointing(width: int = 1288) -> dict[str, Any]:
     """A screenshot of the main screen sized for vision models to point at things (sides are multiples of 28,
     which is how Qwen-VL models measure), plus what's needed to turn their answer back into screen pixels."""
+    try:
+        return _screenshot_for_pointing(width)
+    except PCError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise _no_screen(exc) from exc
+
+
+def _screenshot_for_pointing(width: int) -> dict[str, Any]:
     try:
         import mss
         from PIL import Image

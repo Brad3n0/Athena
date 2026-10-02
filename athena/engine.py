@@ -58,6 +58,7 @@ _lock = threading.RLock()
 _proc: subprocess.Popen | None = None
 _state: dict[str, Any] = {"state": "off", "what": "", "done": 0, "total": 0, "error": "", "build": ""}
 _ready_hooks: list = []
+_error_hooks: list = []  # called when her engine can't start (the app falls back to Ollama if it's installed)
 _shim_started = False
 _last_used = [time.time()]
 
@@ -383,9 +384,14 @@ def _launch(exe: Path, model: Path, eyes: Path | None, ctx: int | None = None, g
     if eyes:
         args += ["--mmproj", str(eyes)]
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    log = LOG_FILE.open("a", encoding="utf-8")
+    try:  # keep the log from growing forever: start a fresh one past 5 MB (the previous one is kept as .old)
+        if LOG_FILE.exists() and LOG_FILE.stat().st_size > 5_000_000:
+            LOG_FILE.replace(LOG_FILE.with_suffix(".log.old"))
+    except OSError:
+        pass
     _log("starting: " + " ".join(args))
-    return subprocess.Popen(args, cwd=str(exe.parent), stdout=log, stderr=subprocess.STDOUT, creationflags=FLAGS)
+    with LOG_FILE.open("a", encoding="utf-8") as log:  # the engine keeps its own copy of the file handle
+        return subprocess.Popen(args, cwd=str(exe.parent), stdout=log, stderr=subprocess.STDOUT, creationflags=FLAGS)
 
 
 def _stop_leftovers() -> None:
@@ -548,9 +554,50 @@ def _start() -> None:
             msg = (f"Couldn't reach the download site ({exc.__class__.__name__}: {exc}). Check the internet connection, "
                    "then press Try again.")
         _set(state="error", error=msg, what="")
+        for hook in list(_error_hooks):
+            try:
+                hook()
+            except Exception as hook_exc:  # noqa: BLE001
+                _log(f"error hook: {hook_exc!r}")
 
 
 _starting = threading.Lock()
+
+
+def graphics_check() -> tuple[str, str]:
+    """For Settings → Health check: can her engine see and use the graphics card? Asks the engine itself."""
+    exe = server_exe()
+    if not exe:
+        return "skip", "Her engine isn't downloaded yet"
+    try:
+        r = subprocess.run([str(exe), "--list-devices"], cwd=str(exe.parent), capture_output=True, text=True,
+                           errors="replace", timeout=60, creationflags=FLAGS)
+    except subprocess.TimeoutExpired:
+        return "warn", "Her engine took too long to check the graphics card. Restart the PC and check again."
+    except OSError as exc:
+        return "fail", f"Her engine couldn't run ({exc}). Delete the 'engine' folder and press Try again to download it fresh."
+    crashed = r.returncode < 0 or (r.returncode & 0xFFFFFFFF) >= 0xC0000000  # a signal, or a Windows crash code
+    if r.returncode != 0 and not crashed:
+        return "skip", f"This engine version can't check the graphics card (exit code {r.returncode})"
+    if crashed:
+        return "fail", ("Your graphics driver crashed her engine while it looked for the graphics card"
+                        f"{_exit_meaning(r.returncode)}. Restart the PC; if it keeps happening, install the latest driver "
+                        "(amd.com/support or nvidia.com/drivers). Until then she runs on the processor, which is slower.")
+    out = (r.stdout or "") + (r.stderr or "")
+    devices = [ln.strip() for ln in out.split("Available devices:", 1)[-1].splitlines()
+               if ":" in ln and "(none)" not in ln and not ln.strip().lower().startswith(("load_backend", "ggml_"))]
+    if not devices:
+        return "warn", ("Her engine can't see a graphics card, so she runs on the processor (slow). Install the latest "
+                        "AMD or NVIDIA driver (amd.com/support or nvidia.com/drivers) and restart the PC.")
+    note = _state.get("note") or ""
+    if "processor" in note:
+        return "warn", f"Found {devices[0]}, but she had to fall back to the processor: {note.strip()}"
+    return "ok", "Using " + "; ".join(devices[:2])
+
+
+def on_error(hook) -> None:
+    if hook not in _error_hooks:
+        _error_hooks.append(hook)
 
 
 def start(on_ready=None) -> None:

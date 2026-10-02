@@ -208,7 +208,8 @@ function engineBanner(eng) {
   if (eng.state === 'error') {
     return `<b>Athena's engine couldn't start:</b> ${escapeHtml(eng.error || 'unknown problem')}
       <button type="button" class="ghost" id="engineRetry">Try again</button>
-      <span class="muted small">Or switch to Ollama in Settings → Models → Engine.</span>`;
+      <span class="muted small">${eng.fallback === 'ollama' ? 'Meanwhile she’s answering with your Ollama models, so you can keep chatting.'
+        : 'Or switch to Ollama in Settings → Models → Engine.'}</span>`;
   }
   return '<b>Loading Athena’s brain…</b> this takes a few seconds.';
 }
