@@ -40,7 +40,12 @@ FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 # The brains she can run. Each is one model file in GGUF format (Q4_K_M: a quarter of the size, nearly the same smarts).
 BRAINS: dict[str, dict[str, Any]] = {
-    "qwen3-vl-8b": {"name": "ATH-X", "label": "ATH-X: chat, code, tools and pictures, fast (about 6 GB, built on Qwen3-VL 8B)",
+    "qwen3-vl-30b": {"name": "ATH-X", "label": "ATH-X: her smartest brain; chat, code, tools and pictures (about 19 GB, "
+                     "built on Qwen3-VL 30B; for 12 GB+ graphics cards with 32 GB of memory)",
+                     "repo": "Qwen/Qwen3-VL-30B-A3B-Instruct-GGUF", "repos": ["Qwen/Qwen3-VL-30B-A3B-Instruct-GGUF"],
+                     "params": "30B", "family": "qwen3vl", "fit": True, "needs": {"vram_gb": 12, "ram_gb": 30}},
+    "qwen3-vl-8b": {"name": "ATH-X Lite", "replaced_by": "qwen3-vl-30b",
+                    "label": "ATH-X Lite: chat, code, tools and pictures, fast (about 6 GB, built on Qwen3-VL 8B)",
                     "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF", "repos": ["Qwen/Qwen3-VL-8B-Instruct-GGUF", "ggml-org/Qwen3-VL-8B-Instruct-GGUF"],
                     "params": "8B", "family": "qwen3vl"},
     "gemma3-12b": {"name": "Gemma 3 12B", "label": "Gemma 3 12B: chat, writing and pictures (about 8 GB)",
@@ -110,9 +115,28 @@ def status() -> dict[str, Any]:
     if s["total"]:
         s["percent"] = round(100 * s["done"] / s["total"])
     newer = BRAINS[brain_key()].get("replaced_by")
-    if newer in BRAINS:
+    if newer in BRAINS and _fits(newer):
         s["upgrade"] = {"brain": newer, "label": BRAINS[newer]["label"]}
     return s
+
+
+_hw_cache: dict[str, Any] = {}
+
+
+def _fits(key: str) -> bool:
+    """Is this PC big enough for that brain? (Checked once; a big brain on a small PC would crawl.)"""
+    needs = BRAINS[key].get("needs")
+    if not needs:
+        return True
+    if not _hw_cache:
+        try:
+            from . import system
+
+            g = system.gpus()
+            _hw_cache.update(vram_gb=g[0]["vram_gb"] if g else 0.0, ram_gb=system.ram_gb())
+        except Exception:  # noqa: BLE001
+            _hw_cache.update(vram_gb=0.0, ram_gb=0.0)
+    return _hw_cache["vram_gb"] >= needs.get("vram_gb", 0) and _hw_cache["ram_gb"] >= needs.get("ram_gb", 0)
 
 
 def ready() -> bool:
@@ -354,7 +378,7 @@ def ensure_brain(client: httpx.Client, key: str) -> tuple[Path, Path | None]:
 def _brain_with_fallback(client: httpx.Client) -> tuple[Path, Path | None]:
     """The chosen brain; if its download can't be found (renamed or removed online), the next one on the list."""
     first = brain_key()
-    order = [first] + [k for k in BRAINS if k != first]
+    order = [first] + [k for k in BRAINS if k != first and not BRAINS[k].get("needs")]  # backups: small brains only
     last: Exception | None = None
     for key in order:
         try:
@@ -378,7 +402,13 @@ def _brain_with_fallback(client: httpx.Client) -> tuple[Path, Path | None]:
 def _launch(exe: Path, model: Path, eyes: Path | None, ctx: int | None = None, gpu_layers: int = 999) -> subprocess.Popen:
     ctx = ctx or int(store.get_settings().get("context_size") or 16384)
     args = [str(exe), "-m", str(model), "--host", "127.0.0.1", "--port", str(LLAMA_PORT), "-c", str(ctx),
-            "-ngl", str(gpu_layers), "-np", "1", "--jinja", "--alias", MODEL_NAME]
+            "-np", "1", "--jinja", "--alias", MODEL_NAME]
+    big = BRAINS.get(_state.get("running") or brain_key(), {}).get("fit")
+    if not (big and gpu_layers == 999):
+        # Small brains go fully on the graphics card. A big brain that doesn't all fit is left to the engine's
+        # own "fit": as much as fits on the card, the rest in memory (it's a mixture-of-experts brain, so
+        # that stays quick).
+        args += ["-ngl", str(gpu_layers)]
     if gpu_layers == 0:
         args += ["--device", "none"]  # processor only: don't even open the graphics driver
     if eyes:

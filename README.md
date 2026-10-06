@@ -35,7 +35,7 @@ Linux/macOS: use `./start.sh` and `./install-voice.sh`.
 
 ## Athena's Brain
 
-Athena runs her AI herself with a built-in engine that works on AMD and NVIDIA cards. Her brain, **ATH-X** (built on Qwen3-VL 8B), handles chat, code, tools and pictures in one. Change it in **Settings → Models → Engine**, or switch to Ollama if you prefer. When a smarter brain comes out, a one-click **brain upgrade** keeps all her memories and settings.
+Athena runs her AI herself with a built-in engine that works on AMD and NVIDIA cards. Her brain, **ATH-X**, handles chat, code, tools and pictures in one. On PCs with a 12 GB+ graphics card and 32 GB of memory she runs the full ATH-X (built on Qwen3-VL 30B); smaller PCs get **ATH-X Lite** (built on Qwen3-VL 8B) and can upgrade later. Change it in **Settings → Models → Engine**, or switch to Ollama if you prefer. When a smarter brain comes out, a one-click **brain upgrade** keeps all her memories and settings.
 
 **🧠 See her mind:** click **Athena's Brain** in the sidebar for a holographic 3D map of what she knows: memories, lessons, library, reflections and skills, linked where related. It lights up live while she thinks. Drag to turn, scroll to zoom, click a star to read or delete it, and slide the timeline to watch her grow. It pauses while you're in a game.
 
