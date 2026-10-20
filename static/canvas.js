@@ -29,8 +29,10 @@ export function initCanvas(d) {
     words: $('#canvasWords'), bar: $('#canvasBar'), barLabel: $('#canvasBarLabel'), ask: $('#canvasAsk'), askInput: $('#canvasAskInput'),
     report: $('#canvasReport'),
   });
-  ui.bar.insertAdjacentHTML('beforeend', QUICK.map(([label], i) => `<button type="button" data-cq="${i}">${label}</button>`).join('') +
-    `<select id="canvasTone" title="Change the tone"><option value="">Tone…</option>${TONES.map((t) => `<option>${t}</option>`).join('')}</select>` +
+  // One ✨ Edit menu holds the quick edits and the tones, so the bar stays on one row next to Mortalize and Oracle.
+  ui.bar.insertAdjacentHTML('beforeend',
+    `<select id="canvasEdit" title="Quick edits and tone"><option value="">✨ Edit…</option>${QUICK.map(([label], i) => `<option value="q${i}">${label}</option>`).join('')}` +
+    `<optgroup label="Change the tone">${TONES.map((t) => `<option value="t${t}">${t}</option>`).join('')}</optgroup></select>` +
     '<select id="canvasHuman" title="Mortalize: make it sound like a person wrote it"></select>' +
     '<button type="button" id="canvasCheck" title="Oracle: Athena’s AI detector (works like GPTZero)">🔮 Oracle</button>');
   fillHumanize();
@@ -41,8 +43,12 @@ export function initCanvas(d) {
     if (e.target.closest('[data-rp="highlight"]')) setHighlight(true);
   };
   ui.hl.onclick = () => setHighlight(false);
-  ui.bar.onclick = (e) => { const b = e.target.closest('[data-cq]'); if (b) edit(QUICK[b.dataset.cq][1]); };
-  $('#canvasTone').onchange = (e) => { if (e.target.value) edit(`Rewrite it in a ${e.target.value.toLowerCase()} tone.`); e.target.value = ''; };
+  $('#canvasEdit').onchange = (e) => {
+    const v = e.target.value;
+    e.target.value = '';
+    if (v.startsWith('q')) edit(QUICK[Number(v.slice(1))][1]);
+    else if (v.startsWith('t')) edit(`Rewrite it in a ${v.slice(1).toLowerCase()} tone.`);
+  };
   ui.text.addEventListener('input', () => { changed(); });
   ui.text.addEventListener('keydown', (e) => {
     const mod = e.ctrlKey || e.metaKey;
@@ -52,7 +58,7 @@ export function initCanvas(d) {
   // Snapshot for undo at the start of each typing burst.
   let typing = 0;
   ui.text.addEventListener('beforeinput', () => { if (!typing) snapshot(); clearTimeout(typing); typing = setTimeout(() => (typing = 0), 1200); });
-  ['select', 'keyup', 'mouseup'].forEach((ev) => ui.text.addEventListener(ev, updateBarLabel));
+  ['select', 'keyup', 'mouseup', 'input'].forEach((ev) => ui.text.addEventListener(ev, updateBarLabel));
   ui.title.addEventListener('input', changed);
   ui.ask.onsubmit = (e) => { e.preventDefault(); const v = ui.askInput.value.trim(); if (v) { ui.askInput.value = ''; edit(v); } };
   $('#canvasHead').onclick = (e) => {
@@ -194,7 +200,7 @@ function setBusy(on) {
 async function edit(instruction, extra = {}) {
   if (busy) return null;
   const model = deps.model();
-  if (!model) { deps.toast('Download a model first (Settings → Models)', 'error'); return null; }
+  if (!model) { deps.toast('Download a model first (Settings → Brain & models)', 'error'); return null; }
   const doc = ui.text.value;
   const sel = selection();
   const target = sel || { a: 0, b: doc.length, text: doc };

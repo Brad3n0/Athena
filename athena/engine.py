@@ -69,7 +69,7 @@ _last_used = [time.time()]
 
 
 def _idle_limit() -> float | None:
-    """Settings → Models → "Keep models loaded after use", in seconds (None = always)."""
+    """Settings → Brain & models → "Keep models loaded after use", in seconds (None = always)."""
     raw = str(store.get_settings().get("keep_alive") or "30m").strip()
     m = re.fullmatch(r"(-?\d+(?:\.\d+)?)([smh]?)", raw)
     if not m or float(m.group(1)) < 0:
@@ -94,7 +94,7 @@ class EngineError(Exception):
 # ------------------------------------------------------------------ status
 
 def wanted() -> bool:
-    """Is the built-in engine switched on (Settings → Models → Engine)?"""
+    """Is the built-in engine switched on (Settings → Brain & models → Engine)?"""
     return store.get_settings().get("engine", "builtin") == "builtin"
 
 
@@ -595,7 +595,7 @@ _starting = threading.Lock()
 
 
 def graphics_check() -> tuple[str, str]:
-    """For Settings → Health check: can her engine see and use the graphics card? Asks the engine itself."""
+    """For Settings → Privacy & system → Health check: can her engine see and use the graphics card? Asks the engine itself."""
     exe = server_exe()
     if not exe:
         return "skip", "Her engine isn't downloaded yet"
@@ -995,14 +995,14 @@ def build_shim():
     @app.post("/api/embed")
     @app.post("/api/embeddings")
     async def embed(request: Request):
-        return JSONResponse({"error": "Document search needs Ollama with nomic-embed-text (Settings → Models → Engine)."},
+        return JSONResponse({"error": "Document search needs Ollama with nomic-embed-text (Settings → Brain & models → Engine)."},
                             status_code=501)
 
     @app.post("/api/pull")
     @app.post("/api/delete")
     @app.post("/api/create")
     async def unsupported(request: Request):
-        return JSONResponse({"error": "Athena's built-in engine has one brain. Change it in Settings → Models → Engine."},
+        return JSONResponse({"error": "Athena's built-in engine has one brain. Change it in Settings → Brain & models → Engine."},
                             status_code=400)
 
     return app

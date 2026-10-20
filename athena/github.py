@@ -1,7 +1,7 @@
 """GitHub: Athena creates repositories and uploads projects to your account, like a developer would.
 
 It uses the GitHub sign-in Git already keeps on this PC (the one update.bat asked for), through Git's own
-credential helper. Nothing is stored by Athena itself. Connect once in Settings → Integrations → GitHub.
+credential helper. Nothing is stored by Athena itself. Connect once in Settings → Abilities → GitHub.
 """
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def create_repo(name: str, private: bool = True, description: str = "") -> dict[
     """Make a new repository on the signed-in account (or reuse one with that name). Returns its addresses."""
     acc = account()
     if not acc:
-        raise GitHubError("GitHub isn't connected yet. Open Settings → Integrations → GitHub and click Connect GitHub (one sign-in).")
+        raise GitHubError("GitHub isn't connected yet. Open Settings → Abilities → GitHub and click Connect GitHub (one sign-in).")
     repo = slug(name)
     body = {"name": repo, "private": bool(private), "description": (description or "Made with Athena AI")[:300], "auto_init": False}
     r = httpx.post(f"{API}/user/repos", headers=_headers(acc["token"]), json=body, timeout=20)
@@ -114,5 +114,5 @@ def create_repo(name: str, private: bool = True, description: str = "") -> dict[
             d = g.json()
             return {"html_url": d["html_url"], "clone_url": d["clone_url"], "full_name": d["full_name"], "created": False, "private": d.get("private")}
     if r.status_code in (401, 403):
-        raise GitHubError("GitHub didn't allow creating a repository with this sign-in. Click Connect GitHub again in Settings → Integrations.")
+        raise GitHubError("GitHub didn't allow creating a repository with this sign-in. Click Connect GitHub again in Settings → Abilities.")
     raise GitHubError(f"GitHub said: {(r.json().get('message') if r.headers.get('content-type', '').startswith('application/json') else r.text)[:200]}")

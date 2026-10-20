@@ -139,7 +139,7 @@ def plan(app: str, to: str, text: str, subject: str = "") -> dict[str, Any]:
                   "email": contact.get("email") or (to if "@" in to else "")}[kind]
     if kind in ("sms", "email") and not target:
         raise MessageError(f"I don't have {'a phone number' if kind == 'sms' else 'an email address'} for {who}. "
-                           f"Add it in Settings → Jarvis → Contacts, or tell me: 'add {who}'s {'number' if kind == 'sms' else 'email'}'.")
+                           f"Add it in Settings → Routines & alerts → Contacts, or tell me: 'add {who}'s {'number' if kind == 'sms' else 'email'}'.")
     aliases = [a for a in dict.fromkeys([target, who, *nicknames(contact), *(contact.get(k, "") for k in HANDLE_FIELDS[:4])]) if a]
     return {"app": kind, "label": label, "to": who, "target": target, "text": text, "subject": subject.strip(), "aliases": aliases}
 

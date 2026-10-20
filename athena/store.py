@@ -83,7 +83,6 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "reduce_motion": False,  # turn off animations
     "emotion_tracking": True,  # notice how you seem in each message, adapt to it, keep a mood history
     "adaptive_voice": True,  # her voice follows the mood (faster when excited, softer when you're down)
-    "auto_tasks": True,  # add to-dos you mention to Tasks by themselves, and tick them off when you say they're done
     "offline_mode": False,  # nothing reaches the internet (no web search, updates, YouTube, GitHub...)
     "sports_enabled": True,
     "brain_style": "athena",  # Athena's Brain view: athena, holo (Jarvis), constellation or armillary

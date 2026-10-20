@@ -260,7 +260,7 @@ async def deep_check(client: httpx.AsyncClient, text: str) -> dict[str, Any]:
     from . import engine
 
     if not engine.wanted():
-        raise RuntimeError("The deep check needs Athena's built-in engine (Settings → Models → Engine). Showing the style check instead.")
+        raise RuntimeError("The deep check needs Athena's built-in engine (Settings → Brain & models → Engine). Showing the style check instead.")
     if not await run_in_threadpool(engine.ensure_running, 180):
         raise RuntimeError("Athena's brain isn't loaded right now (it may be downloading or paused for a game). Showing the style check instead.")
     engine._last_used[0] = time.time()
