@@ -15,14 +15,14 @@ Athena is an evolving personal AI assistant that lives on your computer, not in 
 | 📘 **Your study partner** | Turns your notes into study guides, flashcards that adapt to you, and clickable quizzes with step-by-step explanations. |
 | 🎨 **Creative tools** | Edits your photos, makes new pictures, and helps you write essays, emails and stories. |
 | 🛡️ **Private by design** | Asks before she moves a file or sends a message, and keeps everything in one folder on your PC. |
-| 🤖 **Ai Humanizer & Checker** | Rewrites text to sound more human and scan to check ai text. |
+| 🤖 **Ai Humanizer & Checker** | Rewrites text to sound more human and she scans to check if a text is ai. |
 ---
 
 ## Setup (needs internet once)
 
 1. **Install Python 3.10+** from [python.org](https://www.python.org/downloads/). On Windows, tick **"Add python.exe to PATH"**.
 2. **Get Athena:** Code → Download ZIP and unzip it, or `git clone` it.
-3. **Double-click `start.bat`.** A short setup checks your graphics card and suggests settings. The first time, she downloads her engine and her brain (about 6 GB). Progress shows at the top.
+3. **Double-click `start.bat`.** A short setup checks your graphics card and suggests settings. The first time, she downloads her engine and her brain (about 6 GB). Progress shows at the top of your screen.
 4. **Voice (recommended):** double-click **`install-voice.bat`** (about 500 MB) so she can hear you and talk in a natural voice.
 
 After the first run there's an **Athena.exe** in her folder and on your Desktop. Double-click it to open her with no command windows.
