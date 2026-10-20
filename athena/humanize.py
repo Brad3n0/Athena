@@ -188,6 +188,90 @@ def instruction(strength: str, samples: str = "", text: str = "") -> str:
     return "\n\n".join(parts)
 
 
+POLISH_SYSTEM = (
+    "You are a sharp human editor doing a second read of a rewrite. Reply with ONLY the final text: no "
+    "introduction, no notes, no quotes around it."
+)
+
+
+def polish_prompt(original: str, draft: str) -> str:
+    """Second pass: reread the first rewrite and fix only what still reads stiff, keeping everything that works."""
+    found = [t["phrase"] for t in analyze(draft).get("tells", [])][:12]
+    parts = [
+        "Here is the ORIGINAL text, then a DRAFT rewrite of it.",
+        f"ORIGINAL:\n<<<\n{original}\n>>>",
+        f"DRAFT:\n<<<\n{draft}\n>>>",
+        "Reread the draft the way a careful human editor would. Find the sentences that still sound stiff, generic or "
+        "template-like: the same sentence openings over and over, every sentence about the same length, tidy lists of "
+        "three, a neat one-line moral at the end of a paragraph, filler transitions, vague words where a specific one "
+        "would do. Rewrite only those sentences. Leave everything that already reads naturally exactly as it is.",
+        "Keep the draft's tone and level of formality (a formal draft stays formal). Keep every fact, name and number "
+        "from the ORIGINAL and add nothing new: no examples, stories, statistics or quotes that aren't in it.",
+    ]
+    if found:
+        parts.append("These stock phrases are still in the draft; replace each one: " + ", ".join(found) + ".")
+    parts.append("Reply with only the final text.")
+    return "\n\n".join(parts)
+
+
+COACH_SYSTEM = (
+    "You are a friendly writing coach. You never rewrite the user's text for them; you point out what to improve and "
+    "they make the changes themselves. Reply with ONLY a JSON array, no other text."
+)
+
+
+def coach_prompt(text: str) -> str:
+    return (
+        f"The user's text:\n<<<\n{text}\n>>>\n\n"
+        "Find up to 8 sentences that sound the most stiff, generic or machine-written (stock phrases, filler "
+        "transitions, vague wording, every sentence the same length, tidy summary lines). For each one give:\n"
+        '- "quote": the sentence copied EXACTLY from the text, character for character\n'
+        '- "why": one short reason it sounds stiff (under 15 words)\n'
+        '- "tip": a concrete suggestion for how THEY could rewrite it (an idea or a direction, under 25 words, not a '
+        "finished replacement sentence)\n"
+        "Keep the tone they're going for (a formal paper stays formal). Most important first. If the writing already "
+        "sounds natural, return an empty array []. Reply with only the JSON array."
+    )
+
+
+def parse_coach(raw: str, text: str) -> list[dict[str, Any]]:
+    """Read the coach's JSON and keep only notes whose quote really is in the text (with where it is)."""
+    import json as _json
+
+    raw = re.sub(r"<think>[\s\S]*?</think>", "", raw or "")
+    m = re.search(r"\[[\s\S]*\]", raw)
+    if not m:
+        return []
+    try:
+        items = _json.loads(m.group(0))
+    except ValueError:
+        return []
+    out, used = [], set()
+    squash = lambda t: re.sub(r"\s+", " ", t).strip()
+    flat = squash(text)
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict):
+            continue
+        quote = squash(str(it.get("quote") or "")).strip('"“”')
+        if len(quote) < 12:
+            continue
+        start = text.find(quote)
+        if start < 0:  # the model changed the spacing: find it ignoring whitespace differences
+            pattern = r"\s+".join(re.escape(w) for w in quote.split())
+            hit = re.search(pattern, text)
+            if not hit:
+                continue
+            start, end = hit.start(), hit.end()
+        else:
+            end = start + len(quote)
+        if start in used or quote not in flat and not re.search(r"\s+".join(re.escape(w) for w in quote.split()), text):
+            continue
+        used.add(start)
+        out.append({"start": start, "end": end, "quote": text[start:end],
+                    "why": str(it.get("why") or "").strip()[:160], "tip": str(it.get("tip") or "").strip()[:240]})
+    return sorted(out, key=lambda x: x["start"])[:8]
+
+
 def options(strength: str) -> dict[str, Any]:
     """Sampling for the rewrite. A bit more randomness than normal editing breaks up the even, predictable rhythm."""
     temp = {"light": 0.7, "medium": 0.85, "strong": 0.95, "voice": 0.85}.get(strength, 0.85)

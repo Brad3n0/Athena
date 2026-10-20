@@ -2067,6 +2067,51 @@ REWRITE_SYSTEM = (
 )
 
 
+def _strip_wrappers(t: str) -> str:
+    """Drop the wrappers models sometimes add around a rewrite ("Here is…:", <<< >>>, ``` fences)."""
+    t = re.sub(r"^\s*here(?:'s| is)[^\n]*:\s*\n", "", t, flags=re.I)
+    t = re.sub(r"^\s*<<<\s*\n?", "", t)
+    t = re.sub(r"\n?>>>\s*$", "", t)
+    if re.match(r"^\s*```\w*\n", t):
+        t = re.sub(r"^\s*```\w*\n", "", t)
+        t = re.sub(r"\n```\s*$", "", t)
+    return t.strip()
+
+
+async def _rewrite_stream(payload: dict[str, Any]):
+    """Stream a rewrite from the model as ("t", text) pieces, or one ("error", message). Hides <think> blocks."""
+    payload = dict(payload)
+    for attempt in range(2):
+        try:
+            async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload, timeout=httpx.Timeout(10.0, read=300)) as resp:
+                if resp.status_code != 200:
+                    err = (await resp.aread()).decode(errors="replace")
+                    if attempt == 0 and "think" in err.lower():
+                        payload.pop("think", None)  # model can't turn thinking off; try again without
+                        continue
+                    yield "error", err[:300] or f"Ollama error {resp.status_code}"
+                    return
+                in_think = False
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    chunk = (json.loads(line).get("message") or {}).get("content", "")
+                    # Some models still write <think>…</think> inline; don't put that in the document.
+                    if "<think>" in chunk:
+                        in_think, chunk = True, chunk.split("<think>")[0]
+                    if in_think:
+                        if "</think>" not in chunk:
+                            continue
+                        in_think, chunk = False, chunk.split("</think>", 1)[1]
+                    if chunk:
+                        yield "t", chunk
+                return
+        except httpx.HTTPError as exc:
+            print(f"Ollama unavailable: {exc!r}", file=sys.stderr)
+            yield "error", "Ollama isn't answering. Check that it's running, then try again."
+            return
+
+
 @app.post("/api/rewrite")
 async def rewrite(request: Request):
     """Canvas edits: rewrite a selection (or the whole document) and stream back just the new text."""
@@ -2098,38 +2143,70 @@ async def rewrite(request: Request):
                                "keep_alive": keep_alive(store.get_settings()),
                                "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}]}
 
+    two_pass = body.get("mode") == "humanize" and bool(body.get("two_pass")) and bool(text.strip())
+
     async def gen():
-        for attempt in range(2):
-            try:
-                async with client.stream("POST", f"{OLLAMA}/api/chat", json=payload, timeout=httpx.Timeout(10.0, read=300)) as resp:
-                    if resp.status_code != 200:
-                        err = (await resp.aread()).decode(errors="replace")
-                        if attempt == 0 and "think" in err.lower():
-                            payload.pop("think", None)  # model can't turn thinking off; try again without
-                            continue
-                        yield json.dumps({"error": err[:300] or f"Ollama error {resp.status_code}"}) + "\n"
-                        return
-                    in_think = False
-                    async for line in resp.aiter_lines():
-                        if not line.strip():
-                            continue
-                        chunk = (json.loads(line).get("message") or {}).get("content", "")
-                        # Some models still write <think>…</think> inline; don't put that in the document.
-                        if "<think>" in chunk:
-                            in_think, chunk = True, chunk.split("<think>")[0]
-                        if in_think:
-                            if "</think>" not in chunk:
-                                continue
-                            in_think, chunk = False, chunk.split("</think>", 1)[1]
-                        if chunk:
-                            yield json.dumps({"t": chunk}) + "\n"
-                    return
-            except httpx.HTTPError as exc:
-                print(f"Ollama unavailable: {exc!r}", file=sys.stderr)
-                yield json.dumps({"error": "Ollama isn't answering. Check that it's running, then try again."}) + "\n"
+        if not two_pass:
+            async for kind, value in _rewrite_stream(payload):
+                yield json.dumps({kind: value}) + "\n"
+            return
+        # Two passes: rewrite (quietly), then reread that draft and fix only what still reads stiff (streamed).
+        yield json.dumps({"stage": "Mortalizing (pass 1 of 2)…"}) + "\n"
+        draft = ""
+        async for kind, value in _rewrite_stream(payload):
+            if kind == "error":
+                yield json.dumps({"error": value}) + "\n"
                 return
+            draft += value
+        draft = _strip_wrappers(draft)
+        if not draft.strip():
+            yield json.dumps({"error": "She returned nothing. Try again or pick another model."}) + "\n"
+            return
+        yield json.dumps({"stage": "Polishing (pass 2 of 2)…"}) + "\n"
+        second = {**payload, "options": {**payload["options"], "temperature": 0.7},
+                  "messages": [{"role": "system", "content": humanize.POLISH_SYSTEM},
+                               {"role": "user", "content": humanize.polish_prompt(text, draft)}]}
+        got = False
+        async for kind, value in _rewrite_stream(second):
+            if kind == "error":
+                if not got:  # the polish failed: the first draft is still a good result
+                    yield json.dumps({"t": draft}) + "\n"
+                return
+            got = True
+            yield json.dumps({"t": value}) + "\n"
+        if not got:
+            yield json.dumps({"t": draft}) + "\n"
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+@app.post("/api/humanize/coach")
+async def humanize_coach(request: Request):
+    """Coach mode: point out the stiffest sentences with a tip for each. She suggests; the user rewrites."""
+    body = await request.json()
+    model = str(body.get("model") or "")
+    text = str(body.get("text", ""))[:20_000]
+    if not model:
+        raise HTTPException(400, "Missing model")
+    if len(text.split()) < 25:
+        raise HTTPException(400, "Give the coach at least a few sentences.")
+    payload: dict[str, Any] = {"model": model, "stream": False, "think": False, "options": {"temperature": 0.3},
+                               "keep_alive": keep_alive(store.get_settings()),
+                               "messages": [{"role": "system", "content": humanize.COACH_SYSTEM},
+                                            {"role": "user", "content": humanize.coach_prompt(text)}]}
+    for attempt in range(2):
+        try:
+            r = await client.post(f"{OLLAMA}/api/chat", json=payload, timeout=httpx.Timeout(10.0, read=300))
+        except httpx.HTTPError as exc:
+            raise HTTPException(503, "Athena's brain isn't answering. Check that it's running, then try again.") from exc
+        if r.status_code != 200 and attempt == 0 and "think" in r.text.lower():
+            payload.pop("think", None)
+            continue
+        if r.status_code != 200:
+            raise HTTPException(502, r.text[:300] or f"Ollama error {r.status_code}")
+        raw = (r.json().get("message") or {}).get("content", "")
+        return {"notes": humanize.parse_coach(raw, text)}
+    raise HTTPException(502, "The coach couldn't answer. Try again.")
 
 
 @app.post("/api/humanize/check")

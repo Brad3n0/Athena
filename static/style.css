@@ -834,6 +834,11 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .canvas-hl .hl-badge.hi { background: rgba(34, 211, 238, .25); color: var(--text); border-color: transparent; }
 .canvas-hl .hl-badge.mid { background: rgba(34, 211, 238, .1); }
 @media (max-width: 860px) { .canvas-hl { padding: 16px; } }
+.coach-list { margin: 2px 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.coach-list li { padding: 6px 10px; border-radius: 10px; border: 1px solid transparent; cursor: pointer; }
+.coach-list li:hover, .coach-list li.on { border-color: rgba(var(--accent-rgb), .45); background: rgba(var(--accent-rgb), .06); }
+.coach-list q { display: block; font-style: italic; color: var(--text); margin-bottom: 2px; }
+.coach-list b { color: var(--text-2); font-weight: 600; }
 .canvas-report .rp-note { color: #facc15; }
 .canvas-report .rp-tells { display: flex; flex-wrap: wrap; gap: 4px; }
 .canvas-report .rp-tells span { padding: 1px 8px; border-radius: 99px; border: 1px solid rgba(248, 113, 113, .5); color: var(--text-2); font-size: 12px; }
@@ -1166,8 +1171,31 @@ dialog[open] { opacity: 1; transform: none; }
 @starting-style { dialog[open] { opacity: 0; transform: translateY(10px) scale(.98); } }
 dialog::backdrop { transition: background-color .22s ease, backdrop-filter .22s ease, overlay .22s allow-discrete, display .22s allow-discrete; }
 @starting-style { dialog[open]::backdrop { background-color: transparent; backdrop-filter: none; } }
-/* Side panels (canvas, saved, flashcards, tasks) slide in */
-.canvas:not([hidden]), .drawer:not([hidden]) { animation: panelIn .28s cubic-bezier(.2,.8,.3,1) both; }
+/* Side panels (canvas, PDF viewer, saved, flashcards) slide in */
+.canvas:not([hidden]), .drawer:not([hidden]), .pdfview:not([hidden]) { animation: panelIn .28s cubic-bezier(.2,.8,.3,1) both; }
+/* Things that appear inside them ease in instead of popping */
+.canvas-report:not([hidden]) { animation: barIn .26s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes barIn { from { opacity: 0; transform: translateY(10px); } }
+.canvas-hl:not([hidden]), .canvas-preview:not([hidden]), #canvasText:not([hidden]) { animation: softIn .22s ease both; }
+.canvas-hl mark { animation: markIn .5s ease both; }
+@keyframes markIn { from { background-color: transparent; } }
+.canvas-report .rp-meter i { transition: width .6s cubic-bezier(.2,.8,.3,1); animation: meterIn .7s cubic-bezier(.2,.8,.3,1) both; }
+@keyframes meterIn { from { width: 0; } }
+.rp-sents li, .rp-tells span, .coach-list li { animation: fadeUp .3s ease both; }
+.rp-sents li:nth-child(2), .coach-list li:nth-child(2) { animation-delay: .04s; } .rp-sents li:nth-child(3), .coach-list li:nth-child(3) { animation-delay: .08s; }
+.rp-sents li:nth-child(4), .coach-list li:nth-child(4) { animation-delay: .12s; } .rp-sents li:nth-child(n+5), .coach-list li:nth-child(n+5) { animation-delay: .16s; }
+.pdf-empty:not([hidden]), #pdfFrame:not([hidden]) { animation: softIn .3s ease both; }
+@keyframes softIn { from { opacity: 0; } }
+/* Settings: each tab's page fades in when you switch */
+.settings section[data-panel]:not([hidden]) { animation: tabIn .22s ease both; }
+@keyframes tabIn { from { opacity: 0; transform: translateY(4px); } }
+.settings-advanced[open] > *:not(summary) { animation: fadeUp .25s ease both; }
+/* Menus drop in */
+.model-menu:not([hidden]) { animation: menuDown .18s cubic-bezier(.2,.8,.3,1) both; transform-origin: top left; }
+.slash-menu:not([hidden]) { animation: menuUp .18s cubic-bezier(.2,.8,.3,1) both; transform-origin: bottom left; }
+@keyframes menuDown { from { opacity: 0; transform: translateY(-6px) scale(.98); } }
+@keyframes menuUp { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+.banner:not([hidden]) { animation: fadeUp .25s ease both; }
 @keyframes panelIn { from { opacity: 0; transform: translateX(24px); } }
 /* Voice chat fades up */
 .voice-overlay:not([hidden]) { animation: overlayIn .35s ease both; }
