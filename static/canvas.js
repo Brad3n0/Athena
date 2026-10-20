@@ -379,7 +379,7 @@ function showReport(r, before) {
   const tone = r.score < 35 ? 'good' : r.score < 70 ? 'mid' : 'bad';
   const change = before?.score != null ? `<span class="muted">${before.score}% → </span>` : '';
   const stats = d
-    ? `Perplexity ${d.perplexity} <span class="muted">(lower = more predictable = more AI-like)</span> · Burstiness ${d.burstiness ?? '–'} · ` +
+    ? `Surprise ${d.perplexity} <span class="muted">(how unpredictable the words are; low = AI-like)</span> · Variety ${d.burstiness ?? '–'} <span class="muted">(how much that changes between sentences; low = AI-like)</span> · ` +
       `${d.top10}% of words were in her top 10 guesses${d.truncated ? ` · checked the first ${d.checked_chars.toLocaleString()} characters` : ''}`
     : `Style check only · avg sentence ${r.avg_sentence} words · rhythm ${r.variation}`;
   ui.report.innerHTML = `
@@ -395,7 +395,7 @@ function showReport(r, before) {
     ${r.tells.length ? `<div class="rp-tells">${r.tells.map((t) => `<span>${esc(t.phrase)}${t.count > 1 ? ` ×${t.count}` : ''}</span>`).join('')}</div>` : ''}
     ${r.tips.length ? `<div class="small">${r.tips.map(esc).join(' ')}</div>` : ''}
     ${r.note ? `<div class="small rp-note">${esc(r.note)}</div>` : ''}
-    <div class="muted small">${d ? 'Checked like GPTZero (perplexity + burstiness) using Athena\'s own brain, plus the style meter.' : 'Style meter only.'}
+    <div class="muted small">${d ? 'Checked the way GPTZero works (word surprise + sentence variety) using Athena\'s own brain, plus the style meter.' : 'Style meter only.'}
       Turnitin and GPTZero use their own trained models, so their numbers will differ.</div>`;
   ui.report.hidden = false;
 }
