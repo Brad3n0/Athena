@@ -323,15 +323,21 @@ async def deep_check(client: httpx.AsyncClient, text: str) -> dict[str, Any]:
         pz = (NLL_CENTER - statistics.mean(vals)) / NLL_SCALE
         if len(inside) >= 3:
             pz += BURST_WEIGHT * (BURST_CENTER - statistics.pstdev(inside)) / BURST_SCALE
-        paragraphs.append({"start": offset + a, "end": offset + b, "ai": round(_sigmoid(pz) * 100)})
+        paragraphs.append({"start": offset + a, "end": offset + b, "ai": round(_sigmoid(pz) * 100), "tokens": len(vals)})
 
     z = (NLL_CENTER - mean_nll) / NLL_SCALE
     if burst is not None:
         z += BURST_WEIGHT * (BURST_CENTER - burst) / BURST_SCALE
     ai = _sigmoid(z)
+    whole = ai
+    if len(paragraphs) >= 2:
+        # Like Turnitin's number: how much of the text looks AI-written, paragraph by paragraph. (Scoring a mixed
+        # document as one block hides AI paragraphs, because mixing in human ones makes the whole thing look bursty.)
+        ai = sum(p["ai"] * p["tokens"] for p in paragraphs) / sum(p["tokens"] for p in paragraphs) / 100
     flagged = sorted((s for s in sentences if s["ai"] >= 0.6), key=lambda s: -s["ai"])[:6]
     return {
         "ai": round(ai * 100),
+        "whole_text_ai": round(whole * 100),
         "perplexity": round(math.exp(mean_nll), 1),
         "burstiness": None if burst is None else round(burst, 2),
         "top1": round(100 * sum(1 for t in tokens if t[3] == 0) / len(tokens)),
