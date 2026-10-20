@@ -111,6 +111,7 @@ Scores, schedules, standings, injuries and past seasons: `/scores NBA tonight`. 
 - **Projects:** chat folders with their own instructions and files.
 - **Deep research** with sources, and **Think harder** for tough problems.
 - **Your documents:** ask about your own PDFs and notes (Settings → Knowledge).
+- **📄 PDF viewer** next to the chat: open a PDF (or click one you attached) to read it with zoom, search and print, and **Open in canvas** to edit it, Mortalize it or ask the Oracle.
 - **Personalities:** Assistant, Companion, Study Buddy, or make your own.
 - **Offline mode**, **PIN lock**, **daily backups**, and **Check everything** to test every part of her.
 - **Desktop app** in the tray: **Ctrl+Alt+Space** opens her, ignored during fullscreen games.

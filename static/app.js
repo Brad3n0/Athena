@@ -9,6 +9,7 @@ import { ACCENTS, applyAccent, logoSvg } from './palette.js';
 import { hydrateStudy, flashcardAction, quizAnswer, quizRetry, cardsOf, mistakePrompt } from './study.js';
 import { hydrateGraphs } from './graph.js';
 import { initCanvas, openCanvas, closeCanvas, syncCanvas, canvasOpen, canvasForChat, applyCanvasReply } from './canvas.js';
+import { initPdfView, openPdf, togglePdfView, pdfViewHit, pdfFiles, isPdf } from './pdfview.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -649,6 +650,7 @@ function newChat() {
 $('#newChat').onclick = newChat;
 $('#newChatTop').onclick = newChat;
 $('#canvasBtn').onclick = () => (canvasOpen() ? closeCanvas() : openCanvas());
+$('#pdfBtn').onclick = () => togglePdfView();
 
 async function openChat(id) {
   stopGenerating();
@@ -1099,7 +1101,7 @@ function messageEl(m, idx) {
   el.className = `msg ${m.role}`;
   el.dataset.idx = idx;
   if (m.role === 'user') {
-    const files = (m.files || []).map((f) => `<span class="file-chip">${ICONS.file}<span>${escapeHtml(f)}</span></span>`).join('');
+    const files = (m.files || []).map((f) => `<span class="file-chip"${pdfFiles.has(f) ? ` data-pdf="${escapeHtml(f)}" title="View in the PDF viewer"` : ''}>${ICONS.file}<span>${escapeHtml(f)}</span></span>`).join('');
     const imgs = (m.images || []).map((b64) => `<span class="pic-wrap"><img class="thumb" src="data:image/*;base64,${b64}" alt=""><button type="button" class="pic-edit" data-pic-edit title="Edit this photo">✏️ Edit</button></span>`).join('');
     el.innerHTML = `<div class="col">${files || imgs ? `<div class="files">${imgs}${files}</div>` : ''}
       <div class="bubble">${escapeHtml(m.display ?? m.content)}</div>
@@ -2181,6 +2183,7 @@ async function addFiles(fileList) {
       const url = await readFile(file, 'DataURL');
       state.attachments.push({ kind: 'image', name: file.name, data: url.split(',')[1] });
     } else if (/\.(pdf|docx|pptx)$/i.test(file.name)) {
+      if (isPdf(file)) pdfFiles.set(file.name, file); // so its chip can open it in the PDF viewer
       const form = new FormData();
       form.append('file', file);
       toast(`Reading ${file.name}…`);
@@ -2214,6 +2217,8 @@ window.addEventListener('drop', (e) => {
   e.preventDefault();
   dragDepth = 0;
   $('#dropZone').hidden = true;
+  const pdf = [...e.dataTransfer.files].find(isPdf);
+  if (pdf && pdfViewHit(e.clientX, e.clientY)) return openPdf(pdf); // dropped on the PDF viewer: show it there
   addFiles(e.dataTransfer.files);
 });
 input.addEventListener('paste', (e) => {
@@ -2234,7 +2239,7 @@ function readFile(file, as) {
 
 function renderAttachments() {
   $('#attachments').innerHTML = state.attachments.map((a, i) =>
-    `<span class="file-chip">${ICONS.file}<span>${escapeHtml(a.name)}</span><button type="button" data-rm="${i}" title="Remove">${ICONS.x}</button></span>`).join('');
+    `<span class="file-chip"${pdfFiles.has(a.name) ? ` data-pdf="${escapeHtml(a.name)}" title="View in the PDF viewer"` : ''}>${ICONS.file}<span>${escapeHtml(a.name)}</span><button type="button" data-rm="${i}" title="Remove">${ICONS.x}</button></span>`).join('');
   updateComposerButtons();
 }
 $('#attachments').onclick = (e) => {
@@ -4684,6 +4689,7 @@ async function init() {
   await refreshModels();
   refreshLoaded().then(preloadCurrentModel);
   if (state.settings.tts_engine === 'custom' && state.status.custom_voice) fetch('/api/custom-voice/warm', { method: 'POST' }).catch(() => {});
+  initPdfView({ openCanvas, toast });
   initCanvas({ state, model: () => currentModel(), save: () => saveChat(), toast,
     onShow: () => { if (innerWidth < 1400 && innerWidth > 860) toggleSidebar(false); } });
   newChat();
