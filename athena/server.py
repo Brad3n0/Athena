@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
-from . import decks, events, files, knowledge, learning, library, research, scheduler, security, speech, store, tts, workspace
+from . import decks, events, files, humanize, knowledge, learning, library, research, scheduler, security, speech, store, tts, workspace
 from .tools import BY_NAME, approval_summary, arun_tool, enabled_tools, parse_args, run_tool
 
 STATIC_DIR = store.ROOT / "static"
@@ -2082,6 +2082,16 @@ async def rewrite(request: Request):
     text = str(body.get("text", ""))[:60_000]
     instruction = str(body.get("instruction", "")).strip()[:2000]
     document = str(body.get("document", ""))[:60_000]
+    system, options = REWRITE_SYSTEM, {"temperature": 0.6}
+    if body.get("mode") == "humanize":  # make it sound like a person wrote it (see humanize.py)
+        if not text.strip():
+            raise HTTPException(400, "Nothing to humanize yet. Paste or write something first.")
+        strength = str(body.get("strength") or "medium")
+        samples = str(store.get_settings().get("writing_samples") or "")
+        if strength == "voice" and not samples.strip():
+            raise HTTPException(400, "Save a sample of your own writing first (Humanize → Save selection as my voice).")
+        system, options = humanize.SYSTEM, humanize.options(strength)
+        instruction = humanize.instruction(strength, samples, text)
     if not model or not instruction:
         raise HTTPException(400, "Missing model or instruction")
     if text.strip() and document and text != document:
@@ -2091,9 +2101,9 @@ async def rewrite(request: Request):
         prompt = f"Document:\n<<<\n{text}\n>>>\n\nInstruction: {instruction}\n\nReply with only the full updated document."
     else:
         prompt = f"Write a new document. Instruction: {instruction}\n\nReply with only the document, in Markdown."
-    payload: dict[str, Any] = {"model": model, "stream": True, "think": False, "options": {"temperature": 0.6},
+    payload: dict[str, Any] = {"model": model, "stream": True, "think": False, "options": options,
                                "keep_alive": keep_alive(store.get_settings()),
-                               "messages": [{"role": "system", "content": REWRITE_SYSTEM}, {"role": "user", "content": prompt}]}
+                               "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}]}
 
     async def gen():
         for attempt in range(2):
@@ -2127,6 +2137,13 @@ async def rewrite(request: Request):
                 return
 
     return StreamingResponse(gen(), media_type="application/x-ndjson")
+
+
+@app.post("/api/humanize/check")
+async def humanize_check(request: Request):
+    """The canvas robot meter: a rough, offline 'how AI does this sound' score with the reasons."""
+    body = await request.json()
+    return humanize.analyze(str(body.get("text", ""))[:60_000])
 
 
 CANVAS_PROMPT = (
