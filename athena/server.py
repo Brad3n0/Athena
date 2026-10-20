@@ -2335,6 +2335,40 @@ async def extract_text(file: UploadFile = File(...)):
     return {"text": text[:120_000], "truncated": len(text) > 120_000}
 
 
+# ---------------------------------------------------------------- PDF viewer
+
+# PDFs open in the viewer are held in memory for this session only (newest few), and served back under their own
+# file name so the viewer's toolbar shows "essay.pdf" instead of a random id. Nothing is written to disk.
+_pdf_views: dict[str, tuple[str, bytes]] = {}
+
+
+@app.post("/api/pdfview")
+async def pdfview_upload(file: UploadFile = File(...)):
+    name = Path(file.filename or "document.pdf").name
+    data = await file.read()
+    if len(data) > 100 * 1024 * 1024:
+        raise HTTPException(413, "That PDF is too large to view here (max 100 MB)")
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(400, f"{name} isn't a PDF")
+    import uuid
+
+    view_id = uuid.uuid4().hex
+    _pdf_views[view_id] = (name, data)
+    while len(_pdf_views) > 6:  # keep memory small: forget the oldest
+        _pdf_views.pop(next(iter(_pdf_views)))
+    return {"id": view_id, "name": name}
+
+
+@app.get("/api/pdfview/{view_id}/{name}")
+async def pdfview_file(view_id: str, name: str):
+    item = _pdf_views.get(view_id)
+    if not item:
+        raise HTTPException(404, "That PDF isn't open anymore. Open it again.")
+    safe = re.sub(r'[^\w .()-]', "_", item[0])
+    return Response(item[1], media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{safe}"', "Cache-Control": "no-store"})
+
+
 def _pptx_text(path: str) -> str:
     import zipfile
 
