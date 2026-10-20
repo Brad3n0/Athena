@@ -797,7 +797,7 @@ async def chat(request: Request):
                         if _is_image_error(text) and any(m.get("images") for m in messages):
                             if messages[-1].get("images"):
                                 yield _event("error", message=f"{model} can't look at images. Download a vision model like "
-                                             "qwen3-vl:8b (or gemma3:4b for smaller PCs) in Settings → Models, and Athena will "
+                                             "qwen3-vl:8b (or gemma3:4b for smaller PCs) in Settings → Brain & models, and Athena will "
                                              "use it automatically for pictures.")
                                 return
                             _drop_images(messages)  # a picture from earlier in the chat: carry on without it
@@ -1038,7 +1038,7 @@ async def look_at_screen(question: str = "") -> dict[str, Any]:
 
     model = await pick_vision_model()
     if not model:
-        return {"error": "Looking at the screen needs a vision model. Download 'qwen3-vl:8b' (or 'gemma3:4b' for smaller PCs) in Settings → Models."}
+        return {"error": "Looking at the screen needs a vision model. Download 'qwen3-vl:8b' (or 'gemma3:4b' for smaller PCs) in Settings → Brain & models."}
     try:
         image = await run_in_threadpool(pc.screenshot)
     except pc.PCError as exc:
@@ -1186,7 +1186,7 @@ async def locate_on_screen(target: str) -> dict[str, Any]:
         f"This screenshot is {shot['width']}x{shot['height']} pixels. Find: {target}. Reply with only JSON giving the pixel "
         'position of its center, like {"x": 100, "y": 200}, or {"x": null, "y": null} if it is not visible.', shot["image"], 40)
     if answer is None:
-        return {"error": "Clicking on things needs a vision model. Download qwen3-vl:8b in Settings → Models."}
+        return {"error": "Clicking on things needs a vision model. Download qwen3-vl:8b in Settings → Brain & models."}
     m = re.search(r'"?x"?\s*[:=]\s*(\d+(?:\.\d+)?)\D+?"?y"?\s*[:=]\s*(\d+(?:\.\d+)?)', answer) or re.search(r"\(?\[?\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)", answer)
     if not m:
         return {"error": f"I couldn't find '{target}' on the screen."}
@@ -1438,12 +1438,7 @@ async def learn(request: Request):
     if not model or not user:
         return out
     ka = keep_alive(settings)
-    if not settings.get("auto_learn", True):  # learning is off, but the task manager has its own switch
-        if settings.get("auto_tasks", True) and settings.get("tools_enabled") and learning.worth_checking_for_tasks(user):
-            try:
-                out["tasks"] = await learning.learn_tasks(client, OLLAMA, model, user, ka)
-            except (httpx.HTTPError, ValueError):
-                pass
+    if not settings.get("auto_learn", True):
         return out
     try:
         previous = str(body.get("previous_reply") or "")
@@ -1452,8 +1447,6 @@ async def learn(request: Request):
                                                         previous, "correction", user, ka, settings.get("persona") or "assistant")
         if settings.get("memory_enabled") and learning.worth_checking_for_facts(user):
             out["facts"] = await learning.learn_facts(client, OLLAMA, model, user, reply, ka)
-        if settings.get("auto_tasks", True) and settings.get("tools_enabled") and learning.worth_checking_for_tasks(user):
-            out["tasks"] = await learning.learn_tasks(client, OLLAMA, model, user, ka)
     except (httpx.HTTPError, ValueError):
         pass  # learning is a bonus; never bother the user about it
     return out
@@ -1505,12 +1498,12 @@ def _ollama_error(text: str, status: int) -> str:
     msg = str(msg)
     if _out_of_memory(msg):
         return ("My graphics card ran out of memory loading the model. Close games or other heavy apps and try again, or "
-                "lower Settings → Models → Chat memory to Normal (8K).")
+                "lower Settings → Brain & models → Chat memory to Normal (8K).")
     if "context size" in msg.lower() or "context length" in msg.lower():
         return ("This chat is longer than the model can read at once. Start a new chat, or raise "
-                "Settings → Models → Chat memory, then try again.")
+                "Settings → Brain & models → Chat memory, then try again.")
     if status == 404 and "not found" in msg.lower():
-        msg += " — download it in Settings → Models."
+        msg += " — download it in Settings → Brain & models."
     return msg or f"Ollama returned HTTP {status}"
 
 
@@ -1541,7 +1534,7 @@ async def status():
 
 @app.post("/api/engine")
 async def set_engine(request: Request):
-    """Settings → Models → Engine: Athena's own engine (and which brain), or Ollama."""
+    """Settings → Brain & models → Engine: Athena's own engine (and which brain), or Ollama."""
     from . import engine
 
     body = await request.json()
@@ -2172,7 +2165,7 @@ async def system_info():
 
 @app.get("/api/selftest")
 async def selftest():
-    """Try every part of Athena and report what works (Settings → Check everything)."""
+    """Try every part of Athena and report what works (Settings → Privacy & system → Check everything)."""
     from . import system, web
 
     settings = store.get_settings()
@@ -2206,7 +2199,7 @@ async def selftest():
 
     async def models():
         if not names:
-            return "fail", "No models downloaded yet — run the setup wizard or Settings → Models"
+            return "fail", "No models downloaded yet — run the setup wizard or Settings → Brain & models"
         chosen = {k: v for k, v in (settings.get("models") or {}).items() if v}
         missing = [f"{k}: {v}" for k, v in chosen.items() if v not in names]
         detail = f"{len(names)} installed: {', '.join(shown(n) for n in names[:8])}{'…' if len(names) > 8 else ''}"
@@ -2257,7 +2250,7 @@ async def selftest():
             return "skip", "No Knowledge folders set"
         model = settings.get("embed_model") or "nomic-embed-text"
         if not any(n.split(":")[0] == model.split(":")[0] for n in names):
-            return "fail", f"Download '{model}' in Settings → Knowledge"
+            return "fail", f"Download '{model}' in Settings → Abilities → Your documents"
         k = knowledge.summary()
         return ("ok", f"{k['documents']} documents indexed") if k["documents"] else ("warn", "Folders set but not indexed yet — press 'Index now'")
     await check("Your documents", docs_check())
@@ -2792,9 +2785,9 @@ async def phone_access(request: Request, call_next):
     if not _from_this_pc(request):
         settings = store.get_settings()
         if not settings.get("phone_access") or not security.pin_set():
-            msg = ("Phone access is off. On your PC, open Athena → Settings → Desktop app → Use Athena on your phone "
+            msg = ("Phone access is off. On your PC, open Athena → Settings → Privacy & system → Desktop app → Use Athena on your phone "
                    "(it needs a PIN).") if not settings.get("phone_access") else \
-                  "Set a PIN on your PC first (Athena → Settings → Privacy & data), then open this page again."
+                  "Set a PIN on your PC first (Athena → Settings → Privacy & system), then open this page again."
             if request.url.path.startswith("/api/"):
                 return JSONResponse({"detail": msg}, status_code=403)
             return Response(f"<!doctype html><meta name=viewport content='width=device-width'><body style='font:17px system-ui;"
