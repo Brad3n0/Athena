@@ -12,6 +12,8 @@ export const QUICK = [
   ['Fix grammar', 'Fix spelling, grammar and punctuation only. Change nothing else.'],
 ];
 const TONES = ['Formal', 'Casual', 'Friendly', 'Confident', 'Persuasive', 'Funny'];
+// Humanize: rewrite so it sounds like a person wrote it (the strengths live in athena/humanize.py).
+const HUMANIZE = [['light', 'Light touch'], ['medium', 'Natural'], ['strong', 'Strong rewrite'], ['voice', 'In my voice']];
 
 let deps; // { state, model(), save(), toast() }
 const ui = {};
@@ -25,9 +27,16 @@ export function initCanvas(d) {
   Object.assign(ui, {
     root: $('#canvas'), title: $('#canvasTitle'), text: $('#canvasText'), preview: $('#canvasPreview'),
     words: $('#canvasWords'), bar: $('#canvasBar'), barLabel: $('#canvasBarLabel'), ask: $('#canvasAsk'), askInput: $('#canvasAskInput'),
+    report: $('#canvasReport'),
   });
   ui.bar.insertAdjacentHTML('beforeend', QUICK.map(([label], i) => `<button type="button" data-cq="${i}">${label}</button>`).join('') +
-    `<select id="canvasTone" title="Change the tone"><option value="">Tone…</option>${TONES.map((t) => `<option>${t}</option>`).join('')}</select>`);
+    `<select id="canvasTone" title="Change the tone"><option value="">Tone…</option>${TONES.map((t) => `<option>${t}</option>`).join('')}</select>` +
+    '<select id="canvasHuman" title="Make it sound like a person wrote it"></select>' +
+    '<button type="button" id="canvasCheck" title="Rough check of how AI-written it sounds">🤖 Check</button>');
+  fillHumanize();
+  $('#canvasHuman').onchange = (e) => { const v = e.target.value; e.target.value = ''; if (v) humanizeAction(v); };
+  $('#canvasCheck').onclick = () => check();
+  ui.report.onclick = (e) => { if (e.target.closest('[data-rp="close"]')) ui.report.hidden = true; };
   ui.bar.onclick = (e) => { const b = e.target.closest('[data-cq]'); if (b) edit(QUICK[b.dataset.cq][1]); };
   $('#canvasTone').onchange = (e) => { if (e.target.value) edit(`Rewrite it in a ${e.target.value.toLowerCase()} tone.`); e.target.value = ''; };
   ui.text.addEventListener('input', () => { changed(); });
@@ -174,10 +183,10 @@ function setBusy(on) {
 }
 
 /** Rewrite the selection (or the whole document, or write one from scratch) and stream it into place. */
-async function edit(instruction) {
-  if (busy) return;
+async function edit(instruction, extra = {}) {
+  if (busy) return null;
   const model = deps.model();
-  if (!model) return deps.toast('Download a model first (Settings → Models)', 'error');
+  if (!model) { deps.toast('Download a model first (Settings → Models)', 'error'); return null; }
   const doc = ui.text.value;
   const sel = selection();
   const target = sel || { a: 0, b: doc.length, text: doc };
@@ -191,7 +200,7 @@ async function edit(instruction) {
   try {
     const res = await fetch('/api/rewrite', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: busy.signal,
-      body: JSON.stringify({ model, instruction, text: target.text, document: sel ? doc : '' }),
+      body: JSON.stringify({ model, instruction, text: target.text, document: sel ? doc : '', ...extra }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `Error ${res.status}`);
     const reader = res.body.getReader();
@@ -213,10 +222,13 @@ async function edit(instruction) {
     }
     ui.text.value = before + tidy(out, !!sel, true) + after;
     if (!out.trim()) throw new Error('She returned nothing. Try again or pick another model.');
-    ui.text.setSelectionRange(before.length, before.length + tidy(out, !!sel, true).length);
+    const result = tidy(out, !!sel, true);
+    ui.text.setSelectionRange(before.length, before.length + result.length);
     flash();
+    return result;
   } catch (e) {
     if (e.name !== 'AbortError') { ui.text.value = doc; undo.pop(); deps.toast(e.message, 'error'); }
+    return null;
   } finally {
     busy = null;
     setBusy(false);
@@ -284,3 +296,75 @@ function download() {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+
+// ------------------------------------------------------------- humanize
+
+const samples = () => String(deps.state.settings?.writing_samples || '');
+
+function fillHumanize() {
+  const has = !!samples().trim();
+  $('#canvasHuman').innerHTML = '<option value="">✍️ Humanize…</option>' +
+    HUMANIZE.map(([v, label]) => `<option value="${v}"${v === 'voice' && !has ? ' disabled' : ''}>${label}${v === 'voice' && !has ? ' (save a sample first)' : ''}</option>`).join('') +
+    '<option disabled>──────────</option><option value="save-voice">Save selection as my voice</option>' +
+    (has ? '<option value="forget-voice">Forget my voice sample</option>' : '');
+}
+
+async function saveSamples(text) {
+  const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ writing_samples: text }) });
+  if (!res.ok) throw new Error(`Couldn't save (error ${res.status})`);
+  deps.state.settings = await res.json();
+  fillHumanize();
+}
+
+async function humanizeAction(v) {
+  try {
+    if (v === 'save-voice') {
+      const sel = selection();
+      if (!sel || (sel.text.match(/\S+/g) || []).length < 40) return deps.toast('Highlight at least a paragraph (40+ words) that YOU wrote, then pick this again.');
+      const all = `${samples().trim()}\n\n${sel.text.trim()}`.trim().slice(-6000); // keep the newest ~6,000 characters
+      await saveSamples(all);
+      return deps.toast('Saved. "In my voice" will copy how you write.');
+    }
+    if (v === 'forget-voice') { await saveSamples(''); return deps.toast('Forgot your voice sample'); }
+    const sel = selection();
+    const target = sel ? sel.text : ui.text.value;
+    if (!target.trim()) return deps.toast('Paste or write something first');
+    const before = await score(target);
+    const label = HUMANIZE.find(([k]) => k === v)?.[1] || 'Natural';
+    const result = await edit(`Humanize (${label})`, { mode: 'humanize', strength: v });
+    if (result) showReport(await score(result), before);
+  } catch (e) { deps.toast(e.message, 'error'); }
+}
+
+async function score(text) {
+  const res = await fetch('/api/humanize/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+  if (!res.ok) throw new Error(`Check failed (error ${res.status})`);
+  return res.json();
+}
+
+async function check() {
+  const sel = selection();
+  const text = sel ? sel.text : ui.text.value;
+  if (!text.trim()) return deps.toast('Nothing to check yet');
+  try { showReport(await score(text)); } catch (e) { deps.toast(e.message, 'error'); }
+}
+
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function showReport(r, before) {
+  if (r.score == null) { ui.report.hidden = true; return deps.toast(r.label); }
+  const tone = r.score < 30 ? 'good' : r.score < 55 ? 'mid' : 'bad';
+  const change = before?.score != null ? `<span class="muted">${before.score} → </span>` : '';
+  ui.report.innerHTML = `
+    <div class="rp-top">
+      <b class="rp-score ${tone}">${change}${r.score}</b>
+      <span>${esc(r.label)}</span>
+      <span class="rp-meter"><i class="${tone}" style="width:${r.score}%"></i></span>
+      <button type="button" class="icon-btn" data-rp="close" title="Close">×</button>
+    </div>
+    <div class="muted small">Avg sentence ${r.avg_sentence} words · rhythm ${r.variation} · ${r.contractions} contractions per sentence</div>
+    ${r.tells.length ? `<div class="rp-tells">${r.tells.map((t) => `<span>${esc(t.phrase)}${t.count > 1 ? ` ×${t.count}` : ''}</span>`).join('')}</div>` : ''}
+    ${r.tips.length ? `<div class="small">${r.tips.map(esc).join(' ')}</div>` : ''}
+    <div class="muted small">A rough home-made meter (0 = human, 100 = robotic), not a real AI detector.</div>`;
+  ui.report.hidden = false;
+}
