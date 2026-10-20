@@ -25,7 +25,7 @@ let saveTimer = 0;
 export function initCanvas(d) {
   deps = d;
   Object.assign(ui, {
-    root: $('#canvas'), title: $('#canvasTitle'), text: $('#canvasText'), preview: $('#canvasPreview'),
+    root: $('#canvas'), title: $('#canvasTitle'), text: $('#canvasText'), preview: $('#canvasPreview'), hl: $('#canvasHighlight'),
     words: $('#canvasWords'), bar: $('#canvasBar'), barLabel: $('#canvasBarLabel'), ask: $('#canvasAsk'), askInput: $('#canvasAskInput'),
     report: $('#canvasReport'),
   });
@@ -36,7 +36,11 @@ export function initCanvas(d) {
   fillHumanize();
   $('#canvasHuman').onchange = (e) => { const v = e.target.value; e.target.value = ''; if (v) humanizeAction(v); };
   $('#canvasCheck').onclick = () => check();
-  ui.report.onclick = (e) => { if (e.target.closest('[data-rp="close"]')) ui.report.hidden = true; };
+  ui.report.onclick = (e) => {
+    if (e.target.closest('[data-rp="close"]')) ui.report.hidden = true;
+    if (e.target.closest('[data-rp="highlight"]')) setHighlight(true);
+  };
+  ui.hl.onclick = () => setHighlight(false);
   ui.bar.onclick = (e) => { const b = e.target.closest('[data-cq]'); if (b) edit(QUICK[b.dataset.cq][1]); };
   $('#canvasTone').onchange = (e) => { if (e.target.value) edit(`Rewrite it in a ${e.target.value.toLowerCase()} tone.`); e.target.value = ''; };
   ui.text.addEventListener('input', () => { changed(); });
@@ -60,6 +64,7 @@ export function initCanvas(d) {
     if (act === 'download') download();
     if (act === 'print') printDoc();
     if (act === 'stop') busy?.abort();
+    if (act === 'highlight') setHighlight(ui.hl.hidden);
   };
 }
 
@@ -94,6 +99,9 @@ export function syncCanvas() {
   undo.length = 0;
   redo.length = 0;
   busy?.abort();
+  lastCheck = null;
+  ui.report.hidden = true;
+  $('#canvasHead [data-cv="highlight"]').hidden = true;
   if (deps.state.chat?.canvas?.open) show(); else { ui.root.hidden = true; document.body.classList.remove('canvas-on'); }
 }
 
@@ -252,6 +260,8 @@ function flash() {
 }
 
 function setPreview(on) {
+  ui.hl.hidden = true;
+  $('#canvasHead [data-cv="highlight"]').classList.remove('on');
   ui.preview.hidden = !on;
   ui.text.hidden = on;
   $('#canvasHead [data-cv="preview"]').classList.toggle('on', on);
@@ -333,7 +343,7 @@ async function humanizeAction(v) {
     showReport(before);
     const label = HUMANIZE.find(([k]) => k === v)?.[1] || 'Natural';
     const result = await edit(`Humanize (${label})`, { mode: 'humanize', strength: v });
-    if (result) showReport(await score(result), before);
+    if (result) { const base = ui.text.selectionStart; remember(await score(result), base, before); }
   } catch (e) { deps.toast(e.message, 'error'); }
 }
 
@@ -357,7 +367,8 @@ async function check() {
   const sel = selection();
   const text = sel ? sel.text : ui.text.value;
   if (!text.trim()) return deps.toast('Nothing to check yet');
-  try { showReport(await score(text)); } catch (e) { ui.report.hidden = true; deps.toast(e.message, 'error'); }
+  const base = sel ? sel.a : 0;
+  try { remember(await score(text), base); } catch (e) { ui.report.hidden = true; deps.toast(e.message, 'error'); }
 }
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -376,6 +387,7 @@ function showReport(r, before) {
       <b class="rp-score ${tone}">${change}${r.score}%</b>
       <span>${esc(r.label)}</span>
       <span class="rp-meter"><i class="${tone}" style="width:${r.score}%"></i></span>
+      ${d?.spans ? '<button type="button" class="rp-hl" data-rp="highlight">🖍️ Highlight</button>' : ''}
       <button type="button" class="icon-btn" data-rp="close" title="Close">×</button>
     </div>
     <div class="small">${stats}</div>
@@ -386,4 +398,47 @@ function showReport(r, before) {
     <div class="muted small">${d ? 'Checked like GPTZero (perplexity + burstiness) using Athena\'s own brain, plus the style meter.' : 'Style meter only.'}
       Turnitin and GPTZero use their own trained models, so their numbers will differ.</div>`;
   ui.report.hidden = false;
+}
+
+// ------------------------------------------------- highlight view (like Turnitin's AI report)
+
+let lastCheck = null; // { doc, base, r } from the last Check, so the highlights line up with the text
+
+function remember(r, base, before) {
+  lastCheck = r.deep?.spans ? { doc: ui.text.value, base, r } : null;
+  $('#canvasHead [data-cv="highlight"]').hidden = !lastCheck;
+  showReport(r, before);
+}
+
+const level = (ai) => (ai >= 70 ? 'hi' : ai >= 40 ? 'mid' : 'lo');
+
+function highlightHtml() {
+  const { doc, base, r } = lastCheck;
+  const spans = r.deep.spans.map((s) => ({ a: base + s.start, b: base + s.end, ai: s.ai }));
+  const paras = new Map(r.deep.paragraphs.map((p) => [base + p.start, p.ai]));
+  const cuts = [...new Set([0, doc.length, ...spans.flatMap((s) => [s.a, s.b]), ...paras.keys()])]
+    .filter((x) => x >= 0 && x <= doc.length).sort((x, y) => x - y);
+  let html = '';
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const a = cuts[i];
+    const piece = esc(doc.slice(a, cuts[i + 1]));
+    if (paras.has(a)) { const ai = paras.get(a); html += `<span class="hl-badge ${level(ai)}">¶ ${ai}% AI</span>`; }
+    const s = spans.find((x) => x.a <= a && a < x.b);
+    html += s && s.ai >= 40 ? `<mark class="${level(s.ai)}" title="${s.ai}% likely AI">${piece}</mark>` : piece;
+  }
+  const checked = r.deep.truncated ? ' Only the first part was checked.' : '';
+  return `<div class="hl-legend"><b>${r.score}% AI overall</b> · <mark class="hi">likely AI (70%+)</mark> <mark class="mid">maybe (40–69%)</mark>
+    unmarked = likely human · hover a sentence for its % · click to keep editing.${checked}</div><div class="hl-body">${html}</div>`;
+}
+
+function setHighlight(on) {
+  if (on) {
+    if (!lastCheck) return deps.toast('Run 🤖 Check first');
+    if (ui.text.value !== lastCheck.doc) return deps.toast('The text changed since the check. Run 🤖 Check again.');
+    setPreview(false);
+    ui.hl.innerHTML = highlightHtml();
+  }
+  ui.hl.hidden = !on;
+  ui.text.hidden = on;
+  $('#canvasHead [data-cv="highlight"]').classList.toggle('on', on);
 }

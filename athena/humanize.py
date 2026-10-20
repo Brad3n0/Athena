@@ -266,6 +266,7 @@ async def deep_check(client: httpx.AsyncClient, text: str) -> dict[str, Any]:
     engine._last_used[0] = time.time()
 
     original_len = len(text)
+    offset = len(text) - len(text.lstrip())  # where the checked text starts inside what was sent
     text = text.strip()[:DEEP_MAX_CHARS]
     if len(text) < original_len - 5:  # cut at the end of a sentence, not mid-word
         cut = max(text.rfind(". "), text.rfind("\n"))
@@ -306,8 +307,23 @@ async def deep_check(client: httpx.AsyncClient, text: str) -> dict[str, Any]:
         vals = [t[2] for t in tokens if ba <= t[0] < bb]
         if len(vals) >= 5:
             s_nll = statistics.mean(vals)
-            sentences.append({"text": text[a:b], "nll": s_nll, "ai": _sigmoid((NLL_CENTER - s_nll) / NLL_SCALE)})
+            sentences.append({"text": text[a:b], "start": a, "end": b, "nll": s_nll,
+                              "ai": _sigmoid((NLL_CENTER - s_nll) / NLL_SCALE)})
     burst = statistics.pstdev([s["nll"] for s in sentences]) if len(sentences) >= 3 else None
+
+    # Per paragraph (like Turnitin's sections): the paragraph's own perplexity and burstiness.
+    paragraphs = []
+    for m in re.finditer(r"\S[\s\S]*?(?=\n\s*\n|\Z)", text):
+        a, b = m.start(), m.start() + len(m.group(0).rstrip())
+        ba, bb = len(text[:a].encode("utf-8")), len(text[:b].encode("utf-8"))
+        vals = [t[2] for t in tokens if ba <= t[0] < bb]
+        if len(vals) < 15:
+            continue  # headings and one-liners are too short to judge
+        inside = [x["nll"] for x in sentences if a <= x["start"] < b]
+        pz = (NLL_CENTER - statistics.mean(vals)) / NLL_SCALE
+        if len(inside) >= 3:
+            pz += BURST_WEIGHT * (BURST_CENTER - statistics.pstdev(inside)) / BURST_SCALE
+        paragraphs.append({"start": offset + a, "end": offset + b, "ai": round(_sigmoid(pz) * 100)})
 
     z = (NLL_CENTER - mean_nll) / NLL_SCALE
     if burst is not None:
@@ -325,6 +341,9 @@ async def deep_check(client: httpx.AsyncClient, text: str) -> dict[str, Any]:
         "truncated": len(text) < original_len - 5,
         "seconds": round(time.time() - started, 1),
         "sentences": [{"text": s["text"][:220], "ai": round(s["ai"] * 100)} for s in flagged],
+        # Every sentence and paragraph with its place in the text that was sent, for the highlight view.
+        "spans": [{"start": offset + s["start"], "end": offset + s["end"], "ai": round(s["ai"] * 100)} for s in sentences],
+        "paragraphs": paragraphs,
     }
 
 
