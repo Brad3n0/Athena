@@ -32,7 +32,7 @@ export function initCanvas(d) {
   ui.bar.insertAdjacentHTML('beforeend', QUICK.map(([label], i) => `<button type="button" data-cq="${i}">${label}</button>`).join('') +
     `<select id="canvasTone" title="Change the tone"><option value="">Tone…</option>${TONES.map((t) => `<option>${t}</option>`).join('')}</select>` +
     '<select id="canvasHuman" title="Make it sound like a person wrote it"></select>' +
-    '<button type="button" id="canvasCheck" title="AI check: how predictable it is to Athena's brain (like GPTZero)">🤖 Check</button>');
+    '<button type="button" id="canvasCheck" title="AI check: how predictable it is to Athena’s brain (like GPTZero)">🤖 Check</button>');
   fillHumanize();
   $('#canvasHuman').onchange = (e) => { const v = e.target.value; e.target.value = ''; if (v) humanizeAction(v); };
   $('#canvasCheck').onclick = () => check();
@@ -440,5 +440,6 @@ function setHighlight(on) {
   }
   ui.hl.hidden = !on;
   ui.text.hidden = on;
+  ui.report.hidden = on; // the highlight view has its own summary; bring the report back when you go back to editing
   $('#canvasHead [data-cv="highlight"]').classList.toggle('on', on);
 }
