@@ -15,7 +15,7 @@ Athena is an evolving personal AI assistant that lives on your computer, not in 
 | 📘 **Your study partner** | Turns your notes into study guides, flashcards that adapt to you, and clickable quizzes with step-by-step explanations. |
 | 🎨 **Creative tools** | Edits your photos, makes new pictures, and helps you write essays, emails and stories. |
 | 🛡️ **Private by design** | Asks before she moves a file or sends a message, and keeps everything in one folder on your PC. |
-| 🤖 **Mortalize & AI Checker** | Mortalize rewrites text to sound more human, and Check scans it for AI text. |
+| 🔮 **Mortalize & Oracle** | Mortalize rewrites text to sound more human, and the Oracle scans it for AI text. |
 ---
 
 ## Setup (needs internet once)
@@ -107,7 +107,7 @@ Scores, schedules, standings, injuries and past seasons: `/scores NBA tonight`. 
 ## More
 
 - **Writing canvas** for essays and emails, with Improve, Shorter, Tone and more.
-- **✍️ Mortalize** (the humanizer) in the canvas rewrites stiff, AI-sounding text so it reads like a person wrote it (Light touch, Natural, Strong, or *In my voice* after you save a sample of your own writing). **🤖 Check** is an AI detector that works like GPTZero: Athena's own brain reads the text word by word and measures how surprising the words are (**Surprise**, what GPTZero calls perplexity) and how much that changes between sentences (**Variety**, GPTZero's burstiness), then shows an AI %, the most AI-like sentences, and a **🖍️ Highlight** view that marks each sentence and paragraph by how likely it is to be AI, like Turnitin's AI report. It needs the built-in engine; with Ollama it falls back to a quicker style check. All offline. Turnitin and GPTZero use their own trained models, so their numbers will differ.
+- **✍️ Mortalize** (the humanizer) in the canvas rewrites stiff, AI-sounding text so it reads like a person wrote it (Light touch, Natural, Strong, or *In my voice* after you save a sample of your own writing). **🔮 Oracle** is an AI detector that works like GPTZero: Athena's own brain reads the text word by word and measures how surprising the words are (**Surprise**, what GPTZero calls perplexity) and how much that changes between sentences (**Variety**, GPTZero's burstiness), then shows an AI %, the most AI-like sentences, and a **🖍️ Highlight** view that marks each sentence and paragraph by how likely it is to be AI, like Turnitin's AI report. It needs the built-in engine; with Ollama it falls back to a quicker style check. All offline. Turnitin and GPTZero use their own trained models, so their numbers will differ.
 - **Projects:** chat folders with their own instructions and files.
 - **Deep research** with sources, and **Think harder** for tough problems.
 - **Your documents:** ask about your own PDFs and notes (Settings → Knowledge).
