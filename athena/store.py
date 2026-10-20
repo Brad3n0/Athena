@@ -59,6 +59,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "ha_token": "",
     # Custom personalities: [{"id","name","instructions","voice"}]
     "personas": [],
+    "mortalize_two_pass": False,  # Mortalize rereads its own rewrite and fixes what still sounds stiff (slower)
     "writing_samples": "",  # a few paragraphs you wrote yourself, so Humanize → In my voice sounds like you
     # PIN lock
     "pin_hash": "",

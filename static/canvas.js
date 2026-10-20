@@ -41,6 +41,8 @@ export function initCanvas(d) {
   ui.report.onclick = (e) => {
     if (e.target.closest('[data-rp="close"]')) ui.report.hidden = true;
     if (e.target.closest('[data-rp="highlight"]')) setHighlight(true);
+    const note = e.target.closest('[data-coach]');
+    if (note) jumpToNote(Number(note.dataset.coach));
   };
   ui.hl.onclick = () => setHighlight(false);
   $('#canvasEdit').onchange = (e) => {
@@ -230,6 +232,7 @@ async function edit(instruction, extra = {}) {
         if (!line.trim()) continue;
         const ev = JSON.parse(line);
         if (ev.error) throw new Error(ev.error);
+        if (ev.stage) { ui.barLabel.textContent = ev.stage; continue; } // two-pass Mortalize: which pass is running
         out += ev.t || '';
         ui.text.value = before + tidy(out, !!sel) + after;
       }
@@ -321,16 +324,22 @@ function fillHumanize() {
   const has = !!samples().trim();
   $('#canvasHuman').innerHTML = '<option value="">✍️ Mortalize…</option>' +
     HUMANIZE.map(([v, label]) => `<option value="${v}"${v === 'voice' && !has ? ' disabled' : ''}>${label}${v === 'voice' && !has ? ' (save a sample first)' : ''}</option>`).join('') +
+    '<option disabled>──────────</option>' +
+    '<option value="coach">🧑‍🏫 Coach me (tips; you do the rewriting)</option>' +
+    `<option value="two-pass">🔁 Two passes: ${twoPass() ? 'ON (click to turn off)' : 'off (click to turn on)'}</option>` +
     '<option disabled>──────────</option><option value="save-voice">Save selection as my voice</option>' +
     (has ? '<option value="forget-voice">Forget my voice sample</option>' : '');
 }
 
-async function saveSamples(text) {
-  const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ writing_samples: text }) });
+const twoPass = () => !!deps.state.settings?.mortalize_two_pass;
+
+async function putSettings(patch) {
+  const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
   if (!res.ok) throw new Error(`Couldn't save (error ${res.status})`);
   deps.state.settings = await res.json();
   fillHumanize();
 }
+const saveSamples = (text) => putSettings({ writing_samples: text });
 
 async function humanizeAction(v) {
   try {
@@ -342,13 +351,18 @@ async function humanizeAction(v) {
       return deps.toast('Saved. "In my voice" will copy how you write.');
     }
     if (v === 'forget-voice') { await saveSamples(''); return deps.toast('Forgot your voice sample'); }
+    if (v === 'two-pass') {
+      await putSettings({ mortalize_two_pass: !twoPass() });
+      return deps.toast(twoPass() ? '🔁 Two passes on: she rewrites, then rereads it and fixes what still sounds stiff (takes about twice as long)' : 'Two passes off');
+    }
+    if (v === 'coach') return coach();
     const sel = selection();
     const target = sel ? sel.text : ui.text.value;
     if (!target.trim()) return deps.toast('Paste or write something first');
     const before = await score(target);
     showReport(before);
     const label = HUMANIZE.find(([k]) => k === v)?.[1] || 'Natural';
-    const result = await edit(`Mortalize (${label})`, { mode: 'humanize', strength: v });
+    const result = await edit(`Mortalize (${label})`, { mode: 'humanize', strength: v, two_pass: twoPass() });
     if (result) { const base = ui.text.selectionStart; remember(await score(result), base, before); }
   } catch (e) { deps.toast(e.message, 'error'); }
 }
@@ -449,3 +463,63 @@ function setHighlight(on) {
   ui.report.hidden = on; // the highlight view has its own summary; bring the report back when you go back to editing
   $('#canvasHead [data-cv="highlight"]').classList.toggle('on', on);
 }
+
+// ------------------------------------------------------------- coach mode
+// She points out the stiffest sentences and gives a tip for each; you do the rewriting. Click a note to jump to it.
+
+let coachNotes = null; // { doc, base, notes }
+
+async function coach() {
+  if (busy) return;
+  const model = deps.model();
+  if (!model) return deps.toast('Download a model first (Settings → Brain & models)', 'error');
+  const sel = selection();
+  const text = sel ? sel.text : ui.text.value;
+  if ((text.match(/\S+/g) || []).length < 25) return deps.toast('Give the coach at least a few sentences.');
+  const base = sel ? sel.a : 0;
+  setHighlight(false);
+  ui.report.innerHTML = '<div class="muted small">🧑‍🏫 Reading your writing for the stiffest sentences…</div>';
+  ui.report.hidden = false;
+  try {
+    const res = await fetch('/api/humanize/coach', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, text }) });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `The coach couldn't answer (error ${res.status})`);
+    coachNotes = { doc: ui.text.value, base, notes: body.notes || [] };
+    showCoach();
+  } catch (e) { ui.report.hidden = true; deps.toast(e.message, 'error'); }
+}
+
+function showCoach() {
+  const { notes } = coachNotes;
+  ui.report.innerHTML = `
+    <div class="rp-top"><b>🧑‍🏫 Coach</b><span class="muted small">${notes.length ? `${notes.length} sentence${notes.length === 1 ? '' : 's'} to work on · click one to jump to it` : ''}</span>
+      <span class="spacer"></span><button type="button" class="icon-btn" data-rp="close" title="Close">×</button></div>
+    ${notes.length ? `<ol class="coach-list">${notes.map((n, i) => `<li data-coach="${i}">
+        <q>${esc(n.quote.length > 160 ? `${n.quote.slice(0, 157)}…` : n.quote)}</q>
+        <div class="small"><b>Why:</b> ${esc(n.why)}</div>
+        <div class="small"><b>Try:</b> ${esc(n.tip)}</div></li>`).join('')}</ol>`
+      : '<div class="small">Nothing stands out. This already reads naturally. ✨</div>'}
+    <div class="muted small">Tips only: rewrite these in your own words, then ask the coach again.</div>`;
+  ui.report.hidden = false;
+}
+
+function jumpToNote(i) {
+  const n = coachNotes?.notes[i];
+  if (!n) return;
+  let a = coachNotes.base + n.start;
+  let b = coachNotes.base + n.end;
+  if (ui.text.value.slice(a, b) !== n.quote) { // you've edited since: find the sentence again, if it's still there
+    const at = ui.text.value.indexOf(n.quote);
+    if (at < 0) return deps.toast('That sentence has changed. Nice! Ask the coach again for a fresh look.');
+    a = at; b = at + n.quote.length;
+  }
+  setHighlight(false);
+  setPreview(false);
+  ui.text.focus();
+  ui.text.setSelectionRange(a, b);
+  // scroll the editor so the sentence is in view
+  const ratio = a / Math.max(1, ui.text.value.length);
+  ui.text.scrollTop = Math.max(0, ratio * ui.text.scrollHeight - ui.text.clientHeight / 3);
+  $$coach().forEach((li) => li.classList.toggle('on', li.dataset.coach === String(i)));
+}
+const $$coach = () => [...ui.report.querySelectorAll('[data-coach]')];
