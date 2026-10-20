@@ -1,13 +1,25 @@
-"""Humanize: rewrite stiff, AI-sounding text so it reads like a person wrote it, plus a rough "robot meter".
+"""Humanize: rewrite stiff, AI-sounding text so it reads like a person wrote it, plus an AI detector.
 
-Everything here runs offline with Athena's own model. The meter is a home-made heuristic (sentence rhythm, stock AI
-phrases, contractions, dashes), not a real AI detector, so treat its number as a hint, not a verdict.
+Everything here runs offline with Athena's own model. There are two checks:
+
+- The deep check works the way GPTZero describes its method: Athena's brain reads the text one token at a time and
+  measures how predictable each one was (perplexity) and how much that swings from sentence to sentence (burstiness).
+  AI text is very predictable and very even; people are more surprising and more uneven. It also counts how often
+  each word was the brain's own first guess (like the GLTR research tool). It needs her built-in engine.
+- The style meter is a quick heuristic (stock AI phrases, sentence rhythm, contractions, dashes) that works anywhere.
+
+Turnitin and GPTZero use their own trained models, so their numbers won't match exactly. Treat the score as a guide.
 """
 from __future__ import annotations
 
+import asyncio
+import math
 import re
 import statistics
+import time
 from typing import Any
+
+import httpx
 
 SYSTEM = (
     "You are a sharp human editor who rewrites text so it sounds like a real person wrote it, not an AI. "
@@ -180,3 +192,187 @@ def options(strength: str) -> dict[str, Any]:
     """Sampling for the rewrite. A bit more randomness than normal editing breaks up the even, predictable rhythm."""
     temp = {"light": 0.7, "medium": 0.85, "strong": 0.95, "voice": 0.85}.get(strength, 0.85)
     return {"temperature": temp, "top_p": 0.92, "presence_penalty": 0.4}
+
+
+# ------------------------------------------------------------ deep check
+
+# Where "predictable" turns into "probably AI", in nats per token (the average surprise; perplexity = e^this).
+# Text Athena's brain itself would write scores about 0.8-1.4; people's writing usually lands around 2-3.5.
+NLL_CENTER, NLL_SCALE = 1.9, 0.3
+# Burstiness: how much the surprise swings between sentences (spread of each sentence's average). AI ≈ 0.3, people ≈ 0.6+.
+BURST_CENTER, BURST_SCALE, BURST_WEIGHT = 0.5, 0.2, 0.7
+DEEP_MAX_CHARS = 5000  # about 800 words; longer text is checked from the start (keeps it to well under a minute)
+SCORE_PROMPT = "Write a few paragraphs."
+
+
+def _sigmoid(z: float) -> float:
+    return 1 / (1 + math.exp(-max(-30.0, min(30.0, z))))
+
+
+def _gbnf_literal(text: str) -> str:
+    """A grammar that only allows this exact text, so the brain 'writes' it and we can read how surprised it was."""
+    out = []
+    for ch in text:
+        if ch in '"\\':
+            out.append("\\" + ch)
+        elif ch == "\n":
+            out.append("\\n")
+        elif ch == "\r":
+            out.append("\\r")
+        elif ch == "\t":
+            out.append("\\t")
+        elif ord(ch) < 32:
+            out.append(f"\\x{ord(ch):02x}")
+        else:
+            out.append(ch)
+    return 'root ::= "' + "".join(out) + '"'
+
+
+def _sentence_spans(text: str) -> list[tuple[int, int]]:
+    """Character spans of the prose sentences (skipping headings, tables and code)."""
+    spans = []
+    for m in re.finditer(r"[^.!?\n]+(?:[.!?]+[\"”')\]]*|\n|$)", text):
+        chunk = m.group(0)
+        stripped = chunk.strip()
+        if len(_WORD.findall(stripped)) < 4 or stripped.startswith(("#", "|", "```")):
+            continue
+        lead = len(chunk) - len(chunk.lstrip())
+        spans.append((m.start() + lead, m.start() + lead + len(stripped)))
+    return spans
+
+
+async def _prompt_prefix(client: httpx.AsyncClient, base: str) -> str:
+    """The brain's own chat format up to where its reply starts, so the text is scored as if it were her answer."""
+    marker = "⁣ATHENA_SCORE_MARKER⁣"
+    r = await client.post(f"{base}/apply-template", timeout=30,
+                          json={"messages": [{"role": "user", "content": SCORE_PROMPT}, {"role": "assistant", "content": marker}]})
+    r.raise_for_status()
+    rendered = r.json().get("prompt") or ""
+    if marker not in rendered:
+        raise RuntimeError("couldn't read the brain's chat format")
+    return rendered.split(marker)[0]
+
+
+async def deep_check(client: httpx.AsyncClient, text: str) -> dict[str, Any]:
+    """Perplexity + burstiness, scored by Athena's own brain. Raises RuntimeError with a friendly reason if it can't run."""
+    from fastapi.concurrency import run_in_threadpool
+
+    from . import engine
+
+    if not engine.wanted():
+        raise RuntimeError("The deep check needs Athena's built-in engine (Settings → Models → Engine). Showing the style check instead.")
+    if not await run_in_threadpool(engine.ensure_running, 180):
+        raise RuntimeError("Athena's brain isn't loaded right now (it may be downloading or paused for a game). Showing the style check instead.")
+    engine._last_used[0] = time.time()
+
+    original_len = len(text)
+    offset = len(text) - len(text.lstrip())  # where the checked text starts inside what was sent
+    text = text.strip()[:DEEP_MAX_CHARS]
+    if len(text) < original_len - 5:  # cut at the end of a sentence, not mid-word
+        cut = max(text.rfind(". "), text.rfind("\n"))
+        text = text[: cut + 1] if cut > 1000 else text
+    raw = text.encode("utf-8")
+    base = engine.LLAMA_URL
+    prefix = await _prompt_prefix(client, base)
+    started = time.time()
+    r = await client.post(f"{base}/completion", timeout=httpx.Timeout(15.0, read=300), json={
+        "prompt": prefix, "grammar": _gbnf_literal(text), "n_predict": len(raw) + 16, "n_probs": 10,
+        "temperature": 0, "cache_prompt": False, "stream": False,
+    })
+    if r.status_code != 200:
+        raise RuntimeError(f"The brain couldn't score it ({r.text[:200] or r.status_code}).")
+    probs = r.json().get("completion_probabilities") or []
+    tokens = []  # (byte start, byte end, surprise in nats, rank of the real word among her guesses)
+    pos = 0
+    for item in probs:
+        size = len(item.get("bytes") or str(item.get("token", "")).encode("utf-8"))
+        if size == 0:
+            continue  # end-of-text marker
+        lp = item.get("logprob")
+        if lp is None:
+            continue
+        rank = next((i for i, t in enumerate(item.get("top_logprobs") or []) if t.get("id") == item.get("id")), 10)
+        tokens.append((pos, pos + size, -float(lp), rank))
+        pos += size
+    if len(tokens) < 20:
+        raise RuntimeError("Too short for the deep check. Give it a few sentences.")
+
+    nll = [t[2] for t in tokens]
+    mean_nll = statistics.mean(nll)
+
+    # Per sentence: map character spans to byte spans, then average the surprise of the tokens that start inside.
+    sentences = []
+    for a, b in _sentence_spans(text):
+        ba, bb = len(text[:a].encode("utf-8")), len(text[:b].encode("utf-8"))
+        vals = [t[2] for t in tokens if ba <= t[0] < bb]
+        if len(vals) >= 5:
+            s_nll = statistics.mean(vals)
+            sentences.append({"text": text[a:b], "start": a, "end": b, "nll": s_nll,
+                              "ai": _sigmoid((NLL_CENTER - s_nll) / NLL_SCALE)})
+    burst = statistics.pstdev([s["nll"] for s in sentences]) if len(sentences) >= 3 else None
+
+    # Per paragraph (like Turnitin's sections): the paragraph's own perplexity and burstiness.
+    paragraphs = []
+    for m in re.finditer(r"\S[\s\S]*?(?=\n\s*\n|\Z)", text):
+        a, b = m.start(), m.start() + len(m.group(0).rstrip())
+        ba, bb = len(text[:a].encode("utf-8")), len(text[:b].encode("utf-8"))
+        vals = [t[2] for t in tokens if ba <= t[0] < bb]
+        if len(vals) < 15:
+            continue  # headings and one-liners are too short to judge
+        inside = [x["nll"] for x in sentences if a <= x["start"] < b]
+        pz = (NLL_CENTER - statistics.mean(vals)) / NLL_SCALE
+        if len(inside) >= 3:
+            pz += BURST_WEIGHT * (BURST_CENTER - statistics.pstdev(inside)) / BURST_SCALE
+        paragraphs.append({"start": offset + a, "end": offset + b, "ai": round(_sigmoid(pz) * 100), "tokens": len(vals)})
+
+    z = (NLL_CENTER - mean_nll) / NLL_SCALE
+    if burst is not None:
+        z += BURST_WEIGHT * (BURST_CENTER - burst) / BURST_SCALE
+    ai = _sigmoid(z)
+    whole = ai
+    if len(paragraphs) >= 2:
+        # Like Turnitin's number: how much of the text looks AI-written, paragraph by paragraph. (Scoring a mixed
+        # document as one block hides AI paragraphs, because mixing in human ones makes the whole thing look bursty.)
+        ai = sum(p["ai"] * p["tokens"] for p in paragraphs) / sum(p["tokens"] for p in paragraphs) / 100
+    flagged = sorted((s for s in sentences if s["ai"] >= 0.6), key=lambda s: -s["ai"])[:6]
+    return {
+        "ai": round(ai * 100),
+        "whole_text_ai": round(whole * 100),
+        "perplexity": round(math.exp(mean_nll), 1),
+        "burstiness": None if burst is None else round(burst, 2),
+        "top1": round(100 * sum(1 for t in tokens if t[3] == 0) / len(tokens)),
+        "top10": round(100 * sum(1 for t in tokens if t[3] < 10) / len(tokens)),
+        "tokens": len(tokens),
+        "checked_chars": len(text),
+        "truncated": len(text) < original_len - 5,
+        "seconds": round(time.time() - started, 1),
+        "sentences": [{"text": s["text"][:220], "ai": round(s["ai"] * 100)} for s in flagged],
+        # Every sentence and paragraph with its place in the text that was sent, for the highlight view.
+        "spans": [{"start": offset + s["start"], "end": offset + s["end"], "ai": round(s["ai"] * 100)} for s in sentences],
+        "paragraphs": paragraphs,
+    }
+
+
+_deep_lock = asyncio.Lock()  # one deep check at a time (her engine runs one job at a time anyway)
+
+
+async def full_check(client: httpx.AsyncClient, text: str, deep: bool = True) -> dict[str, Any]:
+    """The score the canvas shows: the deep check when it can run (80%) blended with the style meter (20%)."""
+    style = analyze(text)
+    out: dict[str, Any] = {**style, "style_score": style.get("score"), "deep": None, "note": ""}
+    if not deep:
+        return out
+    try:
+        async with _deep_lock:
+            d = await deep_check(client, text)
+    except RuntimeError as exc:
+        out["note"] = str(exc)
+        return out
+    except httpx.HTTPError as exc:
+        out["note"] = f"Couldn't reach Athena's brain for the deep check ({type(exc).__name__}). Showing the style check instead."
+        return out
+    out["deep"] = d
+    blended = d["ai"] if style.get("score") is None else round(0.8 * d["ai"] + 0.2 * style["score"])
+    out["score"] = blended
+    out["label"] = "Likely human" if blended < 35 else "Mixed" if blended < 70 else "Likely AI"
+    return out

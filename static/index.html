@@ -174,6 +174,7 @@
       <span class="muted small" id="canvasWords"></span>
       <button type="button" class="stop-btn" data-cv="stop" hidden>■ Stop</button>
       <button type="button" class="icon-btn" data-cv="undo" title="Undo (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg></button>
+      <button type="button" class="icon-btn" data-cv="highlight" title="AI highlights (from the last Oracle reading)" hidden><svg viewBox="0 0 24 24"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg></button>
       <button type="button" class="icon-btn" data-cv="preview" title="Preview formatting"><svg viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
       <button type="button" class="icon-btn" data-cv="copy" title="Copy all"><svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
       <button type="button" class="icon-btn" data-cv="print" title="Print (or save as PDF)"><svg viewBox="0 0 24 24"><path d="M7 9V3h10v6M7 18H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="7" y="14" width="10" height="7"/></svg></button>
@@ -182,6 +183,7 @@
     </header>
     <textarea id="canvasText" spellcheck="true" placeholder="Start writing, paste something in, or tell Athena what to write below…"></textarea>
     <div class="md canvas-preview" id="canvasPreview" hidden></div>
+    <div class="canvas-hl" id="canvasHighlight" hidden title="Click to go back to editing"></div>
     <div class="canvas-report" id="canvasReport" hidden></div>
     <div class="canvas-bar" id="canvasBar"><span id="canvasBarLabel" class="muted small"></span></div>
     <form class="canvas-ask" id="canvasAsk">
