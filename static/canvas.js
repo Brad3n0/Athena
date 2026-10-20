@@ -32,7 +32,7 @@ export function initCanvas(d) {
   ui.bar.insertAdjacentHTML('beforeend', QUICK.map(([label], i) => `<button type="button" data-cq="${i}">${label}</button>`).join('') +
     `<select id="canvasTone" title="Change the tone"><option value="">Tone…</option>${TONES.map((t) => `<option>${t}</option>`).join('')}</select>` +
     '<select id="canvasHuman" title="Mortalize: make it sound like a person wrote it"></select>' +
-    '<button type="button" id="canvasCheck" title="AI check: how predictable it is to Athena’s brain (like GPTZero)">🤖 Check</button>');
+    '<button type="button" id="canvasCheck" title="Oracle: Athena’s AI detector (works like GPTZero)">🔮 Oracle</button>');
   fillHumanize();
   $('#canvasHuman').onchange = (e) => { const v = e.target.value; e.target.value = ''; if (v) humanizeAction(v); };
   $('#canvasCheck').onclick = () => check();
@@ -351,7 +351,7 @@ async function score(text) {
   setChecking(true);
   try {
     const res = await fetch('/api/humanize/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-    if (!res.ok) throw new Error(`Check failed (error ${res.status})`);
+    if (!res.ok) throw new Error(`The Oracle couldn't check it (error ${res.status})`);
     return await res.json();
   } finally { setChecking(false); }
 }
@@ -359,7 +359,7 @@ async function score(text) {
 function setChecking(on) {
   const b = $('#canvasCheck');
   b.disabled = on;
-  b.textContent = on ? '⏳ Checking…' : '🤖 Check';
+  b.textContent = on ? '🔮 Reading…' : '🔮 Oracle';
   if (on) { ui.report.innerHTML = '<div class="muted small">Athena\'s brain is reading it word by word… (longer text takes up to a minute)</div>'; ui.report.hidden = false; }
 }
 
@@ -395,7 +395,7 @@ function showReport(r, before) {
     ${r.tells.length ? `<div class="rp-tells">${r.tells.map((t) => `<span>${esc(t.phrase)}${t.count > 1 ? ` ×${t.count}` : ''}</span>`).join('')}</div>` : ''}
     ${r.tips.length ? `<div class="small">${r.tips.map(esc).join(' ')}</div>` : ''}
     ${r.note ? `<div class="small rp-note">${esc(r.note)}</div>` : ''}
-    <div class="muted small">${d ? 'Checked the way GPTZero works (word surprise + sentence variety) using Athena\'s own brain, plus the style meter.' : 'Style meter only.'}
+    <div class="muted small">${d ? 'The Oracle checks the way GPTZero works (word surprise + sentence variety) using Athena\'s own brain, plus the style meter.' : 'The Oracle used the style meter only.'}
       Turnitin and GPTZero use their own trained models, so their numbers will differ.</div>`;
   ui.report.hidden = false;
 }
@@ -433,8 +433,8 @@ function highlightHtml() {
 
 function setHighlight(on) {
   if (on) {
-    if (!lastCheck) return deps.toast('Run 🤖 Check first');
-    if (ui.text.value !== lastCheck.doc) return deps.toast('The text changed since the check. Run 🤖 Check again.');
+    if (!lastCheck) return deps.toast('Ask the 🔮 Oracle first');
+    if (ui.text.value !== lastCheck.doc) return deps.toast('The text changed since the Oracle read it. Ask the 🔮 Oracle again.');
     setPreview(false);
     ui.hl.innerHTML = highlightHtml();
   }
