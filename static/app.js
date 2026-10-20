@@ -103,7 +103,7 @@ let lastVoiceFail = 0;
 speaker.onFail = (why) => {  // nothing could play: say so instead of staying silent
   if (Date.now() - lastVoiceFail < 15000) return;
   lastVoiceFail = Date.now();
-  toast(`I couldn't play my voice (${why}). Check your speakers and volume, or run Settings → Health check.`, 'error', { ms: 8000 });
+  toast(`I couldn't play my voice (${why}). Check your speakers and volume, or run Settings → Privacy & system → Health check.`, 'error', { ms: 8000 });
 };
 
 /** The language she should speak: the one you chose, or (on auto) the one you last spoke. */
@@ -210,7 +210,7 @@ function engineBanner(eng) {
     return `<b>Athena's engine couldn't start:</b> ${escapeHtml(eng.error || 'unknown problem')}
       <button type="button" class="ghost" id="engineRetry">Try again</button>
       <span class="muted small">${eng.fallback === 'ollama' ? 'Meanwhile she’s answering with your Ollama models, so you can keep chatting.'
-        : 'Or switch to Ollama in Settings → Models → Engine.'}</span>`;
+        : 'Or switch to Ollama in Settings → Brain & models → Engine.'}</span>`;
   }
   return '<b>Loading Athena’s brain…</b> this takes a few seconds.';
 }
@@ -251,7 +251,7 @@ function showUnreachable() {
   banner.innerHTML = `<b>Can't reach Athena on your PC.</b> Athena runs on your PC, and this device can't see it right now
     (for example, your phone left your home Wi-Fi). Make sure the PC is on with Athena running. To use her from school or on
     mobile data, install the free <b>Tailscale</b> app on the PC and this phone (same account), then open the
-    “From anywhere” address shown in Settings → Desktop app on the PC. This reconnects by itself.`;
+    “From anywhere” address shown in Settings → Privacy & system → Desktop app on the PC. This reconnects by itself.`;
   banner.hidden = false;
   $('#statusText').textContent = 'Not connected to your PC';
   $('#status').classList.add('bad'); $('#status').classList.remove('ok');
@@ -374,8 +374,8 @@ function openModelMenu() {
       <button class="opt" data-model="${escapeHtml(m.name)}">
         <div><div>${escapeHtml(shownModel(m.name))}</div><div class="meta">${escapeHtml([m.parameters, m.family, fmtSize(m.size)].filter(Boolean).join(' · '))}</div></div>
         ${m.name === cur && !autoOn() ? `<span class="check">${ICONS.check}</span>` : `<span class="cmp-btn" data-compare="${escapeHtml(m.name)}" title="Compare side by side with ${escapeHtml(shownModel(cur))}">⚖</span>`}
-      </button>`).join('') + '<div class="hint">⚖ answers your next messages with two models side by side · download more in Settings → Models</div>'
-    : '<div class="hint">No models yet. Open Settings → Models to download one.</div>';
+      </button>`).join('') + '<div class="hint">⚖ answers your next messages with two models side by side · download more in Settings → Brain & models</div>'
+    : '<div class="hint">No models yet. Open Settings → Brain & models to download one.</div>';
   menu.hidden = false;
 }
 
@@ -711,7 +711,7 @@ function renderWelcome() {
       <ol><li>Install it from <code>ollama.com/download</code> (one time).</li><li>Open the Ollama app — it runs in your system tray.</li><li>This page connects automatically.</li></ol></div>`;
   } else if (!state.models.length) {
     body = `<div class="setup-card"><h3>Download your first model</h3>
-      <p>Ollama is running but no AI models are installed yet. Open <b>Settings → Models</b> and download one — try <code>qwen3:8b</code> for chat and <code>qwen2.5-coder:7b</code> for code on an 8 GB graphics card.</p>
+      <p>Ollama is running but no AI models are installed yet. Open <b>Settings → Brain & models</b> and download one — try <code>qwen3:8b</code> for chat and <code>qwen2.5-coder:7b</code> for code on an 8 GB graphics card.</p>
       <p><button class="primary" id="goModels">Open model downloads</button></p></div>`;
   } else {
     body = '';
@@ -740,7 +740,7 @@ function micHelp(e) {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
     return location.hostname === 'localhost' || location.hostname === '127.0.0.1'
       ? 'Voice needs the microphone, which browsers only allow on secure pages. Open Athena at http://localhost:8765.'
-      : 'On your phone, voice needs Athena\'s secure address (it starts with https://). Scan the QR code in Settings → Desktop app on your PC.';
+      : 'On your phone, voice needs Athena\'s secure address (it starts with https://). Scan the QR code in Settings → Privacy & system → Desktop app on your PC.';
   }
   if (e?.name === 'NotFoundError' || /not found/i.test(e?.message || '')) return 'No microphone found. Plug one in (or check Windows Settings → Sound → Input), then try again.';
   if (e?.name === 'NotAllowedError' || /denied|allowed/i.test(e?.message || '')) {
@@ -1531,7 +1531,7 @@ async function sendMessage(text, { voice = false, display = null, research = fal
   if (!state.status.ollama) { await refreshStatus(); }
   if (state.pcReachable === false) { toast("Can't reach Athena on your PC from here. See the note at the top.", 'error'); return; }
   let model = voice ? pickDefaultModel('voice') : currentModel();
-  if (!model) { toast('Download a model first (Settings → Models).', 'error'); openSettings('models'); return; }
+  if (!model) { toast('Download a model first (Settings → Brain & models).', 'error'); openSettings('models'); return; }
   let route = null;
   if (autoOn() && !voice && !state.compare && !research) {
     route = routeMessage(text, state.chat);
@@ -1543,7 +1543,7 @@ async function sendMessage(text, { voice = false, display = null, research = fal
   if (!voice && (newImage || recentImage) && !isVision(model)) {
     const vision = pickVisionModel();
     if (vision) { if (newImage && !route) toast(`Using ${vision} to look at the image`); model = vision; if (route) route = 'vision'; }
-    else if (newImage) toast('To understand images, download a vision model like qwen3-vl:8b or gemma3:4b (Settings → Models).', 'error');
+    else if (newImage) toast('To understand images, download a vision model like qwen3-vl:8b or gemma3:4b (Settings → Brain & models).', 'error');
   }
 
   state.pendingKeep?.(0); // sent again without picking a side: keep the left answer
@@ -1905,7 +1905,7 @@ async function loadCustomVoice() {
     el.innerHTML = '✓ Installed. Add a voice below.';
   } else {
     const using = customVoices.find((v) => v.id === st.active);
-    el.innerHTML = (state.settings.tts_engine === 'custom' && using ? `✓ Speaking as <b>${escapeHtml(using.name)}</b>.` : '✓ Ready. Choose “Custom voice” above, or pick a voice per personality in Settings → General.') +
+    el.innerHTML = (state.settings.tts_engine === 'custom' && using ? `✓ Speaking as <b>${escapeHtml(using.name)}</b>.` : '✓ Ready. Choose “Custom voice” above, or pick a voice per personality in Settings → Personality.') +
       (st.running && st.device === 'cpu' ? ' Each sentence takes a few seconds on the processor.' : '');
   }
   if (st.error) el.innerHTML += `<br><span class="error-text">${escapeHtml(st.error)}</span>`;
@@ -2015,7 +2015,7 @@ $('#micTest').onclick = async () => {
     note.textContent = 'Got it, working out what you said…';
     let text;
     try { text = await transcribe(blob); } catch (err) {
-      note.textContent = `✓ The mic works. Speech recognition had a problem, though: ${err.message}. Check Settings → Health check.`;
+      note.textContent = `✓ The mic works. Speech recognition had a problem, though: ${err.message}. Check Settings → Privacy & system → Health check.`;
       return;
     }
     note.textContent = text ? `✓ I heard: “${text}”` : 'The mic works, but I couldn\'t make out any words. Try speaking a bit louder or closer.';
@@ -2037,7 +2037,7 @@ async function loadPhone() {
   $('#setPhone').disabled = !info.pin_set || info.this_is_phone;
   if (info.this_is_phone) { box.innerHTML = '<p class="small">✓ You\'re using Athena from your phone right now.</p>'; return; }
   if (!info.pin_set) {
-    box.innerHTML = '<p class="small">First set a PIN in <a href="#" data-goto-tab="privacy">Privacy &amp; data</a>, so nobody else on your Wi-Fi can open Athena.</p>';
+    box.innerHTML = '<p class="small">First set a PIN in <a href="#" data-goto-tab="privacy">Privacy &amp; system → PIN lock</a>, so nobody else on your Wi-Fi can open Athena.</p>';
     return;
   }
   if (!info.enabled) { box.innerHTML = ''; return; }
@@ -2080,16 +2080,13 @@ const FIRST_PERSON = /\b(i|i'm|im|i've|i'd|my|me|mine|we|our)\b/i;
 const CORRECTION = /^\s*(no[,.! ]|nope|not quite|that'?s (wrong|not)|wrong|incorrect|actually[, ]|i meant|i said|not what i|you misunderstood|try again|stop )/i;
 
 // After a reply, quietly pick up lasting facts about you and learn from corrections ("no, I meant…").
-// To-dos you mention in passing ("I have to finish my essay by Friday") or finish ("I turned it in").
-const TASK_HINT = /\b(i\s*(have|need|got|gotta|must|should)\s*(to|ta)|gotta|need to|have to|don'?t forget|due (on|by|tomorrow|today|next|this)|deadline|i have (a|an|my) (test|exam|quiz|essay|paper|project|meeting|appointment|game|shift|interview|practice)|finished|done with|completed|turned in|submitted|handed in)\b/i;
 async function learnFrom(chat, reply) {
   const i = chat.messages.indexOf(reply);
   const user = chat.messages[i - 1];
   const text = userText(user);
-  const tasks = state.settings.auto_tasks !== false && TASK_HINT.test(text || '');
-  if (state.settings.auto_learn === false && !tasks) return;
+  if (state.settings.auto_learn === false) return;
   const correction = CORRECTION.test(text) && chat.messages[i - 2]?.role === 'assistant';
-  if (!text || (!tasks && !correction && !(state.settings.memory_enabled && text.length >= 12 && FIRST_PERSON.test(text)))) return;
+  if (!text || (!correction && !(state.settings.memory_enabled && text.length >= 12 && FIRST_PERSON.test(text)))) return;
   const prev = correction ? chat.messages[i - 2] : null;
   try {
     const out = await api('/api/learn', json('POST', {
@@ -2098,11 +2095,6 @@ async function learnFrom(chat, reply) {
     }));
     if (out.facts?.length) toast(`🧠 Remembered: ${out.facts.join(' · ')}`, '', { action: { label: 'See all', fn: () => openSettings('about') }, ms: 6000 });
     if (out.lesson) toast(`📝 Got it for next time: ${out.lesson}`, '', { action: { label: 'See all', fn: () => openSettings('about') }, ms: 6000 });
-    if (out.tasks?.added?.length || out.tasks?.done?.length) {
-      const bits = [...(out.tasks.added || []).map((t) => `➕ ${t}`), ...(out.tasks.done || []).map((t) => `✅ ${t}`)];
-      toast(`Tasks: ${bits.join(' · ')}`, '', { action: { label: 'Open tasks', fn: () => { $('#tasksDrawer').hidden = false; loadTasks(); } }, ms: 7000 });
-      loadTasks();
-    }
   } catch { /* learning is a bonus */ }
 }
 
@@ -2330,7 +2322,6 @@ function handleToolEvent(ev) {
     renderWorkspaceChip();
     toast(`📁 Working in ${ev.result.created}`);
   }
-  if (['add_task', 'complete_task', 'delete_task'].includes(ev.name)) loadTasks();
   if (ev.name === 'set_timer' && ev.result?.timer_set) toast(`⏱ Timer started: ${fmtDuration(ev.result.seconds)}${ev.result.label && ev.result.label !== 'Timer' ? ` — ${ev.result.label}` : ''}`);
   if (ev.name === 'start_focus' && ev.result?.focus_started) startFocus(ev.result.minutes, ev.result.task, ev.result.break_minutes);
   if (ev.name === 'set_reminder' && ev.result?.reminder_set) toast(`🔔 Reminder set for ${ev.result.reminder_set.when}`);
@@ -2386,50 +2377,6 @@ function chime() {
     setTimeout(() => ctx.close(), 1500);
   } catch { /* no audio */ }
 }
-
-// ------------------------------------------------------------------ tasks
-async function loadTasks() {
-  state.tasks = await api('/api/tasks').catch(() => []);
-  renderTasks();
-}
-
-function renderTasks() {
-  const open = state.tasks.filter((t) => !t.done);
-  const done = state.tasks.filter((t) => t.done).sort((a, b) => (b.completed || 0) - (a.completed || 0));
-  const row = (t) => `<li class="task${t.done ? ' done' : ''}" data-id="${t.id}">
-      <input type="checkbox" ${t.done ? 'checked' : ''} title="Mark done">
-      <div class="t"><div class="title">${escapeHtml(t.title)}</div>
-        <div class="meta">${[t.priority === 'high' ? '<span class="prio-high">High priority</span>' : '', t.due ? `Due ${escapeHtml(t.due)}` : '', t.notes ? escapeHtml(t.notes) : ''].filter(Boolean).join(' · ')}</div></div>
-      <button data-del title="Delete">${ICONS.trash}</button></li>`;
-  $('#taskList').innerHTML = open.length ? open.map(row).join('') : '<li class="muted small" style="padding:8px">Nothing to do. Nice!</li>';
-  $('#doneList').innerHTML = done.map(row).join('');
-  $('#doneSummary').textContent = `Completed (${done.length})`;
-  const badge = $('#taskBadge');
-  badge.textContent = open.length;
-  badge.hidden = !open.length;
-}
-
-$('#openTasks').onclick = () => { $('#tasksDrawer').hidden = !$('#tasksDrawer').hidden; if (!$('#tasksDrawer').hidden) { loadTasks(); $('#taskTitle').focus(); } };
-$('#closeTasks').onclick = () => ($('#tasksDrawer').hidden = true);
-$('#taskForm').onsubmit = async (e) => {
-  e.preventDefault();
-  const title = $('#taskTitle').value.trim();
-  if (!title) return;
-  await api('/api/tasks', json('POST', { title }));
-  $('#taskTitle').value = '';
-  loadTasks();
-};
-$('#tasksDrawer').addEventListener('click', async (e) => {
-  const li = e.target.closest('.task');
-  if (!li) return;
-  if (e.target.matches('input[type=checkbox]')) {
-    await api(`/api/tasks/${li.dataset.id}`, json('PATCH', { done: e.target.checked }));
-    loadTasks();
-  } else if (e.target.closest('[data-del]')) {
-    await api(`/api/tasks/${li.dataset.id}`, { method: 'DELETE' });
-    loadTasks();
-  }
-});
 
 // ------------------------------------------------------------ dictation
 let dictating = null;
@@ -2549,7 +2496,7 @@ async function startVoice(firstCommand = '') {
   if (state.voice.active) return;
   if (!state.status.ollama) { toast('Ollama is not running.', 'error'); return; }
   const model = pickDefaultModel('voice');
-  if (!model) { toast('Download a model first (Settings → Models).', 'error'); return; }
+  if (!model) { toast('Download a model first (Settings → Brain & models).', 'error'); return; }
   warmModel(model, { quiet: true }); // start loading it while the microphone starts
   state.voice.active = true;
   state.voice.chimeNext = true;
@@ -2724,7 +2671,7 @@ async function voiceDoze() {
 // ------------------------------------------------------------ settings
 const dlg = $('#settings');
 
-function openSettings(tab = 'general') {
+function openSettings(tab = 'answers') {
   const s = state.settings;
   $('#setName').value = s.user_name || '';
   $('#setInstructions').value = s.custom_instructions || '';
@@ -2762,7 +2709,6 @@ function openSettings(tab = 'general') {
   $('#setOffline').checked = !!s.offline_mode;
   $('#setEmotions').checked = s.emotion_tracking !== false;
   $('#setAdaptiveVoice').checked = s.adaptive_voice !== false;
-  $('#setAutoTasks').checked = s.auto_tasks !== false;
   $('#setImagesEnabled').checked = s.images_enabled !== false;
   $('#setGithubPrivate').checked = s.github_private !== false;
   $('#setAutoRecover').checked = s.auto_recover !== false;
@@ -2849,16 +2795,26 @@ async function loadStats() {
     : '<li class="muted small">No replies yet.</li>';
 }
 
+// Old tab names (from links, toasts and Athena's own messages) open the tab that holds that part now, scrolled to it.
+const TAB_MOVED = {
+  general: ['answers'], knowledge: ['abilities', '#secDocs'], integrations: ['abilities', '#secConnections'],
+  desktop: ['system', '#secDesktop'], privacy: ['system', '#secPrivacy'], stats: ['system', '#secStats'],
+  health: ['system', '#secHealth'], updates: ['system', '#secUpdates'],
+};
 function switchTab(tab) {
-  if (tab === 'stats') loadStats();
+  let jump = null;
+  if (TAB_MOVED[tab]) [tab, jump] = TAB_MOVED[tab];
+  if (!$(`[data-panel="${tab}"]`, dlg)) tab = 'answers';
   if (tab === 'jarvis') loadJarvis();
   if (tab === 'about') { loadMemories(); loadGrowth(); }
-  if (tab === 'privacy') loadBackups();
-  if (tab === 'integrations') { findImageGenerator(); loadGithub(); }
-  if (tab === 'desktop') loadPhone();
+  if (tab === 'abilities') { findImageGenerator(); loadGithub(); }
+  if (tab === 'system') { loadBackups(); loadPhone(); loadStats(); }
   if (tab === 'voice') { loadMics(); loadCustomVoice(); }
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('[data-panel]', dlg).forEach((p) => (p.hidden = p.dataset.panel !== tab));
+  const panel = $(`[data-panel="${tab}"]`, dlg);
+  const target = jump && $(jump, dlg);
+  requestAnimationFrame(() => { if (target) target.scrollIntoView({ block: 'start' }); else panel.scrollTop = 0; });
 }
 $('.tabs', dlg).onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); };
 
@@ -3074,7 +3030,6 @@ async function loadMoods() {
 $('#moodClear').onclick = async () => { if (!confirm('Clear your mood history?')) return; await api('/api/moods', { method: 'DELETE' }); loadMoods(); toast('Mood history cleared'); };
 bind('#setEmotions', 'emotion_tracking', (el) => el.checked);
 bind('#setAdaptiveVoice', 'adaptive_voice', (el) => el.checked);
-bind('#setAutoTasks', 'auto_tasks', (el) => el.checked);
 
 async function loadMemories() {
   loadMoods();
@@ -3372,7 +3327,7 @@ async function openWorkspace(path, { quiet = false } = {}) {
 }
 $('#wsSelf').onclick = () => openWorkspace(state.status.athena_root);
 
-/** The model for changing her own code: your choice in Settings → Models, else a ~14B model that fits entirely on
+/** The model for changing her own code: your choice in Settings → Brain & models, else a ~14B model that fits entirely on
  *  the graphics card (fast, and it can't run out of memory the way two 30B models can). */
 function selfModel({ automatic = false } = {}) {
   const names = modelNames();
@@ -3950,7 +3905,6 @@ async function loadSaved() {
   $('#savedList')._items = items;
 }
 function openSaved() {
-  $('#tasksDrawer').hidden = true;
   $('#savedDrawer').hidden = false;
   loadSaved();
 }
@@ -3973,7 +3927,6 @@ $('#savedList').onclick = async (e) => {
     loadSaved();
   }
 };
-$('#openTasks').addEventListener('click', () => { $('#savedDrawer').hidden = true; });
 
 // ------------------------------------------------------------ focus timer (Pomodoro)
 const focus = { orb: null, timer: null };
@@ -4242,13 +4195,12 @@ async function loadDecks() {
     </div>`).join('') : '<p class="muted small" style="padding:8px">No decks yet. Ask Athena for flashcards in the Study tab, then press 💾 under them.</p>';
 }
 function openDecks() {
-  $('#tasksDrawer').hidden = true; $('#savedDrawer').hidden = true;
+  $('#savedDrawer').hidden = true;
   $('#decksDrawer').hidden = false;
   loadDecks();
 }
 $('#openDecks').onclick = () => ($('#decksDrawer').hidden ? openDecks() : ($('#decksDrawer').hidden = true));
 $('#closeDecks').onclick = () => ($('#decksDrawer').hidden = true);
-$('#openTasks').addEventListener('click', () => { $('#decksDrawer').hidden = true; });
 $('#openSaved').addEventListener('click', () => { $('#decksDrawer').hidden = true; });
 $('#reviewAll').onclick = () => startReview(null);
 $('#deckList').onclick = async (e) => {
@@ -4363,7 +4315,7 @@ async function renderWizard() {
     body.innerHTML = `<h2>Athena's brain</h2>
       <p class="lead">Athena runs one brain of her own: it chats, codes, uses her tools${/pictures/.test(eng.brain_label) ? ' and sees pictures' : ''}. It downloads by itself, once.</p>
       ${wzStatus(eng.state === 'ready' ? 'ok' : 'warn', escapeHtml(eng.brain_label), eng.state === 'ready' ? 'Downloaded and ready.' : engineLine(eng))}
-      <p class="muted small">You can pick a different brain later in Settings → Models → Engine.</p>`;
+      <p class="muted small">You can pick a different brain later in Settings → Brain & models → Engine.</p>`;
   } else if (name === 'models') {
     body.innerHTML = '<h2>Your AI models</h2><p class="lead">Checking your PC…</p>';
     wiz.hw = wiz.hw || await api('/api/system').catch(() => null);
@@ -4696,7 +4648,6 @@ async function init() {
   state.chat.startup = true;
   loadChats();
   loadProjects();
-  loadTasks();
   voicesReady();
   connectEvents();
   setupIdleLock();

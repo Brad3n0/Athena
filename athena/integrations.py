@@ -29,7 +29,7 @@ async def _generate_image_a1111(client: httpx.AsyncClient, prompt: str, negative
                                 height: int = 1024, steps: int = 25) -> dict[str, Any]:
     api = (store.get_settings().get("image_api") or "").rstrip("/")
     if not api:
-        return {"error": "Image generation isn't set up. Add your Stable Diffusion WebUI / Forge address in Settings → Integrations."}
+        return {"error": "Image generation isn't set up. Add your Stable Diffusion WebUI / Forge address in Settings → Abilities."}
     body = {
         "prompt": prompt, "negative_prompt": negative or "blurry, low quality, deformed, watermark, text",
         "width": int(width), "height": int(height), "steps": int(steps), "cfg_scale": 6, "sampler_name": "Euler a",
@@ -69,7 +69,7 @@ def _ha() -> tuple[str, dict[str, str]]:
     s = store.get_settings()
     url, token = (s.get("ha_url") or "").rstrip("/"), s.get("ha_token") or ""
     if not url or not token:
-        raise ValueError("Home Assistant isn't set up. Add its address and a long-lived access token in Settings → Integrations.")
+        raise ValueError("Home Assistant isn't set up. Add its address and a long-lived access token in Settings → Abilities.")
     return url, {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
 

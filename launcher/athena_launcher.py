@@ -1,6 +1,6 @@
 """Athena.exe: double-click to open Athena. No command windows.
 
-Built from this file by Athena herself (Settings → Desktop app, or make-athena-exe.bat) with PyInstaller. It lives in
+Built from this file by Athena herself (Settings → Privacy & system → Desktop app, or make-athena-exe.bat) with PyInstaller. It lives in
 the Athena folder and just starts Athena's desktop app from there; the first time, it runs the normal setup.
 """
 import subprocess

@@ -41,7 +41,7 @@ def main() -> None:
     _no_console_safety()
     parser = argparse.ArgumentParser(description="Athena AI — offline assistant powered by Ollama")
     parser.add_argument("--host", default=None, help="Use 0.0.0.0 to allow other devices on your network "
-                        "(or turn on Settings → Desktop app → Use on your phone)")
+                        "(or turn on Settings → Privacy & system → Desktop app → Use on your phone)")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--preload-whisper", metavar="MODEL", help="Download a Whisper model for offline use and exit")

@@ -532,7 +532,7 @@ async def _send_message(a, ctx):
                 await run_in_threadpool(automation.press_keys, "esc")
                 saw = f" The chat that opened was “{seen}”." if seen else ""
                 return {"error": f"I couldn't find a chat with {p['to']}, so I didn't send anything.{saw} If that's them, "
-                                 f"add “{seen or p['to']}” as their nickname in Settings → Jarvis → Contacts; otherwise try their exact "
+                                 f"add “{seen or p['to']}” as their nickname in Settings → Routines & alerts → Contacts; otherwise try their exact "
                                  f"{'Discord username' if p['app'] == 'discord' else 'WhatsApp name'}."}
             await run_in_threadpool(messaging.type_and_send, p["text"])
         else:
@@ -582,7 +582,7 @@ async def _send_on_screen(p, ctx):
     if ok is False:
         saw = f" (it was “{seen}”)" if seen else ""
         return {"error": f"The chat that opened in {app} doesn't look like {who}'s{saw}, so I didn't send anything. "
-                         f"Try their exact username, or save it as a nickname in Settings → Jarvis → Contacts."}
+                         f"Try their exact username, or save it as a nickname in Settings → Routines & alerts → Contacts."}
     spot = await _click_spot(ctx, f"the text box for typing a message in the open {app} conversation")
     if spot.get("error"):
         return {"error": f"I opened the chat with {who} but couldn't find the message box, so I didn't send anything."}

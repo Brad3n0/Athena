@@ -108,7 +108,7 @@ def apply(enabled: bool, ollama_url: str) -> dict[str, Any]:
 def status(enabled: bool) -> tuple[str, str]:
     """For the health check."""
     if not enabled:
-        return "skip", "Off (Settings → Models)"
+        return "skip", "Off (Settings → Brain & models)"
     if not sys.platform.startswith("win"):
         return "skip", last["note"]
     try:
