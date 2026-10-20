@@ -107,7 +107,7 @@ Scores, schedules, standings, injuries and past seasons: `/scores NBA tonight`. 
 ## More
 
 - **Writing canvas** for essays and emails, with Improve, Shorter, Tone and more.
-- **✍️ Humanize** in the canvas rewrites stiff, AI-sounding text so it reads like a person wrote it (Light touch, Natural, Strong, or *In my voice* after you save a sample of your own writing). **🤖 Check** gives a rough robot-meter score and points out stock AI phrases. All offline; the meter is a home-made guide, not a real AI detector.
+- **✍️ Humanize** in the canvas rewrites stiff, AI-sounding text so it reads like a person wrote it (Light touch, Natural, Strong, or *In my voice* after you save a sample of your own writing). **🤖 Check** is an AI detector that works like GPTZero: Athena's own brain reads the text word by word and measures how predictable it is (perplexity) and how much that swings between sentences (burstiness), then shows an AI % and the most AI-like sentences. It needs the built-in engine; with Ollama it falls back to a quicker style check. All offline. Turnitin and GPTZero use their own trained models, so their numbers will differ.
 - **Projects:** chat folders with their own instructions and files.
 - **Deep research** with sources, and **Think harder** for tough problems.
 - **Your documents:** ask about your own PDFs and notes (Settings → Knowledge).

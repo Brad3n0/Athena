@@ -2141,9 +2141,9 @@ async def rewrite(request: Request):
 
 @app.post("/api/humanize/check")
 async def humanize_check(request: Request):
-    """The canvas robot meter: a rough, offline 'how AI does this sound' score with the reasons."""
+    """The canvas AI check: perplexity + burstiness from her own brain (like GPTZero), plus the style meter."""
     body = await request.json()
-    return humanize.analyze(str(body.get("text", ""))[:60_000])
+    return await humanize.full_check(client, str(body.get("text", ""))[:60_000], deep=body.get("deep", True) is not False)
 
 
 CANVAS_PROMPT = (
