@@ -12,7 +12,7 @@ export const QUICK = [
   ['Fix grammar', 'Fix spelling, grammar and punctuation only. Change nothing else.'],
 ];
 const TONES = ['Formal', 'Casual', 'Friendly', 'Confident', 'Persuasive', 'Funny'];
-// Humanize: rewrite so it sounds like a person wrote it (the strengths live in athena/humanize.py).
+// Mortalize (the humanizer): rewrite so it sounds like a person wrote it (the strengths live in athena/humanize.py).
 const HUMANIZE = [['light', 'Light touch'], ['medium', 'Natural'], ['strong', 'Strong rewrite'], ['voice', 'In my voice']];
 
 let deps; // { state, model(), save(), toast() }
@@ -31,7 +31,7 @@ export function initCanvas(d) {
   });
   ui.bar.insertAdjacentHTML('beforeend', QUICK.map(([label], i) => `<button type="button" data-cq="${i}">${label}</button>`).join('') +
     `<select id="canvasTone" title="Change the tone"><option value="">Tone…</option>${TONES.map((t) => `<option>${t}</option>`).join('')}</select>` +
-    '<select id="canvasHuman" title="Make it sound like a person wrote it"></select>' +
+    '<select id="canvasHuman" title="Mortalize: make it sound like a person wrote it"></select>' +
     '<button type="button" id="canvasCheck" title="AI check: how predictable it is to Athena’s brain (like GPTZero)">🤖 Check</button>');
   fillHumanize();
   $('#canvasHuman').onchange = (e) => { const v = e.target.value; e.target.value = ''; if (v) humanizeAction(v); };
@@ -313,7 +313,7 @@ const samples = () => String(deps.state.settings?.writing_samples || '');
 
 function fillHumanize() {
   const has = !!samples().trim();
-  $('#canvasHuman').innerHTML = '<option value="">✍️ Humanize…</option>' +
+  $('#canvasHuman').innerHTML = '<option value="">✍️ Mortalize…</option>' +
     HUMANIZE.map(([v, label]) => `<option value="${v}"${v === 'voice' && !has ? ' disabled' : ''}>${label}${v === 'voice' && !has ? ' (save a sample first)' : ''}</option>`).join('') +
     '<option disabled>──────────</option><option value="save-voice">Save selection as my voice</option>' +
     (has ? '<option value="forget-voice">Forget my voice sample</option>' : '');
@@ -342,7 +342,7 @@ async function humanizeAction(v) {
     const before = await score(target);
     showReport(before);
     const label = HUMANIZE.find(([k]) => k === v)?.[1] || 'Natural';
-    const result = await edit(`Humanize (${label})`, { mode: 'humanize', strength: v });
+    const result = await edit(`Mortalize (${label})`, { mode: 'humanize', strength: v });
     if (result) { const base = ui.text.selectionStart; remember(await score(result), base, before); }
   } catch (e) { deps.toast(e.message, 'error'); }
 }

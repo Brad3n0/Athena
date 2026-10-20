@@ -2089,7 +2089,7 @@ async def rewrite(request: Request):
         strength = str(body.get("strength") or "medium")
         samples = str(store.get_settings().get("writing_samples") or "")
         if strength == "voice" and not samples.strip():
-            raise HTTPException(400, "Save a sample of your own writing first (Humanize → Save selection as my voice).")
+            raise HTTPException(400, "Save a sample of your own writing first (Mortalize → Save selection as my voice).")
         system, options = humanize.SYSTEM, humanize.options(strength)
         instruction = humanize.instruction(strength, samples, text)
     if not model or not instruction:
