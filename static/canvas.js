@@ -32,7 +32,7 @@ export function initCanvas(d) {
   ui.bar.insertAdjacentHTML('beforeend', QUICK.map(([label], i) => `<button type="button" data-cq="${i}">${label}</button>`).join('') +
     `<select id="canvasTone" title="Change the tone"><option value="">Tone…</option>${TONES.map((t) => `<option>${t}</option>`).join('')}</select>` +
     '<select id="canvasHuman" title="Make it sound like a person wrote it"></select>' +
-    '<button type="button" id="canvasCheck" title="Rough check of how AI-written it sounds">🤖 Check</button>');
+    '<button type="button" id="canvasCheck" title="AI check: how predictable it is to Athena's brain (like GPTZero)">🤖 Check</button>');
   fillHumanize();
   $('#canvasHuman').onchange = (e) => { const v = e.target.value; e.target.value = ''; if (v) humanizeAction(v); };
   $('#canvasCheck').onclick = () => check();
@@ -330,6 +330,7 @@ async function humanizeAction(v) {
     const target = sel ? sel.text : ui.text.value;
     if (!target.trim()) return deps.toast('Paste or write something first');
     const before = await score(target);
+    showReport(before);
     const label = HUMANIZE.find(([k]) => k === v)?.[1] || 'Natural';
     const result = await edit(`Humanize (${label})`, { mode: 'humanize', strength: v });
     if (result) showReport(await score(result), before);
@@ -337,34 +338,52 @@ async function humanizeAction(v) {
 }
 
 async function score(text) {
-  const res = await fetch('/api/humanize/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-  if (!res.ok) throw new Error(`Check failed (error ${res.status})`);
-  return res.json();
+  setChecking(true);
+  try {
+    const res = await fetch('/api/humanize/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    if (!res.ok) throw new Error(`Check failed (error ${res.status})`);
+    return await res.json();
+  } finally { setChecking(false); }
+}
+
+function setChecking(on) {
+  const b = $('#canvasCheck');
+  b.disabled = on;
+  b.textContent = on ? '⏳ Checking…' : '🤖 Check';
+  if (on) { ui.report.innerHTML = '<div class="muted small">Athena\'s brain is reading it word by word… (longer text takes up to a minute)</div>'; ui.report.hidden = false; }
 }
 
 async function check() {
   const sel = selection();
   const text = sel ? sel.text : ui.text.value;
   if (!text.trim()) return deps.toast('Nothing to check yet');
-  try { showReport(await score(text)); } catch (e) { deps.toast(e.message, 'error'); }
+  try { showReport(await score(text)); } catch (e) { ui.report.hidden = true; deps.toast(e.message, 'error'); }
 }
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function showReport(r, before) {
   if (r.score == null) { ui.report.hidden = true; return deps.toast(r.label); }
-  const tone = r.score < 30 ? 'good' : r.score < 55 ? 'mid' : 'bad';
-  const change = before?.score != null ? `<span class="muted">${before.score} → </span>` : '';
+  const d = r.deep;
+  const tone = r.score < 35 ? 'good' : r.score < 70 ? 'mid' : 'bad';
+  const change = before?.score != null ? `<span class="muted">${before.score}% → </span>` : '';
+  const stats = d
+    ? `Perplexity ${d.perplexity} <span class="muted">(lower = more predictable = more AI-like)</span> · Burstiness ${d.burstiness ?? '–'} · ` +
+      `${d.top10}% of words were in her top 10 guesses${d.truncated ? ` · checked the first ${d.checked_chars.toLocaleString()} characters` : ''}`
+    : `Style check only · avg sentence ${r.avg_sentence} words · rhythm ${r.variation}`;
   ui.report.innerHTML = `
     <div class="rp-top">
-      <b class="rp-score ${tone}">${change}${r.score}</b>
+      <b class="rp-score ${tone}">${change}${r.score}%</b>
       <span>${esc(r.label)}</span>
       <span class="rp-meter"><i class="${tone}" style="width:${r.score}%"></i></span>
       <button type="button" class="icon-btn" data-rp="close" title="Close">×</button>
     </div>
-    <div class="muted small">Avg sentence ${r.avg_sentence} words · rhythm ${r.variation} · ${r.contractions} contractions per sentence</div>
+    <div class="small">${stats}</div>
+    ${d?.sentences?.length ? `<div class="small">Most AI-like sentences:</div><ul class="rp-sents">${d.sentences.map((x) => `<li><b>${x.ai}%</b> ${esc(x.text)}</li>`).join('')}</ul>` : ''}
     ${r.tells.length ? `<div class="rp-tells">${r.tells.map((t) => `<span>${esc(t.phrase)}${t.count > 1 ? ` ×${t.count}` : ''}</span>`).join('')}</div>` : ''}
     ${r.tips.length ? `<div class="small">${r.tips.map(esc).join(' ')}</div>` : ''}
-    <div class="muted small">A rough home-made meter (0 = human, 100 = robotic), not a real AI detector.</div>`;
+    ${r.note ? `<div class="small rp-note">${esc(r.note)}</div>` : ''}
+    <div class="muted small">${d ? 'Checked like GPTZero (perplexity + burstiness) using Athena\'s own brain, plus the style meter.' : 'Style meter only.'}
+      Turnitin and GPTZero use their own trained models, so their numbers will differ.</div>`;
   ui.report.hidden = false;
 }
