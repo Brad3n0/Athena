@@ -18,7 +18,7 @@ CODES = {
 async def get_weather(client: httpx.AsyncClient, location: str, units: str = "imperial") -> dict[str, Any]:
     location = (location or "").strip()
     if not location:
-        return {"error": "Which city? (You can set your home city in Settings → Integrations)"}
+        return {"error": "Which city? (You can set your home city in Settings → Abilities)"}
     try:
         geo = await client.get("https://geocoding-api.open-meteo.com/v1/search",
                                params={"name": location.split(",")[0], "count": 5, "format": "json"}, timeout=10)

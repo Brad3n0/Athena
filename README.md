@@ -29,13 +29,13 @@ After the first run there's an **Athena.exe** in her folder and on your Desktop.
 
 Linux/macOS: use `./start.sh` and `./install-voice.sh`.
 
-**Updating:** click **Update now** when Athena says an update is available (or **Settings → General → Updates**, or `update.bat`). Your chats, memories and settings are kept.
+**Updating:** click **Update now** when Athena says an update is available (or **Settings → Privacy & system → Updates**, or `update.bat`). Your chats, memories and settings are kept.
 
 ---
 
 ## Athena's Brain
 
-Athena runs her AI herself with a built-in engine that works on AMD and NVIDIA cards. Her brain, **ATH-X**, handles chat, code, tools and pictures in one. On PCs with a 12 GB+ graphics card and 32 GB of memory she runs the full ATH-X (built on Qwen3-VL 30B); smaller PCs get **ATH-X Lite** (built on Qwen3-VL 8B) and can upgrade later. Change it in **Settings → Models → Engine**, or switch to Ollama if you prefer. When a smarter brain comes out, a one-click **brain upgrade** keeps all her memories and settings.
+Athena runs her AI herself with a built-in engine that works on AMD and NVIDIA cards. Her brain, **ATH-X**, handles chat, code, tools and pictures in one. On PCs with a 12 GB+ graphics card and 32 GB of memory she runs the full ATH-X (built on Qwen3-VL 30B); smaller PCs get **ATH-X Lite** (built on Qwen3-VL 8B) and can upgrade later. Change it in **Settings → Brain & models → Engine**, or switch to Ollama if you prefer. When a smarter brain comes out, a one-click **brain upgrade** keeps all her memories and settings.
 
 **🧠 See her mind:** click **Athena's Brain** in the sidebar for a holographic 3D map of what she knows: memories, lessons, library, reflections and skills, linked where related. It lights up live while she thinks. Drag to turn, scroll to zoom, click a star to read or delete it, and slide the timeline to watch her grow. It pauses while you're in a game.
 
@@ -74,7 +74,7 @@ Typed or spoken:
 - **Find things:** *"find the folder Crimson Desert is in"* (checks Steam, Epic and Xbox too)
 - **Routines:** one phrase, many steps: *"goodnight"* closes apps, lowers the volume and locks the PC.
 - **Heads-ups:** she speaks up when a download finishes, memory is full, or a reminder is close.
-- **Tasks & reminders:** *"remind me at 12pm to call my professor"*, *"set a 10 minute timer"*. She also adds tasks you mention and ticks them off.
+- **Reminders & timers:** *"remind me at 12pm to call my professor"*, *"set a 10 minute timer"*.
 
 ## Pictures
 
@@ -94,8 +94,8 @@ Scores, schedules, standings, injuries and past seasons: `/scores NBA tonight`. 
 
 ## Use her on your phone
 
-1. Set a PIN in **Settings → Privacy & data**.
-2. Tick **Let my phone use Athena** in **Settings → Desktop app**, then restart Athena.
+1. Set a PIN in **Settings → Privacy & system**.
+2. Tick **Let my phone use Athena** in **Settings → Privacy & system → Desktop app**, then restart Athena.
 3. Scan the QR code. Tap **Advanced → Proceed** on the warning (it's your own PC's certificate). Then **Add to Home Screen**.
 
 **Away from home:** install **Tailscale** (free app) on the PC and phone (same account) and use the **🌍 From anywhere** address. Voice works on the phone too.
@@ -110,7 +110,7 @@ Scores, schedules, standings, injuries and past seasons: `/scores NBA tonight`. 
 - **✍️ Mortalize** (the humanizer) in the canvas rewrites stiff, AI-sounding text so it reads like a person wrote it (Light touch, Natural, Strong, or *In my voice* after you save a sample of your own writing). **🔮 Oracle** is an AI detector that works like GPTZero: Athena's own brain reads the text word by word and measures how surprising the words are (**Surprise**, what GPTZero calls perplexity) and how much that changes between sentences (**Variety**, GPTZero's burstiness), then shows an AI %, the most AI-like sentences, and a **🖍️ Highlight** view that marks each sentence and paragraph by how likely it is to be AI, like Turnitin's AI report. It needs the built-in engine; with Ollama it falls back to a quicker style check. All offline. Turnitin and GPTZero use their own trained models, so their numbers will differ.
 - **Projects:** chat folders with their own instructions and files.
 - **Deep research** with sources, and **Think harder** for tough problems.
-- **Your documents:** ask about your own PDFs and notes (Settings → Knowledge).
+- **Your documents:** ask about your own PDFs and notes (Settings → Abilities → Your documents).
 - **📄 PDF viewer** next to the chat: open a PDF (or click one you attached) to read it with zoom, search and print, and **Open in canvas** to edit it, Mortalize it or ask the Oracle.
 - **Personalities:** Assistant, Companion, Study Buddy, or make your own.
 - **Offline mode**, **PIN lock**, **daily backups**, and **Check everything** to test every part of her.

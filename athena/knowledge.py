@@ -76,7 +76,7 @@ def _embed(client: httpx.Client, ollama: str, model: str, texts: list[str]):
 
     resp = client.post(f"{ollama}/api/embed", json={"model": model, "input": texts}, timeout=300)
     if resp.status_code == 404 or "not found" in resp.text.lower():
-        raise KnowledgeError(f"The embedding model '{model}' isn't installed. Download it in Settings → Knowledge.")
+        raise KnowledgeError(f"The embedding model '{model}' isn't installed. Download it in Settings → Abilities → Your documents.")
     resp.raise_for_status()
     vecs = np.asarray(resp.json()["embeddings"], dtype="float32")
     norms = np.linalg.norm(vecs, axis=1, keepdims=True)
@@ -172,7 +172,7 @@ def search(ollama: str, query: str, k: int = 6) -> dict[str, Any]:
 
     chunks, vectors = _load()
     if not chunks or vectors is None or not len(vectors):
-        return {"error": "No documents indexed yet. Add folders in Settings → Knowledge and press 'Index now'."}
+        return {"error": "No documents indexed yet. Add folders in Settings → Abilities → Your documents and press 'Index now'."}
     model = chunks[0].get("model") or store.get_settings().get("embed_model")
     with httpx.Client() as client:
         q = _embed(client, ollama, model, [query])[0]

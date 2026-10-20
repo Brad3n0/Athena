@@ -5,7 +5,7 @@
 - Stable Diffusion WebUI Forge / AUTOMATIC1111 (started with --api): ports 7860 and 7861
 - Ollama image models (e.g. x/z-image-turbo), where Ollama supports them
 
-An address typed in Settings → Integrations is tried first.
+An address typed in Settings → Abilities is tried first.
 
 The chat model and the picture model share one graphics card: before drawing, Athena unloads her chat model, and after
 drawing she asks ComfyUI to let go of its model, so neither runs out of graphics memory.
