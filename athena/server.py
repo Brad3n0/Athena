@@ -2358,7 +2358,7 @@ async def pdfview_upload(file: UploadFile = File(...)):
         _pdf_views.pop(next(iter(_pdf_views)))
     from urllib.parse import quote
 
-    return {"id": view_id, "name": name, "url": f"/api/pdfview/{view_id}/{quote(name)}"}
+    return {"id": view_id, "name": name, "url": f"/api/pdfview/{view_id}/{quote(name, safe='')}"}
 
 
 @app.get("/api/pdfview/{view_id}/{name}")
@@ -2368,7 +2368,7 @@ async def pdfview_file(view_id: str, name: str):
         raise HTTPException(404, "That PDF isn't open anymore. Open it again.")
     safe = re.sub(r'[^\w .()-]', "_", item[0])
     return Response(item[1], media_type="application/pdf",
-                    headers={"Content-Disposition": f'inline; filename="{safe}"', "Cache-Control": "no-store"})
+                    headers={"Content-Disposition": f'inline; filename="{safe}"', "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
 def _pptx_text(path: str) -> str:
