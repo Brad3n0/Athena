@@ -44,25 +44,21 @@ export function togglePdfView() {
 
 export async function openPdf(file) {
   if (!isPdf(file)) return deps.toast(`${file?.name || 'That'} isn't a PDF`, 'error');
-  if (current?.blob) URL.revokeObjectURL(current.url);
   pdfFiles.set(file.name, file);
-  // Hand it to Athena's server so the viewer shows its real name; if that fails, show it straight from memory.
-  let url = '';
-  let blob = false;
+  // Athena's server checks it really is a PDF and serves it back as one (never as a web page), under its real name.
+  let url;
   try {
     const form = new FormData();
     form.append('file', file);
     const res = await fetch('/api/pdfview', { method: 'POST', body: form });
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body.detail || `error ${res.status}`);
-    if (typeof body.url !== 'string' || !/^\/api\/pdfview\/[0-9a-f]{32}\/[^?#]*$/.test(body.url)) throw new Error('bad viewer address');
-    url = body.url; // built by Athena's server (the file name safely encoded)
+    if (!res.ok) throw new Error(body.detail || `Couldn't open it (error ${res.status})`);
+    if (typeof body.url !== 'string' || !/^\/api\/pdfview\/[0-9a-f]{32}\/[^?#]*$/.test(body.url)) throw new Error("Couldn't open it");
+    url = body.url;
   } catch (err) {
-    if (/isn't a PDF|too large/.test(err.message)) return deps.toast(err.message, 'error');
-    url = URL.createObjectURL(file);
-    blob = true;
+    return deps.toast(err.message, 'error');
   }
-  current = { file, url, blob };
+  current = { file, url };
   ui.name.textContent = file.name;
   ui.name.title = file.name;
   show(); // first, so the viewer knows the panel's width and can fit the page to it
@@ -74,7 +70,6 @@ export function closePdf() {
   ui.root.hidden = true;
   document.body.classList.remove('pdf-on');
   ui.frame.src = 'about:blank';
-  if (current?.blob) URL.revokeObjectURL(current.url);
   current = null;
   ui.name.textContent = 'PDF viewer';
 }
