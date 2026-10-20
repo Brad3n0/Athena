@@ -811,6 +811,22 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .canvas-report .rp-meter { flex: 1; height: 6px; border-radius: 99px; background: var(--border); overflow: hidden; }
 .canvas-report .rp-meter i { display: block; height: 100%; border-radius: 99px; }
 .canvas-report .icon-btn { font-size: 18px; line-height: 1; }
+.canvas-report { max-height: 40vh; overflow-y: auto; }
+.canvas-report .rp-sents { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--text-2); }
+.canvas-report .rp-sents b { color: #f87171; margin-right: 4px; }
+.canvas-report .rp-hl { font-size: 12px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); background: none; color: var(--text-2); }
+.canvas-report .rp-hl:hover { border-color: var(--accent); color: var(--text); }
+.canvas-hl { flex: 1; overflow-y: auto; padding: 22px 28px; font: 16px/1.7 Georgia, 'Iowan Old Style', 'Palatino Linotype', serif; color: var(--text); cursor: text; }
+.canvas-hl .hl-body { white-space: pre-wrap; word-wrap: break-word; }
+.canvas-hl .hl-legend { font: 12.5px/1.6 system-ui, sans-serif; color: var(--text-2); margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.canvas-hl mark { color: inherit; border-radius: 3px; padding: 1px 0; }
+.canvas-hl mark.hi { background: rgba(34, 211, 238, .38); }
+.canvas-hl mark.mid { background: rgba(34, 211, 238, .14); }
+.canvas-hl .hl-badge { display: inline-block; margin-right: 6px; padding: 0 7px; border-radius: 99px; font: 600 11px/1.7 system-ui, sans-serif; vertical-align: 2px; border: 1px solid var(--border); color: var(--text-2); }
+.canvas-hl .hl-badge.hi { background: rgba(34, 211, 238, .25); color: var(--text); border-color: transparent; }
+.canvas-hl .hl-badge.mid { background: rgba(34, 211, 238, .1); }
+@media (max-width: 860px) { .canvas-hl { padding: 16px; } }
+.canvas-report .rp-note { color: #facc15; }
 .canvas-report .rp-tells { display: flex; flex-wrap: wrap; gap: 4px; }
 .canvas-report .rp-tells span { padding: 1px 8px; border-radius: 99px; border: 1px solid rgba(248, 113, 113, .5); color: var(--text-2); font-size: 12px; }
 .canvas-ask { display: flex; gap: 8px; padding: 4px 14px 14px; }

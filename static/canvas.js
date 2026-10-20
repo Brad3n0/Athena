@@ -12,7 +12,7 @@ export const QUICK = [
   ['Fix grammar', 'Fix spelling, grammar and punctuation only. Change nothing else.'],
 ];
 const TONES = ['Formal', 'Casual', 'Friendly', 'Confident', 'Persuasive', 'Funny'];
-// Humanize: rewrite so it sounds like a person wrote it (the strengths live in athena/humanize.py).
+// Mortalize (the humanizer): rewrite so it sounds like a person wrote it (the strengths live in athena/humanize.py).
 const HUMANIZE = [['light', 'Light touch'], ['medium', 'Natural'], ['strong', 'Strong rewrite'], ['voice', 'In my voice']];
 
 let deps; // { state, model(), save(), toast() }
@@ -25,18 +25,22 @@ let saveTimer = 0;
 export function initCanvas(d) {
   deps = d;
   Object.assign(ui, {
-    root: $('#canvas'), title: $('#canvasTitle'), text: $('#canvasText'), preview: $('#canvasPreview'),
+    root: $('#canvas'), title: $('#canvasTitle'), text: $('#canvasText'), preview: $('#canvasPreview'), hl: $('#canvasHighlight'),
     words: $('#canvasWords'), bar: $('#canvasBar'), barLabel: $('#canvasBarLabel'), ask: $('#canvasAsk'), askInput: $('#canvasAskInput'),
     report: $('#canvasReport'),
   });
   ui.bar.insertAdjacentHTML('beforeend', QUICK.map(([label], i) => `<button type="button" data-cq="${i}">${label}</button>`).join('') +
     `<select id="canvasTone" title="Change the tone"><option value="">Tone…</option>${TONES.map((t) => `<option>${t}</option>`).join('')}</select>` +
-    '<select id="canvasHuman" title="Make it sound like a person wrote it"></select>' +
-    '<button type="button" id="canvasCheck" title="Rough check of how AI-written it sounds">🤖 Check</button>');
+    '<select id="canvasHuman" title="Mortalize: make it sound like a person wrote it"></select>' +
+    '<button type="button" id="canvasCheck" title="Oracle: Athena’s AI detector (works like GPTZero)">🔮 Oracle</button>');
   fillHumanize();
   $('#canvasHuman').onchange = (e) => { const v = e.target.value; e.target.value = ''; if (v) humanizeAction(v); };
   $('#canvasCheck').onclick = () => check();
-  ui.report.onclick = (e) => { if (e.target.closest('[data-rp="close"]')) ui.report.hidden = true; };
+  ui.report.onclick = (e) => {
+    if (e.target.closest('[data-rp="close"]')) ui.report.hidden = true;
+    if (e.target.closest('[data-rp="highlight"]')) setHighlight(true);
+  };
+  ui.hl.onclick = () => setHighlight(false);
   ui.bar.onclick = (e) => { const b = e.target.closest('[data-cq]'); if (b) edit(QUICK[b.dataset.cq][1]); };
   $('#canvasTone').onchange = (e) => { if (e.target.value) edit(`Rewrite it in a ${e.target.value.toLowerCase()} tone.`); e.target.value = ''; };
   ui.text.addEventListener('input', () => { changed(); });
@@ -60,6 +64,7 @@ export function initCanvas(d) {
     if (act === 'download') download();
     if (act === 'print') printDoc();
     if (act === 'stop') busy?.abort();
+    if (act === 'highlight') setHighlight(ui.hl.hidden);
   };
 }
 
@@ -94,6 +99,9 @@ export function syncCanvas() {
   undo.length = 0;
   redo.length = 0;
   busy?.abort();
+  lastCheck = null;
+  ui.report.hidden = true;
+  $('#canvasHead [data-cv="highlight"]').hidden = true;
   if (deps.state.chat?.canvas?.open) show(); else { ui.root.hidden = true; document.body.classList.remove('canvas-on'); }
 }
 
@@ -252,6 +260,8 @@ function flash() {
 }
 
 function setPreview(on) {
+  ui.hl.hidden = true;
+  $('#canvasHead [data-cv="highlight"]').classList.remove('on');
   ui.preview.hidden = !on;
   ui.text.hidden = on;
   $('#canvasHead [data-cv="preview"]').classList.toggle('on', on);
@@ -303,7 +313,7 @@ const samples = () => String(deps.state.settings?.writing_samples || '');
 
 function fillHumanize() {
   const has = !!samples().trim();
-  $('#canvasHuman').innerHTML = '<option value="">✍️ Humanize…</option>' +
+  $('#canvasHuman').innerHTML = '<option value="">✍️ Mortalize…</option>' +
     HUMANIZE.map(([v, label]) => `<option value="${v}"${v === 'voice' && !has ? ' disabled' : ''}>${label}${v === 'voice' && !has ? ' (save a sample first)' : ''}</option>`).join('') +
     '<option disabled>──────────</option><option value="save-voice">Save selection as my voice</option>' +
     (has ? '<option value="forget-voice">Forget my voice sample</option>' : '');
@@ -330,41 +340,106 @@ async function humanizeAction(v) {
     const target = sel ? sel.text : ui.text.value;
     if (!target.trim()) return deps.toast('Paste or write something first');
     const before = await score(target);
+    showReport(before);
     const label = HUMANIZE.find(([k]) => k === v)?.[1] || 'Natural';
-    const result = await edit(`Humanize (${label})`, { mode: 'humanize', strength: v });
-    if (result) showReport(await score(result), before);
+    const result = await edit(`Mortalize (${label})`, { mode: 'humanize', strength: v });
+    if (result) { const base = ui.text.selectionStart; remember(await score(result), base, before); }
   } catch (e) { deps.toast(e.message, 'error'); }
 }
 
 async function score(text) {
-  const res = await fetch('/api/humanize/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-  if (!res.ok) throw new Error(`Check failed (error ${res.status})`);
-  return res.json();
+  setChecking(true);
+  try {
+    const res = await fetch('/api/humanize/check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    if (!res.ok) throw new Error(`The Oracle couldn't check it (error ${res.status})`);
+    return await res.json();
+  } finally { setChecking(false); }
+}
+
+function setChecking(on) {
+  const b = $('#canvasCheck');
+  b.disabled = on;
+  b.textContent = on ? '🔮 Reading…' : '🔮 Oracle';
+  if (on) { ui.report.innerHTML = '<div class="muted small">Athena\'s brain is reading it word by word… (longer text takes up to a minute)</div>'; ui.report.hidden = false; }
 }
 
 async function check() {
   const sel = selection();
   const text = sel ? sel.text : ui.text.value;
   if (!text.trim()) return deps.toast('Nothing to check yet');
-  try { showReport(await score(text)); } catch (e) { deps.toast(e.message, 'error'); }
+  const base = sel ? sel.a : 0;
+  try { remember(await score(text), base); } catch (e) { ui.report.hidden = true; deps.toast(e.message, 'error'); }
 }
 
 const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function showReport(r, before) {
   if (r.score == null) { ui.report.hidden = true; return deps.toast(r.label); }
-  const tone = r.score < 30 ? 'good' : r.score < 55 ? 'mid' : 'bad';
-  const change = before?.score != null ? `<span class="muted">${before.score} → </span>` : '';
+  const d = r.deep;
+  const tone = r.score < 35 ? 'good' : r.score < 70 ? 'mid' : 'bad';
+  const change = before?.score != null ? `<span class="muted">${before.score}% → </span>` : '';
+  const stats = d
+    ? `Surprise ${d.perplexity} <span class="muted">(how unpredictable the words are; low = AI-like)</span> · Variety ${d.burstiness ?? '–'} <span class="muted">(how much that changes between sentences; low = AI-like)</span> · ` +
+      `${d.top10}% of words were in her top 10 guesses${d.truncated ? ` · checked the first ${d.checked_chars.toLocaleString()} characters` : ''}`
+    : `Style check only · avg sentence ${r.avg_sentence} words · rhythm ${r.variation}`;
   ui.report.innerHTML = `
     <div class="rp-top">
-      <b class="rp-score ${tone}">${change}${r.score}</b>
+      <b class="rp-score ${tone}">${change}${r.score}%</b>
       <span>${esc(r.label)}</span>
       <span class="rp-meter"><i class="${tone}" style="width:${r.score}%"></i></span>
+      ${d?.spans ? '<button type="button" class="rp-hl" data-rp="highlight">🖍️ Highlight</button>' : ''}
       <button type="button" class="icon-btn" data-rp="close" title="Close">×</button>
     </div>
-    <div class="muted small">Avg sentence ${r.avg_sentence} words · rhythm ${r.variation} · ${r.contractions} contractions per sentence</div>
+    <div class="small">${stats}</div>
+    ${d?.sentences?.length ? `<div class="small">Most AI-like sentences:</div><ul class="rp-sents">${d.sentences.map((x) => `<li><b>${x.ai}%</b> ${esc(x.text)}</li>`).join('')}</ul>` : ''}
     ${r.tells.length ? `<div class="rp-tells">${r.tells.map((t) => `<span>${esc(t.phrase)}${t.count > 1 ? ` ×${t.count}` : ''}</span>`).join('')}</div>` : ''}
     ${r.tips.length ? `<div class="small">${r.tips.map(esc).join(' ')}</div>` : ''}
-    <div class="muted small">A rough home-made meter (0 = human, 100 = robotic), not a real AI detector.</div>`;
+    ${r.note ? `<div class="small rp-note">${esc(r.note)}</div>` : ''}
+    <div class="muted small">${d ? 'The Oracle checks the way GPTZero works (word surprise + sentence variety) using Athena\'s own brain, plus the style meter.' : 'The Oracle used the style meter only.'}
+      Turnitin and GPTZero use their own trained models, so their numbers will differ.</div>`;
   ui.report.hidden = false;
+}
+
+// ------------------------------------------------- highlight view (like Turnitin's AI report)
+
+let lastCheck = null; // { doc, base, r } from the last Check, so the highlights line up with the text
+
+function remember(r, base, before) {
+  lastCheck = r.deep?.spans ? { doc: ui.text.value, base, r } : null;
+  $('#canvasHead [data-cv="highlight"]').hidden = !lastCheck;
+  showReport(r, before);
+}
+
+const level = (ai) => (ai >= 70 ? 'hi' : ai >= 40 ? 'mid' : 'lo');
+
+function highlightHtml() {
+  const { doc, base, r } = lastCheck;
+  const spans = r.deep.spans.map((s) => ({ a: base + s.start, b: base + s.end, ai: s.ai }));
+  const paras = new Map(r.deep.paragraphs.map((p) => [base + p.start, p.ai]));
+  const cuts = [...new Set([0, doc.length, ...spans.flatMap((s) => [s.a, s.b]), ...paras.keys()])]
+    .filter((x) => x >= 0 && x <= doc.length).sort((x, y) => x - y);
+  let html = '';
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const a = cuts[i];
+    const piece = esc(doc.slice(a, cuts[i + 1]));
+    if (paras.has(a)) { const ai = paras.get(a); html += `<span class="hl-badge ${level(ai)}">¶ ${ai}% AI</span>`; }
+    const s = spans.find((x) => x.a <= a && a < x.b);
+    html += s && s.ai >= 40 ? `<mark class="${level(s.ai)}" title="${s.ai}% likely AI">${piece}</mark>` : piece;
+  }
+  const checked = r.deep.truncated ? ' Only the first part was checked.' : '';
+  return `<div class="hl-legend"><b>${r.score}% AI overall</b> · <mark class="hi">likely AI (70%+)</mark> <mark class="mid">maybe (40–69%)</mark>
+    unmarked = likely human · hover a sentence for its % · click to keep editing.${checked}</div><div class="hl-body">${html}</div>`;
+}
+
+function setHighlight(on) {
+  if (on) {
+    if (!lastCheck) return deps.toast('Ask the 🔮 Oracle first');
+    if (ui.text.value !== lastCheck.doc) return deps.toast('The text changed since the Oracle read it. Ask the 🔮 Oracle again.');
+    setPreview(false);
+    ui.hl.innerHTML = highlightHtml();
+  }
+  ui.hl.hidden = !on;
+  ui.text.hidden = on;
+  ui.report.hidden = on; // the highlight view has its own summary; bring the report back when you go back to editing
+  $('#canvasHead [data-cv="highlight"]').classList.toggle('on', on);
 }
