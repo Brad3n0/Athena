@@ -2356,7 +2356,9 @@ async def pdfview_upload(file: UploadFile = File(...)):
     _pdf_views[view_id] = (name, data)
     while len(_pdf_views) > 6:  # keep memory small: forget the oldest
         _pdf_views.pop(next(iter(_pdf_views)))
-    return {"id": view_id, "name": name}
+    from urllib.parse import quote
+
+    return {"id": view_id, "name": name, "url": f"/api/pdfview/{view_id}/{quote(name)}"}
 
 
 @app.get("/api/pdfview/{view_id}/{name}")
