@@ -15,7 +15,7 @@ Athena is an evolving personal AI assistant that lives on your computer, not in 
 | 📘 **Your study partner** | Turns your notes into study guides, flashcards that adapt to you, and clickable quizzes with step-by-step explanations. |
 | 🎨 **Creative tools** | Edits your photos, makes new pictures, and helps you write essays, emails and stories. |
 | 🛡️ **Private by design** | Asks before she moves a file or sends a message, and keeps everything in one folder on your PC. |
-
+| 🤖 **Ai Humanizer & Checker** | Rewrites text to sound more human and scan to check ai text. |
 ---
 
 ## Setup (needs internet once)
