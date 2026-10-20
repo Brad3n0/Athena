@@ -801,6 +801,18 @@ kbd { font-family: var(--mono); font-size: 12px; background: var(--bg-input); bo
 .canvas-bar button:hover, .canvas-bar select:hover { border-color: var(--accent); color: var(--text); }
 .canvas-bar select option { background: var(--bg-elev); color: var(--text); }
 .canvas.busy .canvas-bar button, .canvas.busy .canvas-bar select, .canvas.busy .canvas-ask button { opacity: .5; pointer-events: none; }
+.canvas-report { display: flex; flex-direction: column; gap: 5px; padding: 10px 14px; border-top: 1px solid var(--border); background: rgba(var(--accent-rgb), .04); font-size: 13px; }
+.canvas-report .rp-top { display: flex; align-items: center; gap: 10px; }
+.canvas-report .rp-score { font-size: 18px; }
+.canvas-report .rp-score.good, .canvas-report .rp-meter i.good { color: #4ade80; background-color: currentColor; }
+.canvas-report .rp-score.mid, .canvas-report .rp-meter i.mid { color: #facc15; background-color: currentColor; }
+.canvas-report .rp-score.bad, .canvas-report .rp-meter i.bad { color: #f87171; background-color: currentColor; }
+.canvas-report .rp-score { background: none !important; }
+.canvas-report .rp-meter { flex: 1; height: 6px; border-radius: 99px; background: var(--border); overflow: hidden; }
+.canvas-report .rp-meter i { display: block; height: 100%; border-radius: 99px; }
+.canvas-report .icon-btn { font-size: 18px; line-height: 1; }
+.canvas-report .rp-tells { display: flex; flex-wrap: wrap; gap: 4px; }
+.canvas-report .rp-tells span { padding: 1px 8px; border-radius: 99px; border: 1px solid rgba(248, 113, 113, .5); color: var(--text-2); font-size: 12px; }
 .canvas-ask { display: flex; gap: 8px; padding: 4px 14px 14px; }
 .canvas-ask input { flex: 1; min-width: 0; background: var(--bg-input); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; color: var(--text); outline: 0; }
 .canvas-ask input:focus { border-color: var(--accent); }

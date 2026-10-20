@@ -107,6 +107,7 @@ Scores, schedules, standings, injuries and past seasons: `/scores NBA tonight`. 
 ## More
 
 - **Writing canvas** for essays and emails, with Improve, Shorter, Tone and more.
+- **✍️ Humanize** in the canvas rewrites stiff, AI-sounding text so it reads like a person wrote it (Light touch, Natural, Strong, or *In my voice* after you save a sample of your own writing). **🤖 Check** gives a rough robot-meter score and points out stock AI phrases. All offline; the meter is a home-made guide, not a real AI detector.
 - **Projects:** chat folders with their own instructions and files.
 - **Deep research** with sources, and **Think harder** for tough problems.
 - **Your documents:** ask about your own PDFs and notes (Settings → Knowledge).

@@ -59,6 +59,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "ha_token": "",
     # Custom personalities: [{"id","name","instructions","voice"}]
     "personas": [],
+    "writing_samples": "",  # a few paragraphs you wrote yourself, so Humanize → In my voice sounds like you
     # PIN lock
     "pin_hash": "",
     "pin_salt": "",
