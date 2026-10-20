@@ -55,7 +55,8 @@ export async function openPdf(file) {
     const res = await fetch('/api/pdfview', { method: 'POST', body: form });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.detail || `error ${res.status}`);
-    url = `/api/pdfview/${body.id}/${encodeURIComponent(file.name)}`;
+    if (typeof body.url !== 'string' || !/^\/api\/pdfview\/[0-9a-f]{32}\/[^?#]*$/.test(body.url)) throw new Error('bad viewer address');
+    url = body.url; // built by Athena's server (the file name safely encoded)
   } catch (err) {
     if (/isn't a PDF|too large/.test(err.message)) return deps.toast(err.message, 'error');
     url = URL.createObjectURL(file);
