@@ -239,7 +239,14 @@ export function startStars(canvas, getOptions = () => ({ shooting: true, seasona
 
   function tick(now) {
     requestAnimationFrame(tick);
-    if (document.hidden || now - last < 33) return; // ~30 fps is plenty
+    // ~30 fps is plenty. While you're in another window (a game, say) the sky slows to ~8 fps so it doesn't compete
+    // for the graphics card, and in the light themes, where it isn't shown, it doesn't run at all.
+    const away = !document.hasFocus();
+    if (document.hidden || document.documentElement.dataset.theme !== 'dark' || now - last < (away ? 125 : 33)) {
+      if (document.documentElement.dataset.theme !== 'dark' && cleared !== true) { ctx.clearRect(0, 0, w, h); cleared = true; }
+      return;
+    }
+    cleared = false;
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
     for (const s of stars) {
@@ -252,6 +259,7 @@ export function startStars(canvas, getOptions = () => ({ shooting: true, seasona
     draw(now);
   }
 
+  let cleared = false;
   new ResizeObserver(resize).observe(canvas);
   resize();
   if (!still) requestAnimationFrame(tick);

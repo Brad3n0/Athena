@@ -399,10 +399,16 @@ def _brain_with_fallback(client: httpx.Client) -> tuple[Path, Path | None]:
 
 # ------------------------------------------------------------------ running
 
-def _launch(exe: Path, model: Path, eyes: Path | None, ctx: int | None = None, gpu_layers: int = 999) -> subprocess.Popen:
+def _launch(exe: Path, model: Path, eyes: Path | None, ctx: int | None = None, gpu_layers: int = 999,
+            compact: bool = False) -> subprocess.Popen:
     ctx = ctx or int(store.get_settings().get("context_size") or 16384)
     args = [str(exe), "-m", str(model), "--host", "127.0.0.1", "--port", str(LLAMA_PORT), "-c", str(ctx),
             "-np", "1", "--jinja", "--alias", MODEL_NAME]
+    if compact and gpu_layers != 0:
+        # Compact chat memory: she keeps what she's read of the chat in 8-bit instead of 16-bit. It takes about half
+        # the graphics memory (often 1 GB or more), with no real change to her answers, so more of her brain fits on
+        # the card and she runs faster on smaller ones. It needs flash attention, which is turned on with it.
+        args += ["-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"]
     big = BRAINS.get(_state.get("running") or brain_key(), {}).get("fit")
     if not (big and gpu_layers == 999):
         # Small brains go fully on the graphics card. A big brain that doesn't all fit is left to the engine's
@@ -509,18 +515,22 @@ def _start() -> None:
         # Try the full setup first; if the engine stops (usually not enough graphics memory), step down:
         # a shorter chat memory, then without her eyes for pictures, then part of the brain on the processor.
         ctx = int(store.get_settings().get("context_size") or 16384)
-        attempts = [(ctx, eyes, 999), (min(ctx, 8192), eyes, 999), (min(ctx, 8192), None, 999), (8192, None, 24),
-                    (8192, None, 0)]  # last: processor only, in case the graphics driver itself is what crashes
+        # The first try uses compact chat memory (see _launch); if this engine or graphics card can't do that, the
+        # same setup without it comes next, then the lighter setups as before.
+        compact = store.get_settings().get("ollama_boost", True) is not False  # Settings → Brain & models → Speed boost
+        attempts = [(ctx, eyes, 999, compact), (ctx, eyes, 999, False), (min(ctx, 8192), eyes, 999, False),
+                    (min(ctx, 8192), None, 999, False), (8192, None, 24, False),
+                    (8192, None, 0, False)]  # last: processor only, in case the graphics driver itself is what crashes
         seen, reasons, ok = set(), [], False
-        for a_ctx, a_eyes, a_ngl in attempts:
-            if (a_ctx, a_eyes, a_ngl) in seen:
+        for a_ctx, a_eyes, a_ngl, a_compact in attempts:
+            if (a_ctx, a_eyes, a_ngl, a_compact) in seen:
                 continue
-            seen.add((a_ctx, a_eyes, a_ngl))
+            seen.add((a_ctx, a_eyes, a_ngl, a_compact))
             since = LOG_FILE.stat().st_size if LOG_FILE.exists() else 0
             with _lock:
                 if _proc and _proc.poll() is None:
                     _proc.terminate()
-                _proc = _launch(exe, model, a_eyes, a_ctx, a_ngl)
+                _proc = _launch(exe, model, a_eyes, a_ctx, a_ngl, a_compact)
                 proc = _proc
             if _wait_healthy(proc):
                 ok = True
@@ -545,7 +555,8 @@ def _start() -> None:
                 break
             code = proc.poll()
             reasons.append(_failure_reason(since) + _exit_meaning(code))
-            _log(f"engine stopped (ctx {a_ctx}, eyes {'on' if a_eyes else 'off'}, gpu layers {a_ngl}); trying a lighter setup")
+            _log(f"engine stopped (ctx {a_ctx}, eyes {'on' if a_eyes else 'off'}, gpu layers {a_ngl}, compact memory "
+                 f"{'on' if a_compact else 'off'}); trying a lighter setup")
             try:
                 proc.kill()
             except OSError:

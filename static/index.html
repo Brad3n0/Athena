@@ -303,7 +303,7 @@
 
       <section data-panel="appearance" hidden>
         <label>Theme
-          <select id="setTheme"><option value="dark">Dark</option><option value="black">Black (pure black, great on OLED screens)</option><option value="light">Light</option><option value="marble">Marble — white &amp; gold</option><option value="system">System</option></select>
+          <select id="setTheme"><option value="dark">Dark</option><option value="black">Black</option><option value="light">Light</option><option value="marble">Marble — white &amp; gold</option><option value="system">System</option></select>
         </label>
         <label class="check"><input type="checkbox" id="setShooting" /> Shooting stars now and then</label>
         <label class="check"><input type="checkbox" id="setSeasonal" /> Seasonal effects (snow in December, falling leaves in fall, fireworks at New Year)</label>
@@ -438,7 +438,7 @@
           </select>
         </label>
         <p class="muted small" style="margin-top:-6px">A loaded model answers right away. It uses graphics card memory, so games may run slower while it's loaded; pick a shorter time if you game a lot.</p>
-        <label class="check"><input type="checkbox" id="setOllamaBoost" /> <span><b>⚡ Speed boost</b>: flash attention + compressed chat memory in Ollama. Uses about half the graphics memory for the chat, so replies come out faster. Ollama restarts once when you change this.</span></label>
+        <label class="check"><input type="checkbox" id="setOllamaBoost" /> <span><b>⚡ Speed boost</b>: flash attention + compact chat memory, for her own engine and Ollama. Uses about half the graphics memory for the chat, so more of her brain fits on the card and replies come out faster. Takes effect the next time her brain loads (Ollama restarts once).</span></label>
         <label class="check"><input type="checkbox" id="setAutoRecover" /> <span><b>🩹 Self-repair</b>: if Ollama crashes or freezes in the middle of a reply, restart it and try again automatically</span></label>
         <label>Chat memory (how much of the chat she reads at once)
           <select id="setContextSize">
