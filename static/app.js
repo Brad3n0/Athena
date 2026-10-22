@@ -145,10 +145,12 @@ function toast(text, kind = '', { action = null, ms = 0 } = {}) {
 // ---------------------------------------------------------------- theme
 function applyTheme() {
   const t = state.settings.theme || 'dark';
-  const dark = t === 'dark' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+  const dark = t === 'dark' || t === 'black' || (t === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   // Marble: the light theme on white-and-gold marble
-  document.documentElement.dataset.skin = t === 'marble' ? 'marble' : '';
+  // Black: the dark theme on pure black (stars and all)
+  document.documentElement.dataset.skin = t === 'marble' ? 'marble' : t === 'black' ? 'black' : '';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', t === 'black' ? '#000000' : t === 'marble' || !dark ? '#f9f9f9' : '#10151f');
   if (t === 'marble') {
     document.documentElement.style.setProperty('--marble', `url(${marbleTexture()})`);
     document.documentElement.style.setProperty('--marble-veins', `url(${marbleVeins()})`);
