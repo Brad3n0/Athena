@@ -1086,6 +1086,27 @@ pre.diff .d-file { color: var(--text-3); font-weight: 600; }
 @media (max-width: 480px) { .research-btn .lbl { display: none; } .think-btn { padding: 0 9px; } }
 a.side-link { color: inherit; text-decoration: none; }
 
+/* ---- Black theme: the dark theme on pure black (OLED-friendly) */
+:root[data-skin="black"] {
+  --bg: #000000;
+  --bg-side: #050505;
+  --bg-elev: #121212;
+  --bg-hover: #161616;
+  --bg-active: #1e1e1e;
+  --bg-input: #0f0f0f;
+  --bg-code: #0a0a0a;
+  --bg-code-head: #141414;
+  --border: #242424;
+  --bubble: #171717;
+  --shadow: 0 8px 30px rgba(0, 0, 0, .8);
+}
+:root[data-skin="black"] .sidebar { background: rgba(0, 0, 0, .78); border-right-color: rgba(255, 255, 255, .07); }
+:root[data-skin="black"] .composer { background: rgba(18, 18, 18, .82); }
+:root[data-skin="black"] .drawer { background: rgba(5, 5, 5, .88); }
+:root[data-skin="black"] .settings { background: #0d0d0d; }
+:root[data-skin="black"] .mode-switch button.active { background: #262626; }
+:root[data-skin="black"] .drop-zone { background: rgba(0, 0, 0, .85); }
+
 /* ---- Marble theme: white marble with gold veins (light theme underneath) */
 :root[data-skin="marble"] {
   --bg: #faf8f4; --bg-side: #f6f2ea; --bg-elev: #fffdf9; --bg-hover: rgba(176, 138, 52, .08); --bg-active: rgba(176, 138, 52, .14);
