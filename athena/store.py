@@ -142,7 +142,16 @@ def _write(path: Path, data: Any) -> None:
     _ensure_dirs()
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, path)
+    # On Windows, swapping the file in fails for a moment if something (antivirus, a backup, search indexing) has it
+    # open: try a few times before giving up, so a save isn't lost to a blip.
+    for attempt in range(6):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 5:
+                raise
+            time.sleep(0.05 * (attempt + 1))
 
 
 def new_id() -> str:

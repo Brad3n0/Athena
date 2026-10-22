@@ -43,7 +43,20 @@ def load(source: str) -> Image.Image:
         elif source.startswith("data:") or (len(source) > 200 and re.fullmatch(r"[A-Za-z0-9+/=\s]+", source[:400])):
             return _open(io.BytesIO(base64.b64decode(source.split(",", 1)[-1])))
         else:
-            path = Path(source).expanduser()
+            # A file on the PC: only from the folders Athena may use (Settings → Abilities), like her other file
+            # tools (which also understand short names like "Downloads/beach.jpg"). Her own pictures, made or edited
+            # earlier ("now make it brighter"), are always fine.
+            from . import files
+
+            own = Path(source).expanduser()
+            try:
+                own.resolve().relative_to(IMAGES_DIR.resolve())
+                path = own
+            except (ValueError, OSError):
+                try:
+                    path = files.resolve(source)
+                except files.FileError as exc:
+                    raise PhotoError(str(exc)) from None
         if not path.is_file():
             raise PhotoError(f"I couldn't find the picture {source}")
         return _open(path)

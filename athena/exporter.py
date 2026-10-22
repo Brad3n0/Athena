@@ -93,9 +93,15 @@ def restore_backup(data: bytes) -> int:
         rel = PurePosixPath(name)
         if name.endswith("/") or name == "athena-backup.txt":
             continue
-        if rel.is_absolute() or ".." in rel.parts or (set(rel.parts) & SKIP_DIRS):
-            continue  # never write outside the data folder
+        # Never write outside the data folder. On Windows a name like "..\\x" or "C:x" looks harmless as a zip
+        # path but points elsewhere, so backslashes and drive letters are refused too, and the final path is checked.
+        if rel.is_absolute() or ".." in rel.parts or (set(rel.parts) & SKIP_DIRS) or "\\" in name or ":" in name:
+            continue
         target = store.DATA_DIR.joinpath(*rel.parts)
+        try:
+            target.resolve().relative_to(store.DATA_DIR.resolve())
+        except ValueError:
+            continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(z.read(name))
         count += 1
