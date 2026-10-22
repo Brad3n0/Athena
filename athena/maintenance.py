@@ -98,7 +98,7 @@ def start_backups() -> None:
 # ------------------------------------------------------------------ updates
 
 def _branches() -> list[str]:
-    """The update branch named in update.bat, then its old name (used until GitHub has the new one)."""
+    """The update branch named in update.bat (and an older name, if a copy of update.bat still lists one)."""
     try:
         text = (store.ROOT / "update.bat").read_text(encoding="utf-8", errors="replace")
     except OSError:

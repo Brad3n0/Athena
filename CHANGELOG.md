@@ -1,6 +1,6 @@
 # Changelog
 
-What's new in Athena, newest first. Most changes are built with [Claude Code](https://claude.ai/code).
+What's new in Athena, newest first.
 
 ## October 2026
 
