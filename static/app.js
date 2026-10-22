@@ -1160,6 +1160,67 @@ function splitThinking(m) {
 }
 const LEAKED_REASONING = /^\s*(?:(?:okay|ok|alright|so|hmm|well),?\s+)*(?:(?:the\s+)?user\s+(?:just\s+)?(?:asked|asks|said|says|wants|wanted|is asking|is saying|wrote|mentioned|greeted|typed|requested)|(?:i|we)\s+(?:need|should|have)\s+to\s+(?:figure|check|decide|call|use|respond|answer|see|determine|think)|let\s+me\s+(?:think|check|figure|see|recall)|first,?\s+i\s+(?:need|should|will))\b/i;
 
+// ---------------------------------------------- words under the typing dots ("Reading your message…")
+const STATUS_WORDS = {
+  chat: ['Reading your message', 'Thinking it over', 'Putting my answer together', 'Almost there'],
+  code: ['Reading your code question', 'Thinking through the code', 'Working out the best way to do it', 'Writing the code', 'Almost there'],
+  math: ['Reading the problem', 'Working through the math', 'Checking each step', 'Writing it out clearly'],
+  study: ['Reading your question', 'Pulling together what you need to know', 'Making it easy to follow', 'Almost there'],
+  writing: ['Reading what you wrote', 'Thinking about the wording', 'Drafting', 'Polishing it up'],
+  picture: ['Looking at the picture', 'Working out what’s in it', 'Putting my answer together'],
+  pc: ['Reading your request', 'Getting that ready', 'Almost there'],
+  sports: ['Reading your question', 'Checking the latest numbers', 'Putting it together'],
+  research: ['Planning the research', 'Deciding what to look up', 'Getting started'],
+  deep: ['Reading your message', 'Thinking it through carefully', 'Double-checking', 'Weighing it up', 'Almost there'],
+  tools: ['Working on it', 'Putting it together', 'Almost there'],
+};
+
+function statusKind(user, mode, thinkLevel, research) {
+  if (research) return 'research';
+  if (user?.images?.length) return 'picture';
+  const t = userText(user).toLowerCase();
+  if (thinkLevel === 'deep') return 'deep';
+  if (mode === 'code' || /```|\b(code|bug|error|function|python|javascript|html|css|script|website|app|compile)\b/.test(t)) return 'code';
+  if (/[=^√∫∑π≤≥÷]|\d\s*[+\-*/x×]\s*\d|\b(solve|equation|derivative|integral|calculate|math|algebra|percent)\b/.test(t)) return 'math';
+  if (/\b(score|scores|game tonight|nba|nfl|mlb|nhl|odds|spread|prizepicks|underdog|over \d)/.test(t)) return 'sports';
+  if (/\b(open|close|launch|volume|message|text|discord|spotify|lock my|shutdown|minimi[sz]e|snap)\b/.test(t)) return 'pc';
+  if (/\b(essay|paper|email|letter|rewrite|write|paragraph|story|cover letter|poem)\b/.test(t)) return 'writing';
+  if (mode === 'study' || /\b(quiz|flashcards?|study|explain|homework|test|exam)\b/.test(t)) return 'study';
+  return 'chat';
+}
+
+function typingHtml(m) {
+  const kind = (m.tools || []).length ? 'tools' : m.hint || 'chat';
+  const words = STATUS_WORDS[kind] || STATUS_WORDS.chat;
+  return `<span class="typing-wrap"><span class="typing"><i></i><i></i><i></i></span>` +
+    `<span class="think-status" data-kind="${kind}" data-start="${m.time || Date.now()}">${escapeHtml(statusWord(words, m.time))}…</span></span>`;
+}
+// Each phrase stays about 3 seconds; the last one stays until she starts answering.
+const statusWord = (words, start) => words[Math.min(words.length - 1, Math.floor((Date.now() - (start || Date.now())) / 3000))];
+setInterval(() => {
+  for (const el of document.querySelectorAll('.think-status')) {
+    const next = `${statusWord(STATUS_WORDS[el.dataset.kind] || STATUS_WORDS.chat, Number(el.dataset.start))}…`;
+    if (el.textContent !== next) {
+      el.textContent = next;
+      el.classList.remove('swap'); void el.offsetWidth; el.classList.add('swap');
+    }
+  }
+}, 500);
+
+// The newest sentence of her reasoning, cleaned up for a one-line caption.
+function thinkingNow(thinking) {
+  const text = thinking.replace(/\s+/g, ' ').trim();
+  if (text.length < 12) return '';
+  const parts = text.split(/(?<=[.!?])\s+/).filter((x) => x.length > 3);
+  let line = parts.length > 1 && !/[.!?]$/.test(parts[parts.length - 1]) && parts[parts.length - 1].length < 25 ? parts[parts.length - 2] : parts[parts.length - 1] || '';
+  line = line.replace(/^(?:(?:okay|ok|so|alright|hmm|well|wait|now),?\s+)+/i, '')
+    .replace(/\bthe user's\b/gi, 'your').replace(/\bthe user (is|was|has)\b/gi, (_, v) => `you ${{ is: 'are', was: 'were', has: 'have' }[v.toLowerCase()]}`)
+    .replace(/\bthe user (wants|needs|asks|asked|said|says|mentioned|wrote)\b/gi, (_, v) => `you ${v.toLowerCase().replace(/s$/, '').replace(/^(want|need|ask|say|write)$/, '$1')}`)
+    .replace(/\bthe user\b/gi, 'you');
+  line = line.charAt(0).toUpperCase() + line.slice(1);
+  return line.length > 110 ? `${line.slice(0, 107).replace(/\s+\S*$/, '')}…` : line;
+}
+
 function updateAssistantEl(el, m) {
   const { content, thinking, stillThinking } = splitThinking(m);
   const openSteps = new Set($$('.step[open]', el).map((d) => d.dataset.id));
@@ -1172,13 +1233,16 @@ function updateAssistantEl(el, m) {
     const open = el.querySelector('.thinking-box')?.open ?? false;
     const label = stillThinking ? 'Thinking…' : `Thought${m.thinkSecs ? ` for ${m.thinkSecs}s` : ''}`;
     html += `<details class="thinking-box"${open ? ' open' : ''}><summary>${label}</summary><div class="think-text">${escapeHtml(thinking.trim())}</div></details>`;
+    // While she's still thinking (box closed), show what she's on right now, one line, like a running caption.
+    const now = stillThinking && !open ? thinkingNow(thinking) : '';
+    if (now) html += `<div class="think-live" aria-live="polite">${escapeHtml(now)}</div>`;
   }
   if (content) html += `<div class="md">${renderMarkdown(content)}</div>`;
   if (m.error) html += `<p class="error-text">⚠ ${escapeHtml(m.error)}</p>`;
   if (m.streaming && !content && !m.error && !stillThinking && !(m.tools || []).length && m.warming) {
     html += `<span class="warming"><span class="spin"></span>Waking up ${escapeHtml(shownModel(m.model) || 'the model')}… the first reply takes a moment</span>`;
-  } else if (m.streaming && !content && !m.error && !stillThinking) html += '<span class="typing"><i></i><i></i><i></i></span>';
-  if (m.streaming && stillThinking && !thinking.trim()) html += '<span class="typing"><i></i><i></i><i></i></span>';
+  } else if (m.streaming && !content && !m.error && !stillThinking) html += typingHtml(m);
+  if (m.streaming && stillThinking && !thinking.trim()) html += typingHtml(m);
   el.querySelector('.content').innerHTML = html;
   if (html.includes('study-widget')) hydrateStudy(el, !!m.streaming);
   if (html.includes('graph-widget')) hydrateGraphs(el, !!m.streaming);
@@ -1664,7 +1728,8 @@ async function generateReply({ voice = false, model = null, route = null, think 
   model = model || currentModel();
   // Think harder: Quick / Normal / Deep. Voice keeps it quick so she answers straight away.
   const thinkLevel = voice ? 'normal' : think || state.settings.think_level || 'normal';
-  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), ...(voice ? { voice: true } : {}), ...(route ? { route } : {}), ...(thinkLevel === 'deep' ? { think: 'deep' } : {}), ...(research ? { research: { steps: [], started: Date.now() } } : {}) };
+  const asked = [...chat.messages].reverse().find((x) => x.role === 'user');
+  const reply = { role: 'assistant', content: '', thinking: '', tools: [], model, streaming: true, time: Date.now(), hint: statusKind(asked, mode, thinkLevel, research), ...(voice ? { voice: true } : {}), ...(route ? { route } : {}), ...(thinkLevel === 'deep' ? { think: 'deep' } : {}), ...(research ? { research: { steps: [], started: Date.now() } } : {}) };
   chat.messages.push(reply);
 
   const thread = $('.thread', messagesEl);
@@ -1796,6 +1861,7 @@ async function generateReply({ voice = false, model = null, route = null, think 
     cancelAnimationFrame(raf);
     raf = 0;
     reply.streaming = false;
+    delete reply.hint;
     if (!reply.thinking) delete reply.thinking;
     if (reply.research) reply.research.secs = Math.round((Date.now() - reply.research.started) / 1000);
     if (!reply.tools.length) delete reply.tools;
