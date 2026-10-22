@@ -263,6 +263,13 @@ def _find_engine(client: httpx.Client) -> tuple[dict[str, Any], dict[str, Any]]:
     pinned = _known_good(client)
     if pinned:
         return pinned
+    found = _find_newest(client)
+    _lookup_cache.update(time=time.time(), found=found)
+    return found
+
+
+def _find_newest(client: httpx.Client) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The newest llama.cpp release that has this PC's engine file."""
     # The newest release is sometimes published before all its files have finished uploading, so if it doesn't
     # have this PC's engine yet, use the newest recent release that does.
     releases: list[dict[str, Any]] = []
@@ -280,7 +287,6 @@ def _find_engine(client: httpx.Client) -> tuple[dict[str, Any], dict[str, Any]]:
                 continue
             asset = next((a for a in rel.get("assets") or [] if re.search(_engine_asset(), a.get("name", ""))), None)
             if asset:
-                _lookup_cache.update(time=time.time(), found=(rel, asset))
                 return rel, asset
         if attempt:
             _log("engine lookup: no recent release has this PC's engine file; trying the releases page")
@@ -1041,3 +1047,197 @@ def disk_use() -> int:
             total += sum(f.stat().st_size for f in folder.rglob("*") if f.is_file())
     return total
 
+
+
+# ------------------------------------------------------------------ engine updates
+# llama.cpp (her engine) gets faster and supports new brains every few weeks. Updates are never automatic, because a
+# brand-new version can misbehave on some graphics cards: you choose when (Settings → Brain & models), the old
+# version is kept, and if the new one won't load her brain she switches straight back by herself.
+
+ENGINE_OLD = store.ROOT / "engine-old"  # the version before the last update, for "Go back"
+ENGINE_NEW = store.ROOT / "engine-new"  # where an update downloads before it's swapped in
+ENGINE_PREV = store.ROOT / "engine-prev"  # "Go back"'s version, set aside while an update is tried
+_newest_cache: dict[str, Any] = {"time": 0.0, "found": None}
+_updating = threading.Lock()
+
+
+def _version(folder: Path) -> str:
+    try:
+        return (folder / "version.txt").read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+def _build(tag: str) -> int:
+    m = re.fullmatch(r"b(\d+)", tag or "")
+    return int(m.group(1)) if m else 0
+
+
+def versions(check: bool = True) -> dict[str, Any]:
+    """The installed engine version, the newest one (looked up at most once an hour) and the one "Go back" returns to."""
+    installed = _version(ENGINE_DIR)
+    newest = ""
+    if check:
+        if not _newest_cache["found"] or time.time() - _newest_cache["time"] > 3600:
+            try:
+                with httpx.Client(headers={"User-Agent": "AthenaAI"}) as client:
+                    _newest_cache.update(time=time.time(), found=_find_newest(client))
+            except (EngineError, httpx.HTTPError) as exc:
+                _log(f"engine update check: {exc!r}")
+        if _newest_cache["found"]:
+            newest = str(_newest_cache["found"][0].get("tag_name", ""))
+    previous = _version(ENGINE_OLD) if (ENGINE_OLD.exists() and _server_in(ENGINE_OLD)) else ""
+    with _lock:
+        s = dict(_state)
+    busy = _updating.locked()
+    return {"installed": installed, "newest": newest, "tested": KNOWN_GOOD_ENGINE,
+            "update": bool(newest and _build(newest) > _build(installed)), "previous": previous, "updating": busy,
+            "percent": round(100 * s["done"] / s["total"]) if busy and s.get("total") else None,
+            "note": s.get("update_note") or ""}
+
+
+def _server_in(folder: Path) -> Path | None:
+    name = "llama-server.exe" if sys.platform.startswith("win") else "llama-server"
+    hits = sorted(folder.rglob(name)) if folder.exists() else []
+    return hits[0] if hits else None
+
+
+def _swap_in(folder: Path, keep_current_as: Path | None) -> None:
+    """Stop the engine and make `folder` the engine folder (the current one becomes `keep_current_as`, or is deleted)."""
+    with _starting:  # nothing may start the engine while its folder is being swapped
+        _swap_folders(folder, keep_current_as)
+
+
+def _swap_folders(folder: Path, keep_current_as: Path | None) -> None:
+    stop()
+    _stop_leftovers()
+    time.sleep(1)  # Windows releases the engine's files a moment after it closes
+    for attempt in range(10):
+        try:
+            if ENGINE_DIR.exists():
+                if keep_current_as:
+                    shutil.rmtree(keep_current_as, ignore_errors=True)
+                    ENGINE_DIR.rename(keep_current_as)
+                else:
+                    shutil.rmtree(ENGINE_DIR)
+            folder.rename(ENGINE_DIR)
+            return
+        except OSError as exc:
+            if attempt == 9:
+                raise EngineError(f"Couldn't switch engine versions ({exc}). Close Athena, open her again and retry.") from exc
+            time.sleep(1)
+
+
+def _loaded_ok(timeout: float = 600) -> bool:
+    """Start the engine and wait: True only if her brain loaded fully on the graphics card as before."""
+    _set(state="off", error="", note="")
+    start()
+    end = time.time() + timeout
+    while time.time() < end:
+        with _lock:
+            st, note = _state["state"], _state.get("note") or ""
+        if st == "ready":
+            return "processor" not in note and "didn't fit" not in note
+        if st == "error":
+            return False
+        time.sleep(0.5)
+    return False
+
+
+def update_engine() -> None:
+    """Download the newest engine, switch to it, and switch back by herself if it can't load her brain here."""
+    if not _updating.acquire(blocking=False):
+        raise EngineError("An engine update is already running")
+
+    def run() -> None:
+        old_version = _version(ENGINE_DIR)
+        swapped = False
+        _set(update_note="")
+        try:
+            with httpx.Client(headers={"User-Agent": "AthenaAI"}) as client:
+                release, asset = _find_newest(client)
+                tag = str(release.get("tag_name", ""))
+                if _build(tag) <= _build(old_version):
+                    _set(update_note=f"Her engine is already the newest ({old_version}).")
+                    return
+                shutil.rmtree(ENGINE_NEW, ignore_errors=True)
+                ENGINE_NEW.mkdir(parents=True)
+                _set(what=f"the newer engine ({tag})", done=0, total=0)  # she keeps working on the old one meanwhile
+                archive = ENGINE_NEW / asset["name"]
+                _download(client, asset["browser_download_url"], archive, f"the newer engine ({tag})")
+                _unpack(archive, ENGINE_NEW)
+                archive.unlink(missing_ok=True)
+            exe = _server_in(ENGINE_NEW)
+            if not exe:
+                raise EngineError("The engine download didn't contain llama-server")
+            if not sys.platform.startswith("win"):
+                exe.chmod(0o755)
+            (ENGINE_NEW / "version.txt").write_text(tag, encoding="utf-8")
+            _log(f"engine update: switching {old_version or '?'} -> {tag}")
+            _swapped_engine[0] = True  # a failed start must come back here, not re-download the tested version
+            shutil.rmtree(ENGINE_PREV, ignore_errors=True)
+            if ENGINE_OLD.exists():  # keep "Go back"'s version safe until we know the new one works
+                ENGINE_OLD.rename(ENGINE_PREV)
+            _swap_in(ENGINE_NEW, keep_current_as=ENGINE_OLD)
+            swapped = True
+            if _loaded_ok():
+                _log(f"engine update: {tag} works")
+                shutil.rmtree(ENGINE_PREV, ignore_errors=True)
+                _set(update_note=f"Updated to {tag}. If anything seems off, you can go back to {old_version}.")
+                return
+            _log(f"engine update: {tag} didn't load her brain properly; going back to {old_version}")
+            _swap_in(ENGINE_OLD, keep_current_as=None)
+            swapped = False
+            if ENGINE_PREV.exists():
+                ENGINE_PREV.rename(ENGINE_OLD)
+            _loaded_ok()
+            _set(update_note=f"The newer engine ({tag}) didn't load her brain properly on this PC, so she went back to "
+                             f"{old_version}.")
+        except Exception as exc:  # never leave her without an engine
+            _log(f"engine update failed: {exc!r}")
+            if swapped and ENGINE_OLD.exists():
+                try:
+                    _swap_in(ENGINE_OLD, keep_current_as=None)
+                except EngineError as exc2:
+                    _log(f"engine update: couldn't go back: {exc2!r}")
+            if ENGINE_PREV.exists() and not ENGINE_OLD.exists():
+                ENGINE_PREV.rename(ENGINE_OLD)
+            shutil.rmtree(ENGINE_NEW, ignore_errors=True)
+            _set(state="off", what="", error="")
+            start()
+            _set(update_note=f"The engine update didn't finish ({exc}). She's still on {old_version}.")
+        finally:
+            _swapped_engine[0] = False
+            _newest_cache.update(time=0.0)
+            _updating.release()
+
+    threading.Thread(target=run, daemon=True, name="athena-engine-update").start()
+
+
+def rollback_engine() -> None:
+    """Go back to the engine version from before the last update."""
+    if not _server_in(ENGINE_OLD):
+        raise EngineError("There's no earlier engine version to go back to")
+    if not _updating.acquire(blocking=False):
+        raise EngineError("An engine update is running; wait for it to finish")
+
+    def run() -> None:
+        try:
+            back = _version(ENGINE_OLD)
+            now = _version(ENGINE_DIR)
+            tmp = store.ROOT / "engine-swap"
+            shutil.rmtree(tmp, ignore_errors=True)
+            _swap_in(ENGINE_OLD, keep_current_as=tmp)  # the newer one is kept, so you can switch forward again
+            tmp.rename(ENGINE_OLD)
+            _swapped_engine[0] = True
+            _loaded_ok()
+            _set(update_note=f"Back on {back}. {now} is kept, in case you want it again.")
+        except Exception as exc:  # noqa: BLE001
+            _log(f"engine rollback failed: {exc!r}")
+            _set(update_note=f"Couldn't go back to the earlier engine ({exc}).")
+            start()
+        finally:
+            _swapped_engine[0] = False
+            _updating.release()
+
+    threading.Thread(target=run, daemon=True, name="athena-engine-rollback").start()

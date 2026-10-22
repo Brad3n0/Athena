@@ -1408,3 +1408,8 @@ body.canvas-on #canvasBtn, body.pdf-on #pdfBtn { color: var(--accent); border-co
 .top-pill + .top-pill { margin-left: 6px; }
 .app:not(.side-collapsed) #newChatTop { display: none; }
 @media (max-width: 1100px) { .top-pill span { display: none; } .top-pill { padding: 7px; } }
+
+/* Settings → Brain & models: engine version and updates */
+.engine-update { margin: 10px 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 8px; }
+.engine-update-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.engine-update .spin { display: inline-block; vertical-align: -2px; }

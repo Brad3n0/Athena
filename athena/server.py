@@ -1558,6 +1558,36 @@ async def set_engine(request: Request):
     return {**engine.status(), "in_use": OLLAMA == engine.SHIM_URL}
 
 
+@app.get("/api/engine/versions")
+async def engine_versions(check: bool = True):
+    """Settings → Brain & models: her engine's version, and whether a newer one is out."""
+    from . import engine
+
+    return await run_in_threadpool(engine.versions, check)
+
+
+@app.post("/api/engine/update")
+async def engine_update():
+    from . import engine
+
+    try:
+        await run_in_threadpool(engine.update_engine)
+    except engine.EngineError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True}
+
+
+@app.post("/api/engine/rollback")
+async def engine_rollback():
+    from . import engine
+
+    try:
+        await run_in_threadpool(engine.rollback_engine)
+    except engine.EngineError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"ok": True}
+
+
 @app.post("/api/engine/upgrade")
 async def engine_upgrade():
     from . import engine
@@ -2871,7 +2901,7 @@ async def phone_access(request: Request, call_next):
                             f"padding:24px;background:#10151f;color:#eceff5'><h2 style='color:#f5c542'>Athena</h2><p>{msg}</p>",
                             status_code=403, media_type="text/html")
         if request.url.path in ("/api/pin", "/api/backup/restore", "/api/restore", "/api/backups/restore", "/api/update/apply",
-                                "/api/github/connect"):
+                                "/api/github/connect", "/api/engine/update", "/api/engine/rollback"):
             return JSONResponse({"detail": "Change the PIN, restore backups and update from the PC itself."}, status_code=403)
     return await call_next(request)
 

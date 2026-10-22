@@ -2878,6 +2878,7 @@ function switchTab(tab) {
   if (tab === 'abilities') { findImageGenerator(); loadGithub(); }
   if (tab === 'system') { loadBackups(); loadPhone(); loadStats(); }
   if (tab === 'voice') { loadMics(); loadCustomVoice(); }
+  if (tab === 'models') loadEngineVersions();
   $$('.tabs button', dlg).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   $$('[data-panel]', dlg).forEach((p) => (p.hidden = p.dataset.panel !== tab));
   const panel = $(`[data-panel="${tab}"]`, dlg);
@@ -2885,6 +2886,39 @@ function switchTab(tab) {
   requestAnimationFrame(() => { if (target) target.scrollIntoView({ block: 'start' }); else panel.scrollTop = 0; });
 }
 $('.tabs', dlg).onclick = (e) => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); };
+
+// ---- Engine updates (Settings → Brain & models): never automatic; the old version is kept for "Go back".
+let engineUpdTimer = 0;
+async function loadEngineVersions(check = true) {
+  const box = $('#engineUpdate');
+  clearTimeout(engineUpdTimer);
+  if ((state.status?.engine?.mode || state.settings.engine) === 'ollama') { box.hidden = true; return; }
+  box.hidden = false;
+  if (check) box.innerHTML = '<span class="muted">Checking for a newer engine…</span>';
+  let v;
+  try { v = await api(`/api/engine/versions${check ? '' : '?check=false'}`); } catch { box.innerHTML = '<span class="muted">Couldn’t check for engine updates right now.</span>'; return; }
+  const tested = v.installed && v.installed === v.tested ? ' (the version tested with Athena)' : '';
+  let html = `<div>⚙️ Engine version <b>${escapeHtml(v.installed || 'not installed yet')}</b>${tested}.`;
+  if (v.updating) html += ` <span class="spin"></span> Updating${v.percent != null ? ` (downloading ${v.percent}%)` : ''}. She keeps working meanwhile.</div>`;
+  else if (v.update) html += ` A newer engine is out: <b>${escapeHtml(v.newest)}</b>. Newer engines are usually faster and support newer brains.</div>
+    <div class="engine-update-row"><button type="button" class="primary" data-eng="update">Update engine</button>
+    <span class="muted">If it doesn't load her brain properly on your PC, she switches back by herself.</span></div>`;
+  else html += v.newest ? ' ✓ Up to date.</div>' : '</div>';
+  if (v.previous && !v.updating) html += `<div class="engine-update-row"><button type="button" class="ghost" data-eng="rollback">Go back to ${escapeHtml(v.previous)}</button></div>`;
+  if (v.note) html += `<div class="muted">${escapeHtml(v.note)}</div>`;
+  box.innerHTML = html;
+  if (v.updating) engineUpdTimer = setTimeout(() => { loadEngineVersions(false); refreshStatus(); }, 2000);
+}
+$('#engineUpdate').addEventListener('click', async (e) => {
+  const act = e.target.closest('[data-eng]')?.dataset.eng;
+  if (!act) return;
+  e.target.disabled = true;
+  try {
+    await api(`/api/engine/${act}`, json('POST', {}));
+    toast(act === 'update' ? 'Updating her engine… you can keep chatting while it downloads' : 'Going back to the earlier engine…');
+  } catch (err) { toast(err.message, 'error'); }
+  setTimeout(() => loadEngineVersions(false), 600);
+});
 
 // One click: pick the best installed model for each job, based on this PC's graphics card and memory.
 $('#bestModels').onclick = async () => {
