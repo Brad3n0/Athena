@@ -152,3 +152,4 @@ launcher/      Athena.exe
 ## License
 
 © 2026 Brad3n0. All rights reserved. You're welcome to download Athena and use her on your own PC, but please don't copy, re-upload or sell the code. See [LICENSE](LICENSE).
+
