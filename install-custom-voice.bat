@@ -42,3 +42,4 @@ echo The custom voice setup didn't finish. Check your internet connection and ru
 echo If it keeps failing, take a photo of the error above and ask for help.
 pause
 exit /b 1
+
