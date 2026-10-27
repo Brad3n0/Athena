@@ -37,3 +37,4 @@ if /i "%vis%"=="y" ollama pull qwen2.5vl:7b
 echo.
 echo All done. Start Athena with start.bat
 pause
+
