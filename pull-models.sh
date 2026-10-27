@@ -24,3 +24,4 @@ for m in $models; do echo; echo "=== Downloading $m ==="; ollama pull "$m"; done
 read -rp "Also download qwen2.5vl:7b so Athena can read photos of worksheets and notes (6 GB)? (y/n): " vis
 case "$vis" in y|Y) ollama pull qwen2.5vl:7b ;; esac
 echo; echo "All done. Start Athena with ./start.sh"
+
