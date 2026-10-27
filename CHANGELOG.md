@@ -40,3 +40,5 @@ What's new in Athena, newest first.
 - **New features**: offline mode, emotion tracking, adaptive voice, an auto task manager and live code error checking.
 - **Companion personality**: improved, and lessons stay with the personality they were learned in.
 - **Read aloud**: more reliable.
+
+
