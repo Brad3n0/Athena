@@ -8,3 +8,4 @@ cd "$(dirname "$0")"
 .venv/bin/python -m athena --preload-whisper base || true  # other languages
 .venv/bin/python -m athena --download-voice
 echo "Done! Restart Athena and click the voice button."
+
