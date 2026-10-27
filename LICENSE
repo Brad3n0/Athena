@@ -11,3 +11,4 @@ damage or loss arising from its use.
 Third-party parts keep their own licenses and are not covered by the terms above: the files in
 static/vendor (three.js, KaTeX, the QR code library and the Cinzel font, each with its own LICENSE
 file there), and anything Athena downloads when she runs (the llama.cpp engine, AI models, voices).
+
