@@ -75,3 +75,4 @@ exit /b 1
 echo Setup failed while downloading Athena's parts. Check your internet connection and run start.bat again.
 pause
 exit /b 1
+
