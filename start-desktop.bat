@@ -7,3 +7,4 @@ if not exist ".venv\athena-ready" (
 )
 ".venv\Scripts\python.exe" -m pip install -q -r requirements.txt >nul 2>nul
 start "" ".venv\Scripts\pythonw.exe" -m athena --desktop
+
