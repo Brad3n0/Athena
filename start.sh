@@ -12,3 +12,4 @@ else
 fi
 command -v ollama >/dev/null || echo "[!] Ollama not found. Install it from https://ollama.com/download"
 exec .venv/bin/python -m athena "$@"
+
