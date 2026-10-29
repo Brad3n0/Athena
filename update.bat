@@ -64,3 +64,4 @@ echo The update didn't finish. Check your internet connection and that you signe
 echo then double-click update again. Your chats and settings are safe.
 pause
 exit /b 1
+
