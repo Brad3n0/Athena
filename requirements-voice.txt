@@ -5,3 +5,4 @@ kokoro-onnx>=0.4
 # "Hey Athena" wake word (microphone access from the background)
 sounddevice>=0.4
 
+
